@@ -16,6 +16,7 @@ API.interceptors.request.use((req) => {
 // ================= AUTH =================
 export const login = (data) => API.post("/auth/login/legacy", data);
 export const loginWithCredentials = (data) => API.post("/auth/login", data);
+export const generateLoginCaptcha = (data) => API.post("/auth/login/captcha/generate", data);
 export const refreshLoginCaptcha = (data) => API.post("/auth/login/captcha/refresh", data);
 export const verifyLoginCaptcha = (data) => API.post("/auth/login/captcha/verify", data);
 export const resendLoginOtp = (data) => API.post("/auth/login/otp/resend", data);
@@ -27,10 +28,45 @@ export const getMe = () => API.get("/auth/me");
 export const getDashboard = () => API.get("/dashboard");
 
 // ================= STUDENTS =================
-export const getStudents = (page = 1, limit = 10, search = '') => 
-  API.get(`/students?page=${page}&limit=${limit}&search=${search}`);
+export const getStudents = (pageOrParams = 1, limit = 10, search = '', classFilter = '', section = '') => {
+  // Support existing object-style calls in some screens.
+  if (typeof pageOrParams === 'object' && pageOrParams !== null) {
+    const params = { ...pageOrParams };
+    if (params.grade && !params.class) {
+      params.class = params.grade;
+      delete params.grade;
+    }
+    return API.get('/students', { params });
+  }
+
+  const params = {
+    page: pageOrParams,
+    limit,
+    search
+  };
+
+  if (classFilter) {
+    params.class = classFilter;
+  }
+
+  if (section) {
+    params.section = section;
+  }
+
+  return API.get('/students', { params });
+};
 export const getAllStudents = () => API.get("/students/all");
 export const getStudentById = (id) => API.get(`/students/${id}`);
+export const getStudentDetailsById = async (id) => {
+  try {
+    return await API.get(`/students/${id}/details`);
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return API.get(`/student/${id}/details`);
+    }
+    throw error;
+  }
+};
 export const createStudent = (data) => API.post("/students", data);
 export const updateStudent = (id, data) => API.put(`/students/${id}`, data);
 export const deleteStudent = (id) => API.delete(`/students/${id}`);

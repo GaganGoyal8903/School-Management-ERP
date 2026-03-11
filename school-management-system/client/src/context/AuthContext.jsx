@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import {
   login as apiLogin,
   loginWithCredentials,
+  generateLoginCaptcha,
   refreshLoginCaptcha,
   verifyLoginCaptcha,
   resendLoginOtp,
@@ -96,6 +97,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const generateCaptcha = async (sessionToken) => {
+    setError(null);
+    try {
+      const response = await generateLoginCaptcha({ sessionToken });
+      return { success: true, data: response.data };
+    } catch (err) {
+      const message = err.response?.data?.message || 'Unable to generate CAPTCHA';
+      const statusCode = err.response?.status || 500;
+      const payload = err.response?.data || null;
+      setError(message);
+      return { success: false, message, statusCode, payload };
+    }
+  };
+
   const verifyCaptchaAndSendOtp = async ({ sessionToken, captcha }) => {
     setError(null);
     try {
@@ -176,6 +191,7 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     startSecureLogin,
+    generateCaptcha,
     refreshCaptcha,
     verifyCaptchaAndSendOtp,
     resendOtp,

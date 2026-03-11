@@ -40,7 +40,7 @@ async function seed() {
     // Admin User - Use plain password, will be hashed by pre-save hook
     const adminUser = await User.create({
       fullName: "Gagan Goyal",
-      email: "gagan.admin@mayo.edu",
+      email: "gagangoyal878@gmail.com",
       password: "Mayo@123", // Plain password - will be hashed by pre-save hook
       role: "admin"
     });
@@ -460,7 +460,7 @@ async function seed() {
     console.log("🎉 Database Seeded Successfully!");
     console.log("=".repeat(50));
     console.log("\n📌 Test Credentials:");
-    console.log("   Admin: gagan.admin@mayo.edu / Mayo@123");
+    console.log("   Admin: gagangoyal878@gmail.com / Mayo@123");
     console.log("   Teacher: vikram.teacher@mayo.edu / Mayo@123");
     console.log("   Student: aarav.sharma@mayo.edu / Mayo@123");
     console.log("\n");
@@ -476,4 +476,5 @@ async function seed() {
 
 // Run the seed function
 seed();
+
 

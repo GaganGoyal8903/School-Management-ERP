@@ -127,7 +127,7 @@ async function seed() {
     console.log("👤 Creating Users...");
     
     // Admin
-    const adminUser = new User({ fullName: "Gagan Goyal", email: "gagan.admin@mayo.edu", password: hashedPassword, role: "admin" });
+    const adminUser = new User({ fullName: "Gagan Goyal", email: "gagangoyal878@gmail.com", password: hashedPassword, role: "admin" });
     
     // Teachers
     const teacherNames = ["Dr. Vikram Singh Rathore", "Prof. Priya Sharma", "Dr. Rahul Verma", 
@@ -158,7 +158,7 @@ async function seed() {
     await User.insertMany(allUsers);
     
     // Fetch back the users to get IDs
-    const admin = await User.findOne({ email: "gagan.admin@mayo.edu" });
+    const admin = await User.findOne({ email: "gagangoyal878@gmail.com" });
     const teachers = await User.find({ role: "teacher" }).sort({ email: 1 }).limit(20);
     const students = await User.find({ role: "student" }).sort({ email: 1 }).limit(200);
     
@@ -402,7 +402,7 @@ async function seed() {
     console.log("🎉 PRO SEED COMPLETED SUCCESSFULLY!");
     console.log("=".repeat(60));
     console.log("\n📌 Test Credentials:");
-    console.log("   Admin: gagan.admin@mayo.edu / Mayo@123");
+    console.log("   Admin: gagangoyal878@gmail.com / Mayo@123");
     console.log("   Teacher: teacher1@mayo.edu / Mayo@123");
     console.log("   Student: student1@mayo.edu / Mayo@123\n");
 
@@ -419,4 +419,5 @@ async function seed() {
 }
 
 seed();
+
 

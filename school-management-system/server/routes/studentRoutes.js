@@ -4,7 +4,9 @@ const {
   studentLogin,
   getStudentTimetable,
   getStudents, 
+  getAllStudents,
   getStudent, 
+  getStudentDetails,
   createStudent, 
   updateStudent, 
   deleteStudent,
@@ -28,6 +30,9 @@ router.route('/')
   .get(authorize('admin', 'teacher'), getStudents)
   .post(authorize('admin'), createStudent);
 
+router.route('/all')
+  .get(authorize('admin', 'teacher'), getAllStudents);
+
 router.route('/count')
   .get(getStudentCount);
 
@@ -36,6 +41,9 @@ router.route('/class/:class')
 
 // Student timetable - accessible by student or admin/teachers
 router.get('/timetable/:studentId', asyncHandler(getStudentTimetable));
+
+// Complete student details - Admin/Teacher
+router.get('/:id/details', authorize('admin', 'teacher'), getStudentDetails);
 
 router.route('/:id')
   .get(getStudent)

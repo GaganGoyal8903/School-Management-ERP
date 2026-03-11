@@ -1,15 +1,26 @@
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Student = require('../models/Student');
-const AuthLoginSession = require('../models/AuthLoginSession');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
 const { sendOtpEmail } = require('../services/mailService');
+const {
+  ensureAuthSqlReady,
+  syncUserAuthRecord,
+  loginLookup,
+  startLoginSession,
+  getActiveLoginSession,
+  refreshCaptchaForSession,
+  verifyCaptchaForSession,
+  checkOtpResendCooldown,
+  createOtpForSession,
+  verifyOtpForSession,
+} = require('../services/authSqlService');
 const {
   normalizeEmail,
   normalizeCaptcha,
   normalizeOtp,
   hashAuthValue,
-  safeHashCompare,
   createSessionToken,
   createCaptchaCode,
   createOtpCode,
@@ -34,6 +45,33 @@ const OTP_RESEND_COOLDOWN_MS = Number(process.env.OTP_RESEND_COOLDOWN_MS || 60 *
 const CREDENTIAL_MAX_FAILURES = Number(process.env.CREDENTIAL_MAX_FAILURES || 8);
 const CREDENTIAL_WINDOW_MS = Number(process.env.CREDENTIAL_WINDOW_MS || 15 * 60 * 1000);
 const CREDENTIAL_BLOCK_MS = Number(process.env.CREDENTIAL_BLOCK_MS || 15 * 60 * 1000);
+
+const resolveOtpEmailErrorMessage = (error) => {
+  const rawMessage = String(error?.message || '').toLowerCase();
+
+  if (rawMessage.includes('not configured')) {
+    return 'OTP email service is not configured. Set MAIL_HOST, MAIL_PORT, MAIL_USER, MAIL_PASS and MAIL_FROM in server/.env, then restart backend.';
+  }
+
+  if (
+    rawMessage.includes('auth') ||
+    rawMessage.includes('invalid login') ||
+    rawMessage.includes('authentication')
+  ) {
+    return 'SMTP authentication failed. Verify MAIL_USER and MAIL_PASS (for Gmail use an App Password).';
+  }
+
+  if (
+    rawMessage.includes('econn') ||
+    rawMessage.includes('etimedout') ||
+    rawMessage.includes('enotfound') ||
+    rawMessage.includes('ehostunreach')
+  ) {
+    return 'SMTP server connection failed. Verify MAIL_HOST, MAIL_PORT, MAIL_SECURE and network access.';
+  }
+
+  return 'Unable to send OTP email right now. Please try again in a moment.';
+};
 
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -62,57 +100,51 @@ const buildUserPayload = (user) => ({
 });
 
 const buildCredentialRateKey = (email, ipAddress) => hashAuthValue(`credential:${email}:${ipAddress}`);
+const isSqlInactiveFlag = (value) => value === false || value === 0 || String(value).toLowerCase() === 'false';
 
-const getActiveLoginSession = async (sessionToken) => {
-  if (!sessionToken || typeof sessionToken !== 'string' || sessionToken.length < 40) {
+const getMongoUserFromLookup = async (lookupRecord) => {
+  if (!lookupRecord) {
     return null;
   }
 
-  const session = await AuthLoginSession.findOne({ sessionToken: String(sessionToken).trim() });
+  if (lookupRecord.MongoUserId) {
+    const userById = await User.findById(lookupRecord.MongoUserId);
+    if (userById) {
+      return userById;
+    }
+  }
+
+  if (lookupRecord.Email) {
+    return User.findOne({ email: normalizeEmail(lookupRecord.Email) });
+  }
+
+  return null;
+};
+
+const getMongoUserFromSession = async (session) => {
   if (!session) {
     return null;
   }
 
-  if (session.sessionExpiresAt.getTime() <= Date.now()) {
-    await AuthLoginSession.deleteOne({ _id: session._id });
-    return null;
+  if (session.mongoUserId) {
+    const userById = await User.findById(session.mongoUserId);
+    if (userById) {
+      return userById;
+    }
   }
 
-  return session;
+  if (session.email) {
+    return User.findOne({ email: normalizeEmail(session.email) });
+  }
+
+  return null;
 };
 
-const createLoginSession = async ({ user, req }) => {
-  const captchaCode = createCaptchaCode();
-  const sessionToken = createSessionToken();
-  const session = await AuthLoginSession.create({
-    sessionToken,
-    userId: user._id,
-    email: user.email,
-    ipAddress: getClientIp(req),
-    userAgent: sanitizeDisplayText(req.headers['user-agent'] || ''),
-    status: 'credentials_verified',
-    sessionExpiresAt: ttlDate(LOGIN_SESSION_TTL_MS),
-    captchaHash: hashAuthValue(normalizeCaptcha(captchaCode)),
-    captchaExpiresAt: ttlDate(CAPTCHA_EXPIRY_MS),
-  });
-
-  return { session, captchaCode };
-};
-
-const applyNewCaptchaToSession = async (session) => {
-  const captchaCode = createCaptchaCode();
-  session.captchaHash = hashAuthValue(normalizeCaptcha(captchaCode));
-  session.captchaExpiresAt = ttlDate(CAPTCHA_EXPIRY_MS);
-  session.captchaAttempts = 0;
-  session.status = 'credentials_verified';
-  await session.save();
-  return captchaCode;
-};
-
-const issueOtpForSession = async ({ session, user }) => {
+const issueOtpForSession = async ({ sessionToken, user }) => {
   const otpCode = createOtpCode();
   const otpHash = hashAuthValue(normalizeOtp(otpCode));
   const otpExpiresAt = ttlDate(OTP_EXPIRY_MS);
+  const sentAt = new Date();
 
   await sendOtpEmail({
     to: user.email,
@@ -121,13 +153,23 @@ const issueOtpForSession = async ({ session, user }) => {
     expiresInMinutes: Math.max(1, Math.ceil(OTP_EXPIRY_MS / 60000)),
   });
 
-  session.otpHash = otpHash;
-  session.otpExpiresAt = otpExpiresAt;
-  session.otpAttempts = 0;
-  session.otpSendCount += 1;
-  session.otpLastSentAt = new Date();
-  session.status = 'otp_sent';
-  await session.save();
+  const otpResult = await createOtpForSession({
+    sessionToken,
+    otpHash,
+    otpExpiresAt,
+    sentAt,
+    maxSends: OTP_MAX_SENDS,
+  });
+
+  if (!otpResult || otpResult.ResultCode !== 'ok') {
+    throw new Error('Failed to persist OTP session state');
+  }
+
+  return {
+    expiresAt: otpResult.OtpExpiresAt ? new Date(otpResult.OtpExpiresAt) : otpExpiresAt,
+    resendAvailableAt: ttlDate(OTP_RESEND_COOLDOWN_MS),
+    remainingSends: Math.max(0, Number(otpResult.RemainingSends || 0)),
+  };
 };
 
 const credentialsValidationError = (res, message) =>
@@ -137,6 +179,8 @@ const credentialsValidationError = (res, message) =>
 // @route   POST /api/auth/login
 // @access  Public
 const login = asyncHandler(async (req, res) => {
+  await ensureAuthSqlReady();
+
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
 
@@ -163,10 +207,11 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await User.findOne({ email });
-  const isPasswordCorrect = user ? await user.comparePassword(password) : false;
+  const lookupRecord = await loginLookup(email);
+  const isPasswordCorrect =
+    lookupRecord?.PasswordHash ? await bcrypt.compare(password, lookupRecord.PasswordHash) : false;
 
-  if (!user || !isPasswordCorrect) {
+  if (!lookupRecord || !isPasswordCorrect) {
     const failureState = await registerFailure({
       action: 'login_credentials',
       key: credentialRateKey,
@@ -190,16 +235,36 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 
-  if (user.isActive === false) {
+  if (isSqlInactiveFlag(lookupRecord.IsActive)) {
     return res.status(403).json({
       success: false,
       message: 'Account is inactive. Please contact administrator.',
     });
   }
 
+  const user = await getMongoUserFromLookup(lookupRecord);
+  if (!user || user.isActive === false) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unable to continue login for this account.',
+    });
+  }
+
   await clearRateLimit({ action: 'login_credentials', key: credentialRateKey });
 
-  const { session, captchaCode } = await createLoginSession({ user, req });
+  const captchaCode = createCaptchaCode();
+  const captchaExpiresAt = ttlDate(CAPTCHA_EXPIRY_MS);
+  const session = await startLoginSession({
+    sessionToken: createSessionToken(),
+    mongoUserId: user._id,
+    email: user.email,
+    ipAddress: getClientIp(req),
+    userAgent: sanitizeDisplayText(req.headers['user-agent'] || ''),
+    status: 'credentials_verified',
+    sessionExpiresAt: ttlDate(LOGIN_SESSION_TTL_MS),
+    captchaHash: hashAuthValue(normalizeCaptcha(captchaCode)),
+    captchaExpiresAt,
+  });
 
   return res.json({
     success: true,
@@ -208,7 +273,7 @@ const login = asyncHandler(async (req, res) => {
     sessionToken: session.sessionToken,
     captcha: {
       image: buildCaptchaImage(captchaCode),
-      expiresAt: session.captchaExpiresAt,
+      expiresAt: session.captchaExpiresAt || captchaExpiresAt,
     },
   });
 });
@@ -217,6 +282,8 @@ const login = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/login/legacy
 // @access  Public
 const legacyLogin = asyncHandler(async (req, res) => {
+  await ensureAuthSqlReady();
+
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
 
@@ -224,24 +291,33 @@ const legacyLogin = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Please provide email and password' });
   }
 
-  const user = await User.findOne({ email });
-  if (!user) {
+  const lookupRecord = await loginLookup(email);
+  if (!lookupRecord) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
 
-  if (user.isActive === false) {
-    return res.status(401).json({ success: false, message: 'Account is inactive. Please contact administrator.' });
+  if (isSqlInactiveFlag(lookupRecord.IsActive)) {
+    return res
+      .status(401)
+      .json({ success: false, message: 'Account is inactive. Please contact administrator.' });
   }
 
-  const isMatch = await user.comparePassword(password);
+  const isMatch = await bcrypt.compare(password, lookupRecord.PasswordHash);
   if (!isMatch) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
 
-  const token = generateToken(user._id);
-  const studentProfile = await getStudentProfileIfRequired(user);
+  const user = await getMongoUserFromLookup(lookupRecord);
+  if (!user || user.isActive === false) {
+    return res.status(401).json({ success: false, message: 'Unable to complete login for this account.' });
+  }
+
   user.lastLogin = new Date();
   await user.save();
+  await syncUserAuthRecord(user);
+
+  const token = generateToken(user._id);
+  const studentProfile = await getStudentProfileIfRequired(user);
 
   return res.json({
     success: true,
@@ -276,15 +352,39 @@ const refreshCaptcha = asyncHandler(async (req, res) => {
     });
   }
 
-  session.captchaRefreshCount += 1;
-  const captchaCode = await applyNewCaptchaToSession(session);
+  const captchaCode = createCaptchaCode();
+  const captchaExpiresAt = ttlDate(CAPTCHA_EXPIRY_MS);
+  const refreshResult = await refreshCaptchaForSession({
+    sessionToken,
+    captchaHash: hashAuthValue(normalizeCaptcha(captchaCode)),
+    captchaExpiresAt,
+    maxRefresh: CAPTCHA_MAX_REFRESH,
+  });
+
+  if (!refreshResult || refreshResult.ResultCode === 'session_expired') {
+    return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
+  }
+
+  if (refreshResult.ResultCode === 'already_verified') {
+    return res.status(400).json({
+      success: false,
+      message: 'CAPTCHA is already verified for this session.',
+    });
+  }
+
+  if (refreshResult.ResultCode === 'refresh_limit') {
+    return res.status(429).json({
+      success: false,
+      message: 'CAPTCHA refresh limit reached. Please restart login.',
+    });
+  }
 
   return res.json({
     success: true,
     message: 'CAPTCHA refreshed successfully.',
     captcha: {
       image: buildCaptchaImage(captchaCode),
-      expiresAt: session.captchaExpiresAt,
+      expiresAt: refreshResult.CaptchaExpiresAt ? new Date(refreshResult.CaptchaExpiresAt) : captchaExpiresAt,
     },
   });
 });
@@ -301,10 +401,12 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
   }
 
-  const user = await User.findById(session.userId);
+  const user = await getMongoUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to continue login for this account.' });
   }
+
+  await syncUserAuthRecord(user);
 
   if (!session.captchaVerifiedAt) {
     if (!captchaValue) {
@@ -325,43 +427,64 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
       });
     }
 
-    const isCaptchaValid = safeHashCompare(captchaValue, session.captchaHash);
-    if (!isCaptchaValid) {
-      session.captchaAttempts += 1;
-      await session.save();
-      const remainingAttempts = Math.max(0, CAPTCHA_MAX_ATTEMPTS - session.captchaAttempts);
-      const statusCode = remainingAttempts === 0 ? 429 : 400;
+    const captchaResult = await verifyCaptchaForSession({
+      sessionToken,
+      captchaHash: hashAuthValue(captchaValue),
+      maxAttempts: CAPTCHA_MAX_ATTEMPTS,
+      verifiedAt: new Date(),
+    });
 
-      return res.status(statusCode).json({
+    if (!captchaResult || captchaResult.ResultCode === 'session_expired') {
+      return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
+    }
+
+    if (captchaResult.ResultCode === 'missing_captcha' || captchaResult.ResultCode === 'captcha_expired') {
+      return res.status(400).json({
         success: false,
-        message:
-          remainingAttempts === 0
-            ? 'CAPTCHA attempt limit reached. Please restart login.'
-            : 'Invalid CAPTCHA. Please try again.',
-        attemptsLeft: remainingAttempts,
+        message: 'CAPTCHA expired. Please refresh and try again.',
       });
     }
 
-    session.captchaVerifiedAt = new Date();
-    session.status = 'captcha_verified';
-    session.captchaAttempts = 0;
-    await session.save();
+    if (captchaResult.ResultCode === 'captcha_attempt_limit') {
+      return res.status(429).json({
+        success: false,
+        message: 'CAPTCHA attempt limit reached. Please restart login.',
+        attemptsLeft: 0,
+      });
+    }
+
+    if (captchaResult.ResultCode === 'invalid_captcha') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid CAPTCHA. Please try again.',
+        attemptsLeft: Number(captchaResult.AttemptsLeft || 0),
+      });
+    }
   }
 
-  if (session.otpSendCount >= OTP_MAX_SENDS) {
+  const cooldownResult = await checkOtpResendCooldown({
+    sessionToken,
+    cooldownMs: OTP_RESEND_COOLDOWN_MS,
+    maxSends: OTP_MAX_SENDS,
+  });
+
+  if (!cooldownResult || cooldownResult.ResultCode === 'session_expired') {
+    return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
+  }
+
+  if (cooldownResult.ResultCode === 'captcha_required') {
+    return res.status(400).json({ success: false, message: 'Please complete CAPTCHA verification first.' });
+  }
+
+  if (cooldownResult.ResultCode === 'send_limit') {
     return res.status(429).json({
       success: false,
       message: 'OTP resend limit reached. Please restart login.',
     });
   }
 
-  if (
-    session.otpLastSentAt &&
-    Date.now() - session.otpLastSentAt.getTime() < OTP_RESEND_COOLDOWN_MS
-  ) {
-    const retryAfterSeconds = Math.ceil(
-      (OTP_RESEND_COOLDOWN_MS - (Date.now() - session.otpLastSentAt.getTime())) / 1000
-    );
+  if (cooldownResult.ResultCode === 'cooldown_active') {
+    const retryAfterSeconds = Number(cooldownResult.RetryAfterSeconds || 0);
     return res.status(429).json({
       success: false,
       message: `Please wait ${retryAfterSeconds} seconds before requesting another OTP.`,
@@ -369,13 +492,15 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
     });
   }
 
+  let otpState;
+
   try {
-    await issueOtpForSession({ session, user });
+    otpState = await issueOtpForSession({ sessionToken, user });
   } catch (error) {
     console.error('OTP email send error:', error.message);
     return res.status(500).json({
       success: false,
-      message: 'Unable to send OTP email right now. Please try again in a moment.',
+      message: resolveOtpEmailErrorMessage(error),
     });
   }
 
@@ -384,10 +509,10 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
     nextStep: 'otp',
     message: 'OTP sent to your registered email address.',
     otp: {
-      expiresAt: session.otpExpiresAt,
-      resendAvailableAt: ttlDate(OTP_RESEND_COOLDOWN_MS),
+      expiresAt: otpState.expiresAt,
+      resendAvailableAt: otpState.resendAvailableAt,
       maxAttempts: OTP_MAX_ATTEMPTS,
-      remainingSends: Math.max(0, OTP_MAX_SENDS - session.otpSendCount),
+      remainingSends: otpState.remainingSends,
     },
   });
 });
@@ -407,20 +532,25 @@ const resendOtp = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Please complete CAPTCHA verification first.' });
   }
 
-  if (session.otpSendCount >= OTP_MAX_SENDS) {
+  const cooldownResult = await checkOtpResendCooldown({
+    sessionToken,
+    cooldownMs: OTP_RESEND_COOLDOWN_MS,
+    maxSends: OTP_MAX_SENDS,
+  });
+
+  if (!cooldownResult || cooldownResult.ResultCode === 'session_expired') {
+    return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
+  }
+
+  if (cooldownResult.ResultCode === 'send_limit') {
     return res.status(429).json({
       success: false,
       message: 'OTP resend limit reached. Please restart login.',
     });
   }
 
-  if (
-    session.otpLastSentAt &&
-    Date.now() - session.otpLastSentAt.getTime() < OTP_RESEND_COOLDOWN_MS
-  ) {
-    const retryAfterSeconds = Math.ceil(
-      (OTP_RESEND_COOLDOWN_MS - (Date.now() - session.otpLastSentAt.getTime())) / 1000
-    );
+  if (cooldownResult.ResultCode === 'cooldown_active') {
+    const retryAfterSeconds = Number(cooldownResult.RetryAfterSeconds || 0);
     return res.status(429).json({
       success: false,
       message: `Please wait ${retryAfterSeconds} seconds before requesting another OTP.`,
@@ -428,18 +558,22 @@ const resendOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await User.findById(session.userId);
+  const user = await getMongoUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to continue login for this account.' });
   }
 
+  await syncUserAuthRecord(user);
+
+  let otpState;
+
   try {
-    await issueOtpForSession({ session, user });
+    otpState = await issueOtpForSession({ sessionToken, user });
   } catch (error) {
     console.error('OTP resend error:', error.message);
     return res.status(500).json({
       success: false,
-      message: 'Unable to resend OTP email right now. Please try again in a moment.',
+      message: resolveOtpEmailErrorMessage(error),
     });
   }
 
@@ -447,10 +581,10 @@ const resendOtp = asyncHandler(async (req, res) => {
     success: true,
     message: 'A new OTP has been sent to your email.',
     otp: {
-      expiresAt: session.otpExpiresAt,
-      resendAvailableAt: ttlDate(OTP_RESEND_COOLDOWN_MS),
+      expiresAt: otpState.expiresAt,
+      resendAvailableAt: otpState.resendAvailableAt,
       maxAttempts: OTP_MAX_ATTEMPTS,
-      remainingSends: Math.max(0, OTP_MAX_SENDS - session.otpSendCount),
+      remainingSends: otpState.remainingSends,
     },
   });
 });
@@ -496,36 +630,61 @@ const verifyOtpAndCompleteLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const isOtpValid = safeHashCompare(otp, session.otpHash);
-  if (!isOtpValid) {
-    session.otpAttempts += 1;
-    await session.save();
+  const otpResult = await verifyOtpForSession({
+    sessionToken,
+    otpHash: hashAuthValue(otp),
+    maxAttempts: OTP_MAX_ATTEMPTS,
+    verifiedAt: new Date(),
+    completedAt: new Date(),
+    sessionExpiresAt: ttlDate(2 * 60 * 1000),
+  });
 
-    const attemptsLeft = Math.max(0, OTP_MAX_ATTEMPTS - session.otpAttempts);
-    const statusCode = attemptsLeft === 0 ? 429 : 400;
-    return res.status(statusCode).json({
+  if (!otpResult || otpResult.ResultCode === 'session_expired') {
+    return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
+  }
+
+  if (otpResult.ResultCode === 'captcha_required') {
+    return res.status(400).json({ success: false, message: 'Please complete CAPTCHA verification first.' });
+  }
+
+  if (otpResult.ResultCode === 'otp_missing') {
+    return res.status(400).json({
       success: false,
-      message:
-        attemptsLeft === 0
-          ? 'OTP attempt limit reached. Please restart login.'
-          : 'Invalid OTP. Please try again.',
-      attemptsLeft,
+      message: 'OTP was not generated for this session. Please request a new OTP.',
     });
   }
 
-  const user = await User.findById(session.userId);
+  if (otpResult.ResultCode === 'otp_expired') {
+    return res.status(400).json({
+      success: false,
+      message: 'OTP has expired. Please request a new OTP.',
+    });
+  }
+
+  if (otpResult.ResultCode === 'otp_attempt_limit') {
+    return res.status(429).json({
+      success: false,
+      message: 'OTP attempt limit reached. Please restart login.',
+      attemptsLeft: 0,
+    });
+  }
+
+  if (otpResult.ResultCode === 'invalid_otp') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid OTP. Please try again.',
+      attemptsLeft: Number(otpResult.AttemptsLeft || 0),
+    });
+  }
+
+  const user = await getMongoUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to complete login for this account.' });
   }
 
-  session.otpVerifiedAt = new Date();
-  session.completedAt = new Date();
-  session.status = 'completed';
-  session.sessionExpiresAt = ttlDate(2 * 60 * 1000);
-  await session.save();
-
   user.lastLogin = new Date();
   await user.save();
+  await syncUserAuthRecord(user);
 
   const token = generateToken(user._id);
   const studentProfile = await getStudentProfileIfRequired(user);
@@ -572,6 +731,8 @@ const register = asyncHandler(async (req, res) => {
     role: role || 'student',
     phone: sanitizeDisplayText(phone || ''),
   });
+
+  await syncUserAuthRecord(user);
 
   const token = generateToken(user._id);
 
@@ -627,6 +788,7 @@ const updateProfile = asyncHandler(async (req, res) => {
   if (phone) user.phone = sanitizeDisplayText(phone);
 
   await user.save();
+  await syncUserAuthRecord(user);
 
   res.json({
     success: true,
@@ -661,6 +823,7 @@ const changePassword = asyncHandler(async (req, res) => {
 
   user.password = newPassword;
   await user.save();
+  await syncUserAuthRecord(user);
 
   res.json({
     success: true,
@@ -681,4 +844,3 @@ module.exports = {
   updateProfile,
   changePassword,
 };
-

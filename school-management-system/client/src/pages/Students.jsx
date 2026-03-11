@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, Filter, Phone } from 'lucide-react';
+import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
@@ -14,6 +15,7 @@ import {
 } from '../services/api';
 
 const Students = () => {
+  const navigate = useNavigate();
   const { isAdmin, isTeacher } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +54,7 @@ const Students = () => {
   const fetchStudents = async () => {
     try {
       setLoading(true);
-      const response = await getStudents(pagination.page, pagination.limit, searchTerm);
+      const response = await getStudents(pagination.page, pagination.limit, searchTerm, filterClass);
       // Safely handle students array
       const studentsData = response?.data?.students || response?.data || [];
       setStudents(Array.isArray(studentsData) ? studentsData : []);
@@ -146,7 +148,22 @@ const Students = () => {
 
   const columns = [
     { key: 'rollNumber', header: 'Roll No', width: '100px' },
-    { key: 'fullName', header: 'Name' },
+    {
+      key: 'fullName',
+      header: 'Name',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => navigate(`/students/${row._id}`)}
+          className="group inline-flex items-center gap-1 font-semibold text-[#0b2a66] hover:text-[#1d56c3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2a66] focus-visible:ring-offset-2 rounded"
+          title="View student details"
+        >
+          <span className="border-b border-transparent group-hover:border-current transition-colors">
+            {row.fullName}
+          </span>
+        </button>
+      )
+    },
     { key: 'class', header: 'Class' },
     { key: 'section', header: 'Section', width: '80px' },
     { 

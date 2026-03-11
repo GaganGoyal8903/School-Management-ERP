@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   BarChart3,
-  BookOpen,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -44,11 +43,6 @@ const featureItems = [
     title: "Trusted Access",
     text: "Protected authentication and reliable data controls for school operations.",
   },
-];
-
-const demoCredentials = [
-  { role: "Admin", email: "gagan.admin@mayo.edu", password: "Mayo@123" },
-  { role: "Teacher", email: "vikram.teacher@mayo.edu", password: "Mayo@123" },
 ];
 
 const authSteps = [
@@ -94,6 +88,7 @@ export default function Login() {
 
   const {
     startSecureLogin,
+    generateCaptcha,
     refreshCaptcha,
     verifyCaptchaAndSendOtp,
     resendOtp,
@@ -180,9 +175,31 @@ export default function Login() {
     }
 
     const payload = result.data;
-    setSessionToken(payload.sessionToken);
-    setCaptchaImage(payload.captcha?.image || "");
-    setCaptchaExpiresAt(payload.captcha?.expiresAt || null);
+    const secureSessionToken = payload.sessionToken;
+
+    if (!secureSessionToken) {
+      setError("Secure CAPTCHA session was not created. Please restart backend and try again.");
+      return;
+    }
+
+    let captchaPayload = payload.captcha || null;
+    if (!captchaPayload?.image) {
+      const generateResult = await generateCaptcha(secureSessionToken);
+      if (!generateResult.success) {
+        setError(generateResult.message || "Unable to load CAPTCHA. Please try again.");
+        return;
+      }
+      captchaPayload = generateResult.data?.captcha || null;
+    }
+
+    if (!captchaPayload?.image) {
+      setError("CAPTCHA could not be loaded. Please try again.");
+      return;
+    }
+
+    setSessionToken(secureSessionToken);
+    setCaptchaImage(captchaPayload.image);
+    setCaptchaExpiresAt(captchaPayload.expiresAt || null);
     setCaptchaValue("");
     setOtpValue("");
     setOtpExpiresAt(null);
@@ -192,7 +209,10 @@ export default function Login() {
   };
 
   const handleCaptchaRefresh = async () => {
-    if (!sessionToken) return;
+    if (!sessionToken) {
+      setError("Login session missing. Please restart login.");
+      return;
+    }
     setError("");
     setInfoMessage("");
     setCaptchaLoading(true);
@@ -600,25 +620,6 @@ export default function Login() {
                 </div>
               </form>
             )}
-
-            <aside className="erp-demo-panel" aria-label="Demo credentials">
-              <p className="erp-demo-title">
-                <BookOpen size={16} aria-hidden="true" />
-                Demo Credentials
-              </p>
-
-              <div className="erp-demo-list">
-                {demoCredentials.map((item) => (
-                  <div key={item.role} className="erp-demo-row">
-                    <span className="erp-demo-role">{item.role}</span>
-                    <p>
-                      <span>{item.email}</span>
-                      <code>{item.password}</code>
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </aside>
 
             <p className="erp-login-footer">
               Secure access for Admin, Teacher, and Staff

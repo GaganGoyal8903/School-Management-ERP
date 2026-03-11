@@ -18,6 +18,7 @@ const { protect } = require('../middleware/authMiddleware');
 // Public routes
 router.post('/login', login);
 router.post('/login/legacy', legacyLogin);
+router.post('/login/captcha/generate', refreshCaptcha);
 router.post('/login/captcha/refresh', refreshCaptcha);
 router.post('/login/captcha/verify', verifyCaptchaAndSendOtp);
 router.post('/login/otp/resend', resendOtp);

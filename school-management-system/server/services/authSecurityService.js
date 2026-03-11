@@ -1,6 +1,12 @@
 const crypto = require('crypto');
-const AuthAttempt = require('../models/AuthAttempt');
+const {
+  executeQuery,
+  executeInTransaction,
+  getSqlClient,
+} = require('../config/sqlServer');
+const { ensureAuthSqlReady } = require('./authSqlService');
 
+const AUTH_ATTEMPT_TABLE = 'dbo.SqlAuthAttempts';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CAPTCHA_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const AUTH_HASH_SECRET =
@@ -96,8 +102,43 @@ const buildCaptchaImage = (code) => {
 
 const ttlDate = (ms) => new Date(Date.now() + ms);
 
+const mapRateLimitRecord = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    action: row.ActionName,
+    key: row.RateKey,
+    attempts: Number(row.Attempts || 0),
+    windowStart: row.WindowStart ? new Date(row.WindowStart) : null,
+    lastAttemptAt: row.LastAttemptAt ? new Date(row.LastAttemptAt) : null,
+    blockedUntil: row.BlockedUntil ? new Date(row.BlockedUntil) : null,
+    expiresAt: row.ExpiresAt ? new Date(row.ExpiresAt) : null,
+  };
+};
+
 const getRateLimitRecord = async (action, key) => {
-  return AuthAttempt.findOne({ action, key });
+  await ensureAuthSqlReady();
+  const sql = getSqlClient();
+  const result = await executeQuery(
+    `SELECT TOP 1
+       ActionName,
+       RateKey,
+       Attempts,
+       WindowStart,
+       LastAttemptAt,
+       BlockedUntil,
+       ExpiresAt
+     FROM ${AUTH_ATTEMPT_TABLE}
+     WHERE ActionName = @action AND RateKey = @key`,
+    [
+      { name: 'action', type: sql.NVarChar(100), value: action },
+      { name: 'key', type: sql.NVarChar(128), value: key },
+    ]
+  );
+
+  return mapRateLimitRecord(result?.recordset?.[0]);
 };
 
 const isRateLimitBlocked = (attemptRecord) => {
@@ -121,65 +162,137 @@ const ensureNotBlocked = async ({ action, key }) => {
 };
 
 const registerFailure = async ({ action, key, maxAttempts, windowMs, blockMs }) => {
-  const now = new Date();
-  let attemptRecord = await getRateLimitRecord(action, key);
+  await ensureAuthSqlReady();
+  const sql = getSqlClient();
 
-  if (!attemptRecord) {
-    attemptRecord = await AuthAttempt.create({
-      action,
-      key,
-      attempts: 1,
-      windowStart: now,
-      lastAttemptAt: now,
-      expiresAt: ttlDate(7 * ONE_DAY_MS),
-    });
-    return { blocked: false, attemptsLeft: Math.max(0, maxAttempts - 1), retryAfterSeconds: 0 };
-  }
+  return executeInTransaction(async ({ query }) => {
+    const now = new Date();
+    const selectResult = await query(
+      `SELECT TOP 1
+         ActionName,
+         RateKey,
+         Attempts,
+         WindowStart,
+         LastAttemptAt,
+         BlockedUntil,
+         ExpiresAt
+       FROM ${AUTH_ATTEMPT_TABLE} WITH (UPDLOCK, HOLDLOCK)
+       WHERE ActionName = @action AND RateKey = @key`,
+      [
+        { name: 'action', type: sql.NVarChar(100), value: action },
+        { name: 'key', type: sql.NVarChar(128), value: key },
+      ]
+    );
 
-  if (isRateLimitBlocked(attemptRecord)) {
+    const attemptRecord = mapRateLimitRecord(selectResult?.recordset?.[0]);
+
+    if (!attemptRecord) {
+      const expiresAt = ttlDate(7 * ONE_DAY_MS);
+      await query(
+        `INSERT INTO ${AUTH_ATTEMPT_TABLE} (
+           ActionName,
+           RateKey,
+           Attempts,
+           WindowStart,
+           LastAttemptAt,
+           BlockedUntil,
+           ExpiresAt,
+           CreatedAt,
+           UpdatedAt
+         )
+         VALUES (
+           @action,
+           @key,
+           1,
+           @windowStart,
+           @lastAttemptAt,
+           NULL,
+           @expiresAt,
+           @createdAt,
+           @updatedAt
+         )`,
+        [
+          { name: 'action', type: sql.NVarChar(100), value: action },
+          { name: 'key', type: sql.NVarChar(128), value: key },
+          { name: 'windowStart', type: sql.DateTime2(0), value: now },
+          { name: 'lastAttemptAt', type: sql.DateTime2(0), value: now },
+          { name: 'expiresAt', type: sql.DateTime2(0), value: expiresAt },
+          { name: 'createdAt', type: sql.DateTime2(0), value: now },
+          { name: 'updatedAt', type: sql.DateTime2(0), value: now },
+        ]
+      );
+
+      return {
+        blocked: false,
+        attemptsLeft: Math.max(0, maxAttempts - 1),
+        retryAfterSeconds: 0,
+      };
+    }
+
+    if (isRateLimitBlocked(attemptRecord)) {
+      return {
+        blocked: true,
+        attemptsLeft: 0,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil((attemptRecord.blockedUntil.getTime() - Date.now()) / 1000)
+        ),
+      };
+    }
+
+    const windowExpired =
+      !attemptRecord.windowStart || now.getTime() - attemptRecord.windowStart.getTime() > windowMs;
+    const attempts = windowExpired ? 1 : attemptRecord.attempts + 1;
+    const windowStart = windowExpired ? now : attemptRecord.windowStart;
+    const blockedUntil = attempts > maxAttempts ? ttlDate(blockMs) : null;
+
+    await query(
+      `UPDATE ${AUTH_ATTEMPT_TABLE}
+       SET Attempts = @attempts,
+           WindowStart = @windowStart,
+           LastAttemptAt = @lastAttemptAt,
+           BlockedUntil = @blockedUntil,
+           ExpiresAt = @expiresAt,
+           UpdatedAt = @updatedAt
+       WHERE ActionName = @action AND RateKey = @key`,
+      [
+        { name: 'attempts', type: sql.Int, value: attempts },
+        { name: 'windowStart', type: sql.DateTime2(0), value: windowStart },
+        { name: 'lastAttemptAt', type: sql.DateTime2(0), value: now },
+        { name: 'blockedUntil', type: sql.DateTime2(0), value: blockedUntil },
+        { name: 'expiresAt', type: sql.DateTime2(0), value: ttlDate(7 * ONE_DAY_MS) },
+        { name: 'updatedAt', type: sql.DateTime2(0), value: now },
+        { name: 'action', type: sql.NVarChar(100), value: action },
+        { name: 'key', type: sql.NVarChar(128), value: key },
+      ]
+    );
+
+    if (blockedUntil) {
+      return {
+        blocked: true,
+        attemptsLeft: 0,
+        retryAfterSeconds: Math.max(1, Math.ceil(blockMs / 1000)),
+      };
+    }
+
     return {
-      blocked: true,
-      attemptsLeft: 0,
-      retryAfterSeconds: Math.max(
-        1,
-        Math.ceil((attemptRecord.blockedUntil.getTime() - Date.now()) / 1000)
-      ),
+      blocked: false,
+      attemptsLeft: Math.max(0, maxAttempts - attempts),
+      retryAfterSeconds: 0,
     };
-  }
-
-  const windowExpired = now.getTime() - attemptRecord.windowStart.getTime() > windowMs;
-  if (windowExpired) {
-    attemptRecord.attempts = 1;
-    attemptRecord.windowStart = now;
-  } else {
-    attemptRecord.attempts += 1;
-  }
-
-  attemptRecord.lastAttemptAt = now;
-  attemptRecord.expiresAt = ttlDate(7 * ONE_DAY_MS);
-
-  if (attemptRecord.attempts > maxAttempts) {
-    attemptRecord.blockedUntil = ttlDate(blockMs);
-    await attemptRecord.save();
-    return {
-      blocked: true,
-      attemptsLeft: 0,
-      retryAfterSeconds: Math.max(1, Math.ceil(blockMs / 1000)),
-    };
-  }
-
-  attemptRecord.blockedUntil = null;
-  await attemptRecord.save();
-
-  return {
-    blocked: false,
-    attemptsLeft: Math.max(0, maxAttempts - attemptRecord.attempts),
-    retryAfterSeconds: 0,
-  };
+  });
 };
 
 const clearRateLimit = async ({ action, key }) => {
-  await AuthAttempt.deleteOne({ action, key });
+  await ensureAuthSqlReady();
+  const sql = getSqlClient();
+  await executeQuery(
+    `DELETE FROM ${AUTH_ATTEMPT_TABLE} WHERE ActionName = @action AND RateKey = @key`,
+    [
+      { name: 'action', type: sql.NVarChar(100), value: action },
+      { name: 'key', type: sql.NVarChar(128), value: key },
+    ]
+  );
 };
 
 module.exports = {
@@ -197,4 +310,3 @@ module.exports = {
   registerFailure,
   clearRateLimit,
 };
-

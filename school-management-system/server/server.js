@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const { initSqlServer } = require('./config/sqlServer');
 
 const { errorMiddleware, notFound } = require('./middleware/errorMiddleware');
 
@@ -32,6 +33,9 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://gagangoyal878_db_user:wKlY
 mongoose.connect(MONGO_URI)
   .then(() => console.log("MongoDB Connected Successfully"))
   .catch((err) => console.log("MongoDB Error:", err.message));
+
+initSqlServer()
+  .catch((err) => console.warn("SQL Server bootstrap skipped:", err.message));
 
 // ================= API ROUTES =================
 
@@ -69,6 +73,8 @@ app.use("/api/auth", authRoutes);
 
 // Student routes
 app.use("/api/students", studentRoutes);
+// Backward-compatible student routes (legacy singular prefix)
+app.use("/api/student", studentRoutes);
 
 // Teacher routes
 app.use("/api/teachers", teacherRoutes);
@@ -100,8 +106,8 @@ app.use("/api/timetables", timetableRoutes);
 // Parent routes
 app.use("/api/parent", parentRoutes);
 
-// ================= REMOVED LEGACY ROUTES (now using authRoutes only) =================
-// - /api/student (duplicate of /api/students) - REMOVED
+// ================= LEGACY / BACKWARD-COMPAT NOTES =================
+// - /api/student is mounted for backward compatibility with older clients.
 // - /api/login (duplicate of /api/auth/login) - REMOVED
 // - /api/register (duplicate of /api/auth/register) - REMOVED
 
@@ -115,4 +121,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`School Management Server Running on http://localhost:${PORT}`);
 });
-

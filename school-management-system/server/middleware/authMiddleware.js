@@ -54,4 +54,3 @@ const generateToken = (id) => {
 };
 
 module.exports = { protect, generateToken };
-

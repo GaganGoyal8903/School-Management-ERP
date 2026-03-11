@@ -22,7 +22,7 @@ async function seed() {
     const password = await bcrypt.hash('Mayo@123', 10);
 
     const users = [
-      { fullName: 'Gagan Goyal (Admin)', email: 'gagan.admin@mayo.edu', password, role: 'admin' },
+      { fullName: 'Gagan Goyal (Admin)', email: 'gagangoyal878@gmail.com', password, role: 'admin' },
       { fullName: 'Vikram Rathore', email: 'vikram.teacher@mayo.edu', password, role: 'teacher' },
       { fullName: 'Arjun Pratap', email: 'arjun.teacher@mayo.edu', password, role: 'teacher' },
       { fullName: 'Aarav Sharma', email: 'aarav@mayo.edu', password, role: 'student' },
@@ -42,7 +42,7 @@ async function seed() {
 
     console.log('\n✅ Seed Complete!');
     console.log('Login with any of:');
-    console.log('  Admin: gagan.admin@mayo.edu / Mayo@123');
+    console.log('  Admin: gagangoyal878@gmail.com / Mayo@123');
     console.log('  Teacher: vikram.teacher@mayo.edu / Mayo@123');
     console.log('  Student: aarav@mayo.edu / Mayo@123');
     process.exit(0);
@@ -53,4 +53,5 @@ async function seed() {
 }
 
 seed();
+
 

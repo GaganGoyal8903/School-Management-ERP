@@ -185,11 +185,11 @@ async function seed() {
     console.log("👤 Creating Admin User...");
     const adminUser = await User.create({
       fullName: "Gagan Goyal",
-      email: "gagan.admin@mayo.edu",
+      email: "gagangoyal878@gmail.com",
       password: "Mayo@123",
       role: "admin"
     });
-    console.log("✅ Admin created: gagan.admin@mayo.edu\n");
+    console.log("✅ Admin created: gagangoyal878@gmail.com\n");
 
     // ==================== CREATE 20 TEACHERS ====================
     console.log("👨‍🏫 Creating 20 Teachers...");
@@ -605,7 +605,7 @@ async function seed() {
     console.log("🎉 PRO SEED COMPLETED SUCCESSFULLY!");
     console.log("=".repeat(60));
     console.log("\n📌 Test Credentials:");
-    console.log("   Admin: gagan.admin@mayo.edu / Mayo@123");
+    console.log("   Admin: gagangoyal878@gmail.com / Mayo@123");
     console.log("   Teacher: teacher1@mayo.edu / Mayo@123");
     console.log("   Student: student1@mayo.edu / Mayo@123");
     console.log("\n");
@@ -626,4 +626,5 @@ async function seed() {
 
 // Run the seed function
 seed();
+
 
