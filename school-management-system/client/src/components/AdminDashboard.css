@@ -1,0 +1,140 @@
+.admin-dashboard {
+  padding: 24px;
+  background: #f1f5f9;
+  min-height: 100vh;
+  color: #0f172a;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.admin-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.stat-grid {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.stat-card p {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+}
+
+.stat-card h2 {
+  margin: 10px 0 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.admin-panels {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.panel h3 {
+  margin: 0 0 12px;
+}
+
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.activity-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.activity-list strong {
+  display: block;
+}
+
+.activity-list span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.activity-list code {
+  font-size: 12px;
+  background: #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.primary-action,
+.secondary-action {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-action {
+  background: #0369a1;
+  color: #ffffff;
+}
+
+.secondary-action {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+@media (max-width: 1000px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-dashboard {
+    padding: 14px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}

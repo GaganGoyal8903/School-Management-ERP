@@ -1,0 +1,178 @@
+﻿.student-dashboard {
+  min-height: 100vh;
+  background: #f7f7f2;
+  color: #0f172a;
+  padding: 24px;
+}
+
+.student-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.student-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.student-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.student-grid.lower {
+  grid-template-columns: 2fr 1fr;
+}
+
+.student-card {
+  background: #fffff0;
+  border: 1px solid #c5a059;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.student-card h2 {
+  margin: 0 0 12px;
+}
+
+.attendance-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.attendance-ring-wrap {
+  position: relative;
+  width: 170px;
+  height: 170px;
+}
+
+.attendance-ring {
+  width: 170px;
+  height: 170px;
+  transform: rotate(-90deg);
+}
+
+.attendance-ring .track {
+  fill: none;
+  stroke: #c5a059;
+  stroke-width: 12;
+}
+
+.attendance-ring .fill {
+  fill: none;
+  stroke: #002366;
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.attendance-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.attendance-center strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.attendance-center span {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.exam-list,
+.notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.exam-list li {
+  border: 1px solid #c5a059;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f7f7f2;
+}
+
+.exam-list strong {
+  display: block;
+}
+
+.exam-list p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.exam-list span {
+  font-size: 13px;
+  color: #002366;
+  font-weight: 600;
+}
+
+.grades-wrap {
+  overflow-x: auto;
+}
+
+.grades-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.grades-wrap th,
+.grades-wrap td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid #c5a059;
+}
+
+.grades-wrap thead th {
+  font-size: 13px;
+  color: #475569;
+}
+
+.notice-list li {
+  border: 1px solid #c5a059;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f7f7f2;
+}
+
+.notice-list strong {
+  display: block;
+}
+
+.notice-list p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 14px;
+}
+
+@media (max-width: 980px) {
+  .student-grid,
+  .student-grid.lower {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .student-dashboard {
+    padding: 14px;
+  }
+}
+

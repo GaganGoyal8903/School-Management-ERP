@@ -1,0 +1,164 @@
+.teacher-dashboard {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 24px;
+}
+
+.teacher-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.teacher-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.teacher-panel {
+  margin-top: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.teacher-panel h2 {
+  margin: 0 0 12px;
+}
+
+.schedule-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.schedule-card {
+  min-width: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.schedule-time {
+  margin: 0;
+  color: #0369a1;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.schedule-card h3 {
+  margin: 8px 0 4px;
+}
+
+.schedule-card p {
+  margin: 0;
+  color: #334155;
+}
+
+.schedule-card span {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.teacher-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.class-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.class-head select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.class-summary {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.class-summary div {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.class-summary p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.class-summary h3 {
+  margin: 8px 0 0;
+  font-size: 28px;
+}
+
+.assignment-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.assignment-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assignment-list strong {
+  display: block;
+}
+
+.assignment-list p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.assignment-list span {
+  font-size: 13px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .teacher-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .teacher-dashboard {
+    padding: 14px;
+  }
+
+  .class-summary {
+    grid-template-columns: 1fr;
+  }
+}

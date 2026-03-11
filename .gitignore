@@ -1,0 +1,13 @@
+node_modules/
+.env
+**/.env
+.env.*
+dist/
+build/
+.vscode/
+**/node_modules/
+**/dist/
+**/build/
+*.zip
+nul
+**/nul

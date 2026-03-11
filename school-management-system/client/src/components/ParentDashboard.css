@@ -1,0 +1,173 @@
+﻿.parent-dashboard {
+  min-height: 100vh;
+  background: #f7f7f2;
+  color: #0f172a;
+  padding: 24px;
+}
+
+.parent-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.parent-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.parent-card {
+  margin-top: 16px;
+  background: #fffff0;
+  border: 1px solid #c5a059;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.child-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.child-switcher h2 {
+  margin: 0;
+}
+
+.child-switcher p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.child-switcher select {
+  border: 1px solid #c5a059;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fffff0;
+}
+
+.parent-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.attendance-summary {
+  margin-top: 6px;
+}
+
+.attendance-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.attendance-row strong {
+  font-size: 32px;
+}
+
+.attendance-row span {
+  color: #64748b;
+}
+
+.attendance-track {
+  margin-top: 10px;
+  height: 12px;
+  border-radius: 999px;
+  background: #c5a059;
+  overflow: hidden;
+}
+
+.attendance-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #002366, #c5a059);
+}
+
+.fee-card {
+  border-left: 6px solid transparent;
+}
+
+.fee-card.paid {
+  border-left-color: #16a34a;
+}
+
+.fee-card.pending {
+  border-left-color: #d97706;
+}
+
+.fee-status {
+  margin: 8px 0;
+}
+
+.fee-status span {
+  display: inline-block;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.fee-card.paid .fee-status span {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.fee-card.pending .fee-status span {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pay-btn {
+  margin-top: 10px;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #002366;
+  color: #fffff0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pay-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.results-wrap {
+  overflow-x: auto;
+}
+
+.results-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-wrap th,
+.results-wrap td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid #c5a059;
+}
+
+.results-wrap th {
+  font-size: 13px;
+  color: #475569;
+}
+
+@media (max-width: 900px) {
+  .parent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .parent-dashboard {
+    padding: 14px;
+  }
+
+  .child-switcher {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

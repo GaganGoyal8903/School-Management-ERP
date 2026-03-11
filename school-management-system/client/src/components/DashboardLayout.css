@@ -1,0 +1,161 @@
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f7f7f2;
+  color: #0f172a;
+}
+
+.dashboard-sidebar {
+  width: 260px;
+  background: #002366;
+  color: #f8fafc;
+  transition: width 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #c5a059;
+}
+
+.dashboard-sidebar.collapsed {
+  width: 78px;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(197, 160, 89, 0.5);
+}
+
+.sidebar-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sidebar-crest {
+  height: 40px;
+  width: 40px;
+  border-radius: 999px;
+  border: 2px solid #c5a059;
+  background: #fffbf2;
+  object-fit: cover;
+}
+
+.collapse-btn {
+  border: 1px solid #c5a059;
+  background: transparent;
+  color: #c5a059;
+  border-radius: 8px;
+  height: 30px;
+  width: 30px;
+  cursor: pointer;
+}
+
+.sidebar-nav {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-link:hover {
+  background: rgba(197, 160, 89, 0.2);
+}
+
+.sidebar-link svg {
+  color: #c5a059;
+}
+
+.dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-nav {
+  height: 64px;
+  background: #002366;
+  border-bottom: 1px solid #c5a059;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  color: #fffbf2;
+}
+
+.top-nav h1 {
+  margin: 0;
+  font-size: 18px;
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.top-motto {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: #c5a059;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-logo {
+  height: 36px;
+  width: 36px;
+  border-radius: 999px;
+  border: 2px solid #c5a059;
+  background: #fffbf2;
+  object-fit: cover;
+}
+
+.role-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #c5a059;
+  color: #002366;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.dashboard-content {
+  padding: 20px;
+}
+
+@media (max-width: 768px) {
+  .dashboard-sidebar {
+    width: 78px;
+  }
+
+  .top-motto {
+    display: none;
+  }
+
+  .header-logo {
+    height: 32px;
+    width: 32px;
+  }
+}
