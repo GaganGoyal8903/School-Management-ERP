@@ -359,7 +359,10 @@ CREATE OR ALTER PROCEDURE dbo.spStudentCreate
 AS
 BEGIN
   SET NOCOUNT ON;
-  DELETE FROM ${STUDENT_TABLE} WHERE MongoStudentId = @MongoStudentId;
+  DELETE FROM ${STUDENT_TABLE}
+  WHERE MongoStudentId = @MongoStudentId
+     OR RollNumber = @RollNumber
+     OR (@MongoUserId IS NOT NULL AND MongoUserId = @MongoUserId);
 
   INSERT INTO ${STUDENT_TABLE} (
     MongoStudentId,
@@ -664,12 +667,13 @@ const syncAllStudentsToSql = async ({ force = false } = {}) => {
         : [];
       const userMap = new Map(users.map((user) => [String(user._id), user]));
 
+      await pruneDeletedStudentsFromMirror(studentIds);
+
       for (const student of students) {
         const user = student.userId ? userMap.get(String(student.userId)) : null;
         await syncStudentMirror(student, user);
       }
 
-      await pruneDeletedStudentsFromMirror(studentIds);
       lastStudentMirrorSyncAt = Date.now();
     })().finally(() => {
       studentMirrorSyncPromise = null;
