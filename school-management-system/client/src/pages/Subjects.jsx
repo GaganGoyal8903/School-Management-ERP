@@ -17,6 +17,7 @@ const Subjects = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,25 +31,28 @@ const Subjects = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [searchTerm]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [subjectsRes, teachersRes] = await Promise.all([
-        getSubjects(),
+        getSubjects(searchTerm ? { search: searchTerm } : undefined),
         getTeachers()
       ]);
-      // Safely handle subjects array
-      const subjectsData = subjectsRes?.data?.subjects || subjectsRes?.data || [];
-      setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
-      
-      // Safely handle teachers array
-      const teachersData = teachersRes?.data?.teachers || teachersRes?.data || [];
-      setTeachers(Array.isArray(teachersData) ? teachersData : []);
+      const subjectsData = subjectsRes?.data?.subjects;
+      const teachersData = teachersRes?.data?.teachers;
+
+      if (!Array.isArray(subjectsData) || !Array.isArray(teachersData)) {
+        throw new Error('Invalid subjects response');
+      }
+
+      setSubjects(subjectsData);
+      setTeachers(teachersData);
+      setLoadError('');
     } catch (error) {
       toast.error('Failed to fetch data');
-      // Ensure empty arrays on error
+      setLoadError('Unable to load live subject data from the backend API.');
       setSubjects([]);
       setTeachers([]);
     } finally {
@@ -173,6 +177,11 @@ const Subjects = () => {
         onSearch={setSearchTerm}
         searchPlaceholder="Search subjects..."
       />
+      {loadError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
 
       <Modal
         isOpen={showModal}

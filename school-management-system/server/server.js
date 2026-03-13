@@ -10,6 +10,8 @@ const { errorMiddleware, notFound } = require('./middleware/errorMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const teacherRoutes = require('./routes/teacherRoutes');
+const classRoutes = require('./routes/classRoutes');
+const sectionRoutes = require('./routes/sectionRoutes');
 const subjectRoutes = require('./routes/subjectRoutes');
 const materialRoutes = require('./routes/materialRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
@@ -47,21 +49,14 @@ app.get("/api/health", (req, res) => {
 // Dashboard route - returns simplified stats for dashboard cards
 app.get("/api/dashboard", async (req, res) => {
   try {
-    const User = require('./models/User');
-    const Student = require('./models/Student');
-    const Subject = require('./models/Subject');
-    const Material = require('./models/Material');
-    
-    const totalStudents = await Student.countDocuments({ isActive: true });
-    const totalTeachers = await User.countDocuments({ role: 'teacher', isActive: { $ne: false } });
-    const totalSubjects = await Subject.countDocuments();
-    const totalMaterials = await Material.countDocuments();
+    const { getDashboardReport } = require('./services/reportSqlService');
+    const dashboard = await getDashboardReport({});
 
     res.json({
-      totalStudents,
-      totalTeachers,
-      totalSubjects,
-      totalMaterials
+      totalStudents: Number(dashboard?.stats?.students || 0),
+      totalTeachers: Number(dashboard?.stats?.teachers || 0),
+      totalSubjects: Number(dashboard?.stats?.subjects || 0),
+      totalMaterials: Number(dashboard?.stats?.materials || 0)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -78,6 +73,12 @@ app.use("/api/student", studentRoutes);
 
 // Teacher routes
 app.use("/api/teachers", teacherRoutes);
+
+// Class routes
+app.use("/api/classes", classRoutes);
+
+// Section routes
+app.use("/api/sections", sectionRoutes);
 
 // Subject routes
 app.use("/api/subjects", subjectRoutes);
@@ -118,6 +119,15 @@ app.use(errorMiddleware);
 // ================= START SERVER =================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`School Management Server Running on http://localhost:${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Stop the existing process or change PORT in server/.env.`);
+    return;
+  }
+
+  console.error('Server startup error:', error.message);
 });

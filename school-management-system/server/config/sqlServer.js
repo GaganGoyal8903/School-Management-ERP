@@ -10,6 +10,7 @@ try {
 const DEFAULT_SQL_SERVER = '(localdb)\\MSSQLLocalDB';
 const DEFAULT_SQL_DATABASE = 'SchoolERP';
 const DEFAULT_SQL_DRIVER = 'msnodesqlv8';
+const DEFAULT_SQL_ODBC_DRIVER = 'ODBC Driver 18 for SQL Server';
 
 let poolPromise = null;
 
@@ -21,13 +22,47 @@ const toBool = (value, fallback = false) => {
   return ['true', '1', 'yes', 'y'].includes(String(value).trim().toLowerCase());
 };
 
+const toYesNo = (value, fallback = true) => (toBool(value, fallback) ? 'Yes' : 'No');
+
+const buildMsNodeSqlConnectionString = ({ server, database, odbcDriver, trustedConnection, trustServerCertificate }) => {
+  const normalizedDriver = String(odbcDriver || DEFAULT_SQL_ODBC_DRIVER).trim();
+  const wrappedDriver = normalizedDriver.startsWith('{') ? normalizedDriver : `{${normalizedDriver}}`;
+
+  return [
+    `Driver=${wrappedDriver}`,
+    `Server=${server}`,
+    `Database=${database}`,
+    `Trusted_Connection=${toYesNo(trustedConnection, true)}`,
+    `TrustServerCertificate=${toYesNo(trustServerCertificate, true)}`,
+  ].join(';') + ';';
+};
+
+const sqlServer = process.env.SQL_SERVER || DEFAULT_SQL_SERVER;
+const sqlDatabase = process.env.SQL_DATABASE || DEFAULT_SQL_DATABASE;
+const sqlDriver = process.env.SQL_DRIVER || DEFAULT_SQL_DRIVER;
+const sqlTrustedConnection = toBool(process.env.SQL_TRUSTED_CONNECTION, true);
+const sqlTrustCertificate = toBool(process.env.SQL_TRUST_CERT, true);
+const sqlOdbcDriver = process.env.SQL_ODBC_DRIVER || DEFAULT_SQL_ODBC_DRIVER;
+const sqlConnectionString =
+  process.env.SQL_CONNECTION_STRING ||
+  (String(sqlDriver).toLowerCase() === 'msnodesqlv8'
+    ? buildMsNodeSqlConnectionString({
+        server: sqlServer,
+        database: sqlDatabase,
+        odbcDriver: sqlOdbcDriver,
+        trustedConnection: sqlTrustedConnection,
+        trustServerCertificate: sqlTrustCertificate,
+      })
+    : null);
+
 const sqlConfig = {
-  server: process.env.SQL_SERVER || DEFAULT_SQL_SERVER,
-  database: process.env.SQL_DATABASE || DEFAULT_SQL_DATABASE,
-  driver: process.env.SQL_DRIVER || DEFAULT_SQL_DRIVER,
+  server: sqlServer,
+  database: sqlDatabase,
+  driver: sqlDriver,
+  connectionString: sqlConnectionString,
   options: {
-    trustedConnection: toBool(process.env.SQL_TRUSTED_CONNECTION, true),
-    trustServerCertificate: toBool(process.env.SQL_TRUST_CERT, true),
+    trustedConnection: sqlTrustedConnection,
+    trustServerCertificate: sqlTrustCertificate,
     enableArithAbort: true,
   },
   pool: {

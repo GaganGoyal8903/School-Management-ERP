@@ -1,20 +1,19 @@
-const mongoose = require('mongoose');
-const Student = require('../models/Student');
-const User = require('../models/User');
 const {
   getSqlClient,
   executeQuery,
   executeStoredProcedure,
   getPool,
+  executeInTransaction,
 } = require('../config/sqlServer');
-const { ensureAuthSqlReady } = require('./authSqlService');
+const Student = require('../models/Student');
+const User = require('../models/User');
+const { ensureAuthSqlReady, syncUserAuthRecord } = require('./authSqlService');
 
 const STUDENT_TABLE = 'dbo.SqlStudents';
-const FULL_SYNC_TTL_MS = 30000;
-
+const STUDENT_SYNC_TTL_MS = 30000;
 let studentBootstrapPromise = null;
-let studentMirrorSyncPromise = null;
-let lastStudentMirrorSyncAt = 0;
+let studentSyncPromise = null;
+let lastStudentSyncAt = 0;
 
 const toNullableString = (value) => {
   if (value === undefined || value === null) {
@@ -29,19 +28,48 @@ const normalizeAddress = (value) => {
   if (!value || typeof value !== 'object') {
     return {
       street: null,
+      line2: null,
       city: null,
       state: null,
       pincode: null,
+      country: null,
     };
   }
 
   return {
-    street: toNullableString(value.street),
+    street: toNullableString(value.street || value.addressLine1),
+    line2: toNullableString(value.line2 || value.addressLine2),
     city: toNullableString(value.city),
     state: toNullableString(value.state),
-    pincode: toNullableString(value.pincode),
+    pincode: toNullableString(value.pincode || value.postalCode || value.zipCode),
+    country: toNullableString(value.country),
   };
 };
+
+const toNullableDate = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const splitFullName = (fullName) => {
+  const normalizedFullName = String(fullName || '').trim();
+  if (!normalizedFullName) {
+    return { firstName: '', lastName: null, fullName: null };
+  }
+
+  const [firstName, ...rest] = normalizedFullName.split(/\s+/);
+  return {
+    firstName,
+    lastName: rest.length ? rest.join(' ') : null,
+    fullName: normalizedFullName,
+  };
+};
+
+const escapeSqlLiteral = (value = '') => String(value).replace(/'/g, "''");
 
 const toSqlStudentPayload = (studentDocument, userDocument = null) => {
   const student = studentDocument?.toObject ? studentDocument.toObject() : studentDocument;
@@ -117,8 +145,6 @@ const mapStudentRow = (row) => {
     updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
   };
 };
-
-const escapeSqlLiteral = (value = '') => String(value).replace(/'/g, "''");
 
 const STUDENT_SCHEMA_BATCH = `
 IF OBJECT_ID(N'${STUDENT_TABLE}', N'U') IS NULL
@@ -572,6 +598,573 @@ const buildStudentSqlParams = (payload) => {
   ];
 };
 
+const REAL_STUDENT_LIST_PAGE_SIZE = 10000;
+const REAL_STUDENT_BASE_SELECT = `
+  SELECT
+    S.StudentId,
+    S.UserId,
+    S.AdmissionNumber,
+    S.RollNumber,
+    S.AcademicYearId,
+    S.ClassId,
+    S.SectionId,
+    S.FirstName,
+    S.LastName,
+    S.FullName,
+    S.Gender,
+    S.DateOfBirth,
+    S.BloodGroup,
+    S.Phone,
+    S.Email,
+    S.AddressLine1,
+    S.AddressLine2,
+    S.City,
+    S.State,
+    S.PostalCode,
+    S.Country,
+    S.AdmissionDate,
+    S.Status,
+    S.ProfileImage,
+    S.CreatedAt,
+    S.UpdatedAt,
+    C.ClassName,
+    SEC.SectionName,
+    AY.YearName
+  FROM dbo.Students S
+  LEFT JOIN dbo.Classes C ON S.ClassId = C.ClassId
+  LEFT JOIN dbo.Sections SEC ON S.SectionId = SEC.SectionId
+  LEFT JOIN dbo.AcademicYears AY ON S.AcademicYearId = AY.AcademicYearId
+`;
+
+const normalizeStudentNumericId = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isInteger(numericValue) || numericValue <= 0) {
+    return null;
+  }
+
+  return numericValue;
+};
+
+const isSqlStudentActive = (status) => {
+  if (status === undefined || status === null) {
+    return true;
+  }
+
+  return String(status).trim().toLowerCase() !== 'inactive';
+};
+
+const logStudentSqlRead = (procedureName, params = {}) => {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+
+  console.info('[students][sql]', procedureName, params);
+};
+
+const executeStudentReadProcedure = async (procedureName, params = []) => {
+  logStudentSqlRead(procedureName, Object.fromEntries(params.map((param) => [param.name, param.value ?? null])));
+  return executeStoredProcedure(procedureName, params);
+};
+
+const getPrimaryGuardiansByStudentIds = async (studentIds = []) => {
+  const normalizedIds = [...new Set(
+    studentIds
+      .map(normalizeStudentNumericId)
+      .filter(Boolean)
+  )];
+
+  if (!normalizedIds.length) {
+    return new Map();
+  }
+
+  const inClause = normalizedIds.join(', ');
+  const result = await executeQuery(`
+    ;WITH RankedGuardians AS (
+      SELECT
+        G.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY G.StudentId
+          ORDER BY CASE WHEN G.IsPrimaryGuardian = 1 THEN 0 ELSE 1 END, G.GuardianId ASC
+        ) AS GuardianRank
+      FROM dbo.Guardians G
+      WHERE G.StudentId IN (${inClause})
+    )
+    SELECT *
+    FROM RankedGuardians
+    WHERE GuardianRank = 1
+  `);
+
+  return new Map(
+    (result?.recordset || []).map((row) => [Number(row.StudentId), row])
+  );
+};
+
+const mapGuardianAddress = (row) => ({
+  street: row?.AddressLine1 || '',
+  city: row?.City || '',
+  state: row?.State || '',
+  pincode: row?.PostalCode || '',
+  country: row?.Country || '',
+});
+
+const mapRealGuardianRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: String(row.GuardianId),
+    fullName: row.FullName || null,
+    relation: row.Relation || null,
+    phone: row.Phone || null,
+    alternatePhone: row.AlternatePhone || null,
+    email: row.Email || null,
+    occupation: row.Occupation || null,
+    address: mapGuardianAddress(row),
+    isPrimaryGuardian: row.IsPrimaryGuardian === true || row.IsPrimaryGuardian === 1,
+    isActive: true,
+    createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
+    updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
+  };
+};
+
+const mapRealStudentRow = (row, guardianRow = null) => {
+  if (!row) {
+    return null;
+  }
+
+  const studentId = normalizeStudentNumericId(row.StudentId);
+  if (!studentId) {
+    return null;
+  }
+
+  const primaryGuardian = guardianRow ? mapRealGuardianRow(guardianRow) : null;
+  const studentPhone = row.Phone || null;
+  const guardianPhone = primaryGuardian?.phone || null;
+  const className = row.ClassName || '';
+  const sectionName = row.SectionName || '';
+
+  return {
+    _id: String(studentId),
+    id: String(studentId),
+    studentId: String(studentId),
+    dbId: studentId,
+    userId: row.UserId !== undefined && row.UserId !== null
+      ? {
+          _id: String(row.UserId),
+          email: row.Email || null,
+          role: 'student',
+        }
+      : null,
+    admissionNumber: row.AdmissionNumber || null,
+    rollNumber: row.RollNumber || null,
+    firstName: row.FirstName || null,
+    lastName: row.LastName || null,
+    fullName: row.FullName || [row.FirstName, row.LastName].filter(Boolean).join(' ') || null,
+    gender: row.Gender || null,
+    dateOfBirth: row.DateOfBirth ? new Date(row.DateOfBirth) : null,
+    admissionDate: row.AdmissionDate ? new Date(row.AdmissionDate) : null,
+    bloodGroup: row.BloodGroup || null,
+    phone: studentPhone || guardianPhone,
+    email: row.Email || null,
+    class: className,
+    className,
+    classId: className,
+    classDbId: row.ClassId ?? null,
+    section: sectionName,
+    sectionName,
+    sectionId: sectionName,
+    sectionDbId: row.SectionId ?? null,
+    academicYear: row.YearName || null,
+    academicYearId: row.AcademicYearId ?? null,
+    address: {
+      street: row.AddressLine1 || '',
+      city: row.City || '',
+      state: row.State || '',
+      pincode: row.PostalCode || '',
+      country: row.Country || '',
+      line2: row.AddressLine2 || '',
+    },
+    parentName: primaryGuardian?.fullName || null,
+    parentPhone: primaryGuardian?.phone || null,
+    guardianName: primaryGuardian?.fullName || '',
+    guardianPhone: primaryGuardian?.phone || '',
+    guardianRelation: primaryGuardian?.relation || '',
+    isActive: isSqlStudentActive(row.Status),
+    status: row.Status || null,
+    profilePhoto: row.ProfileImage || null,
+    createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
+    updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
+  };
+};
+
+const hydrateRealStudentRows = async (rows = []) => {
+  const guardianMap = await getPrimaryGuardiansByStudentIds(rows.map((row) => row.StudentId));
+  return rows
+    .map((row) => mapRealStudentRow(row, guardianMap.get(Number(row.StudentId)) || null))
+    .filter(Boolean);
+};
+
+const getRealStudentRowsByIds = async (studentIds = []) => {
+  const normalizedIds = [...new Set(
+    studentIds
+      .map(normalizeStudentNumericId)
+      .filter(Boolean)
+  )];
+
+  if (!normalizedIds.length) {
+    return [];
+  }
+
+  const result = await executeQuery(`
+    ${REAL_STUDENT_BASE_SELECT}
+    WHERE S.StudentId IN (${normalizedIds.join(', ')})
+  `);
+
+  return result?.recordset || [];
+};
+
+const getFeeStructureMap = async (feeStructureIds = []) => {
+  const normalizedIds = [...new Set(
+    feeStructureIds
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  )];
+
+  if (!normalizedIds.length) {
+    return new Map();
+  }
+
+  const result = await executeQuery(`
+    SELECT FeeStructureId, FeeType, Amount, DueDate, Description
+    FROM dbo.FeeStructures
+    WHERE FeeStructureId IN (${normalizedIds.join(', ')})
+  `);
+
+  return new Map((result?.recordset || []).map((row) => [Number(row.FeeStructureId), row]));
+};
+
+const getExamMetaMap = async (examSubjectIds = []) => {
+  const normalizedIds = [...new Set(
+    examSubjectIds
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  )];
+
+  if (!normalizedIds.length) {
+    return new Map();
+  }
+
+  const result = await executeQuery(`
+    SELECT
+      ES.ExamSubjectId,
+      ES.MaxMarks,
+      ES.PassMarks,
+      ES.ExamDate,
+      E.ExamName,
+      SUB.SubjectName
+    FROM dbo.ExamSubjects ES
+    LEFT JOIN dbo.Exams E ON ES.ExamId = E.ExamId
+    LEFT JOIN dbo.Subjects SUB ON ES.SubjectId = SUB.SubjectId
+    WHERE ES.ExamSubjectId IN (${normalizedIds.join(', ')})
+  `);
+
+  return new Map((result?.recordset || []).map((row) => [Number(row.ExamSubjectId), row]));
+};
+
+const mapRealStudentFeeRow = (row, feeStructureMap = new Map()) => {
+  const structure = feeStructureMap.get(Number(row?.FeeStructureId)) || null;
+  const amount = Number(row?.TotalAmount || structure?.Amount || 0);
+  const paidAmount = Number(row?.PaidAmount || 0);
+  const pendingAmount = Number(row?.BalanceAmount ?? Math.max(amount - paidAmount, 0));
+
+  return {
+    id: String(row.StudentFeeId),
+    feeType: structure?.FeeType || `Fee #${row.FeeStructureId}`,
+    academicYear: null,
+    dueDate: row.DueDate || structure?.DueDate || null,
+    amount,
+    paidAmount,
+    pendingAmount,
+    status: row.Status || (pendingAmount > 0 ? 'Pending' : 'Paid'),
+    description: structure?.Description || null,
+    paymentDate: null,
+    paymentMode: null,
+    receiptNumber: null,
+    transactionId: null,
+    remarks: null,
+  };
+};
+
+const mapRealExamResultRow = (row, examMetaMap = new Map()) => {
+  const meta = examMetaMap.get(Number(row?.ExamSubjectId)) || null;
+  const marksObtained = Number(row?.MarksObtained || 0);
+  const totalMarks = Number(meta?.MaxMarks || 0);
+  const percentage = totalMarks > 0
+    ? Number(((marksObtained / totalMarks) * 100).toFixed(2))
+    : 0;
+
+  return {
+    id: String(row.ExamResultId),
+    examName: meta?.ExamName || 'Exam',
+    subject: meta?.SubjectName || 'Subject',
+    examDate: meta?.ExamDate || null,
+    marksObtained,
+    totalMarks,
+    percentage,
+    grade: row.Grade || null,
+    remarks: row.Remarks || null,
+    isAbsent: row.IsAbsent === true || row.IsAbsent === 1,
+  };
+};
+
+const filterRealStudents = (students, { search = null, className = null, sectionName = null }) => {
+  const normalizedSearch = toNullableString(search)?.toLowerCase() || null;
+  const normalizedClass = toNullableString(className);
+  const normalizedSection = toNullableString(sectionName);
+
+  return students.filter((student) => {
+    if (normalizedClass && student.className !== normalizedClass) {
+      return false;
+    }
+
+    if (normalizedSection && student.sectionName !== normalizedSection) {
+      return false;
+    }
+
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    const haystack = [
+      student.fullName,
+      student.rollNumber,
+      student.admissionNumber,
+      student.email,
+      student.phone,
+      student.parentName,
+      student.className,
+      student.sectionName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(normalizedSearch);
+  });
+};
+
+const sortRealStudents = (students, sortBy = 'fullName', sortOrder = 'asc') => {
+  const normalizedSortBy = String(sortBy || 'fullName').trim().toLowerCase();
+  const direction = String(sortOrder || 'asc').trim().toLowerCase() === 'desc' ? -1 : 1;
+
+  const getSortableValue = (student) => {
+    switch (normalizedSortBy) {
+      case 'rollnumber':
+        return student.rollNumber || '';
+      case 'email':
+        return student.email || '';
+      case 'class':
+      case 'classname':
+        return student.className || '';
+      case 'section':
+      case 'sectionname':
+        return student.sectionName || '';
+      case 'updatedat':
+        return student.updatedAt ? student.updatedAt.getTime() : 0;
+      case 'createdat':
+        return student.createdAt ? student.createdAt.getTime() : 0;
+      case 'id':
+      case 'studentid':
+        return Number(student.dbId || 0);
+      default:
+        return student.fullName || '';
+    }
+  };
+
+  return [...students].sort((left, right) => {
+    const leftValue = getSortableValue(left);
+    const rightValue = getSortableValue(right);
+
+    if (leftValue < rightValue) {
+      return -1 * direction;
+    }
+
+    if (leftValue > rightValue) {
+      return 1 * direction;
+    }
+
+    return 0;
+  });
+};
+
+const getStudentByIdFromSqlRecord = async (studentId) => {
+  const normalizedStudentId = normalizeStudentNumericId(studentId);
+  if (!normalizedStudentId) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  logStudentSqlRead('query:StudentsById', { StudentId: normalizedStudentId });
+  const result = await executeQuery(
+    `${REAL_STUDENT_BASE_SELECT}
+     WHERE S.StudentId = @StudentId`,
+    [{ name: 'StudentId', type: sql.Int, value: normalizedStudentId }]
+  );
+
+  const row = result?.recordset?.[0] || null;
+  if (!row) {
+    return null;
+  }
+
+  const guardianMap = await getPrimaryGuardiansByStudentIds([normalizedStudentId]);
+  return mapRealStudentRow(row, guardianMap.get(normalizedStudentId) || null);
+};
+
+const getStudentFullProfileFromSqlRecord = async (studentId) => {
+  const normalizedStudentId = normalizeStudentNumericId(studentId);
+  if (!normalizedStudentId) {
+    return {
+      student: null,
+      parentSnapshot: null,
+      academicSnapshot: null,
+      parentDetails: [],
+      feeSnapshot: [],
+      examSnapshot: [],
+    };
+  }
+
+  const sql = getSqlClient();
+  const result = await executeStudentReadProcedure('dbo.usp_Student_FullProfile', [
+    { name: 'StudentId', type: sql.Int, value: normalizedStudentId },
+  ]);
+
+  const recordsets = result?.recordsets || [];
+  const studentRow = recordsets[0]?.[0] || null;
+  const guardianRows = recordsets[1] || [];
+  const feeRows = recordsets[2] || [];
+  const examRows = recordsets[3] || [];
+  const primaryGuardianRow = guardianRows.find((row) => row.IsPrimaryGuardian === true || row.IsPrimaryGuardian === 1) || guardianRows[0] || null;
+  const feeStructureMap = await getFeeStructureMap(feeRows.map((row) => row.FeeStructureId));
+  const examMetaMap = await getExamMetaMap(examRows.map((row) => row.ExamSubjectId));
+
+  return {
+    student: mapRealStudentRow(studentRow, primaryGuardianRow),
+    parentSnapshot: primaryGuardianRow
+      ? {
+          GuardianName: primaryGuardianRow.FullName || null,
+          GuardianPhone: primaryGuardianRow.Phone || null,
+          GuardianRelation: primaryGuardianRow.Relation || null,
+          AddressStreet: primaryGuardianRow.AddressLine1 || '',
+          AddressCity: primaryGuardianRow.City || '',
+          AddressState: primaryGuardianRow.State || '',
+          AddressPincode: primaryGuardianRow.PostalCode || '',
+        }
+      : null,
+    academicSnapshot: studentRow
+      ? {
+          ClassName: studentRow.ClassName || null,
+          SectionName: studentRow.SectionName || null,
+          YearName: studentRow.YearName || null,
+          IsActive: isSqlStudentActive(studentRow.Status),
+        }
+      : null,
+    parentDetails: guardianRows.map(mapRealGuardianRow).filter(Boolean),
+    feeSnapshot: feeRows.map((row) => mapRealStudentFeeRow(row, feeStructureMap)),
+    examSnapshot: examRows.map((row) => mapRealExamResultRow(row, examMetaMap)),
+  };
+};
+
+const getStudentByUserIdFromSqlRecord = async (mongoUserId) => {
+  const normalizedUserId = normalizeStudentNumericId(mongoUserId);
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  logStudentSqlRead('query:StudentsByUserId', { UserId: normalizedUserId });
+  const result = await executeQuery(
+    `${REAL_STUDENT_BASE_SELECT}
+     WHERE S.UserId = @UserId`,
+    [{ name: 'UserId', type: sql.Int, value: normalizedUserId }]
+  );
+
+  const row = result?.recordset?.[0] || null;
+  if (!row) {
+    return null;
+  }
+
+  const guardianMap = await getPrimaryGuardiansByStudentIds([row.StudentId]);
+  return mapRealStudentRow(row, guardianMap.get(Number(row.StudentId)) || null);
+};
+
+const getStudentByRollNumberFromSqlRecord = async (rollNumber) => {
+  const normalizedRollNumber = toNullableString(rollNumber);
+  if (!normalizedRollNumber) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  logStudentSqlRead('query:StudentsByRollNumber', { RollNumber: normalizedRollNumber });
+  const result = await executeQuery(
+    `${REAL_STUDENT_BASE_SELECT}
+     WHERE S.RollNumber = @RollNumber`,
+    [{ name: 'RollNumber', type: sql.NVarChar(50), value: normalizedRollNumber }]
+  );
+
+  const row = result?.recordset?.[0] || null;
+  if (!row) {
+    return null;
+  }
+
+  const guardianMap = await getPrimaryGuardiansByStudentIds([row.StudentId]);
+  return mapRealStudentRow(row, guardianMap.get(Number(row.StudentId)) || null);
+};
+
+const loadUsersForStudents = async (studentDocuments = []) => {
+  const userIds = [...new Set(
+    studentDocuments
+      .map((student) => student?.userId ? String(student.userId) : '')
+      .filter(Boolean)
+  )];
+
+  if (!userIds.length) {
+    return new Map();
+  }
+
+  const users = await User.find({ _id: { $in: userIds } }).lean();
+  return new Map(users.map((user) => [String(user._id), user]));
+};
+
+const syncStudentSnapshot = async (studentDocument, userDocument = null) => {
+  if (!studentDocument?._id) {
+    return null;
+  }
+
+  if (userDocument) {
+    await syncUserAuthRecord(userDocument);
+  }
+
+  const payload = toSqlStudentPayload(studentDocument, userDocument);
+  const result = await executeStoredProcedure('dbo.spStudentCreate', buildStudentSqlParams(payload));
+  return mapStudentRow(result?.recordset?.[0]);
+};
+
+const pruneDeletedStudentsFromMirror = async (studentIds = []) => {
+  if (!studentIds.length) {
+    await executeQuery(`DELETE FROM ${STUDENT_TABLE}`);
+    return;
+  }
+
+  const safeIds = studentIds
+    .map((studentId) => escapeSqlLiteral(studentId))
+    .filter(Boolean)
+    .map((studentId) => `N'${studentId}'`)
+    .join(', ');
+
+  await executeQuery(`DELETE FROM ${STUDENT_TABLE} WHERE MongoStudentId NOT IN (${safeIds})`);
+};
+
 const ensureStudentSqlReady = async () => {
   if (!studentBootstrapPromise) {
     studentBootstrapPromise = (async () => {
@@ -600,87 +1193,63 @@ const syncStudentMirror = async (studentDocument, userDocument = null) => {
 
   const payload = toSqlStudentPayload(studentDocument, userDocument);
   const result = await executeStoredProcedure('dbo.spStudentUpsertMirror', buildStudentSqlParams(payload));
+  lastStudentSyncAt = Date.now();
   return mapStudentRow(result?.recordset?.[0]);
 };
 
 const syncStudentById = async (studentId) => {
-  if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+  if (!studentId) {
     return null;
   }
 
-  const student = await Student.findById(studentId);
-  if (!student) {
+  await ensureStudentSqlReady();
+
+  const studentDocument = await Student.findById(studentId).lean();
+  if (!studentDocument) {
+    await deleteStudentMirror(studentId);
     return null;
   }
 
-  const user = student.userId ? await User.findById(student.userId) : null;
-  return syncStudentMirror(student, user);
-};
+  const userDocument = studentDocument.userId
+    ? await User.findById(studentDocument.userId).lean()
+    : null;
 
-const pruneDeletedStudentsFromMirror = async (studentIds) => {
-  const sql = getSqlClient();
-
-  if (!studentIds.length) {
-    await executeQuery(`DELETE FROM ${STUDENT_TABLE}`);
-    return;
-  }
-
-  const safeIds = studentIds
-    .map((id) => escapeSqlLiteral(id))
-    .filter(Boolean)
-    .map((id) => `N'${id}'`)
-    .join(', ');
-
-  await executeQuery(
-    `DELETE FROM ${STUDENT_TABLE} WHERE MongoStudentId NOT IN (${safeIds})`
-  );
+  const syncedStudent = await syncStudentSnapshot(studentDocument, userDocument);
+  lastStudentSyncAt = Date.now();
+  return syncedStudent;
 };
 
 const syncAllStudentsToSql = async ({ force = false } = {}) => {
-  if (!force && Date.now() - lastStudentMirrorSyncAt < FULL_SYNC_TTL_MS) {
-    return;
+  await ensureStudentSqlReady();
+
+  if (!force && Date.now() - lastStudentSyncAt < STUDENT_SYNC_TTL_MS) {
+    return true;
   }
 
-  if (!studentMirrorSyncPromise) {
-    studentMirrorSyncPromise = (async () => {
-      await ensureStudentSqlReady();
+  if (!studentSyncPromise) {
+    studentSyncPromise = (async () => {
+      const studentDocuments = await Student.find({}).sort({ createdAt: 1 }).lean();
+      const userMap = await loadUsersForStudents(studentDocuments);
+      const syncedStudentIds = [];
 
-      const students = await Student.find({}).lean();
-      const studentIds = students.map((student) => String(student._id));
+      for (const studentDocument of studentDocuments) {
+        const userDocument = studentDocument.userId
+          ? userMap.get(String(studentDocument.userId)) || null
+          : null;
 
-      if (!students.length) {
-        await pruneDeletedStudentsFromMirror([]);
-        lastStudentMirrorSyncAt = Date.now();
-        return;
+        await syncStudentSnapshot(studentDocument, userDocument);
+        syncedStudentIds.push(String(studentDocument._id));
       }
 
-      const userIds = [
-        ...new Set(
-          students
-            .map((student) => (student.userId ? String(student.userId) : null))
-            .filter(Boolean)
-        ),
-      ];
-
-      const users = userIds.length
-        ? await User.find({ _id: { $in: userIds } }).lean()
-        : [];
-      const userMap = new Map(users.map((user) => [String(user._id), user]));
-
-      await pruneDeletedStudentsFromMirror(studentIds);
-
-      for (const student of students) {
-        const user = student.userId ? userMap.get(String(student.userId)) : null;
-        await syncStudentMirror(student, user);
-      }
-
-      lastStudentMirrorSyncAt = Date.now();
+      await pruneDeletedStudentsFromMirror(syncedStudentIds);
+      lastStudentSyncAt = Date.now();
+      return true;
     })().finally(() => {
-      studentMirrorSyncPromise = null;
+      studentSyncPromise = null;
     });
   }
 
-  return studentMirrorSyncPromise;
+  return studentSyncPromise;
 };
 
 const getStudentList = async ({
@@ -692,26 +1261,35 @@ const getStudentList = async ({
   sortBy = 'createdAt',
   sortOrder = 'desc',
 }) => {
-  await syncAllStudentsToSql();
+  await ensureStudentSqlReady();
   const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spStudentList', [
-    { name: 'Page', type: sql.Int, value: Number(page) || 1 },
-    { name: 'Limit', type: sql.Int, value: Number(limit) || 10 },
-    { name: 'Search', type: sql.NVarChar(200), value: toNullableString(search) },
-    { name: 'ClassName', type: sql.NVarChar(100), value: toNullableString(className) },
-    { name: 'SectionName', type: sql.NVarChar(50), value: toNullableString(sectionName) },
-    { name: 'SortBy', type: sql.NVarChar(50), value: toNullableString(sortBy) || 'createdAt' },
-    { name: 'SortOrder', type: sql.NVarChar(4), value: toNullableString(sortOrder) || 'desc' },
+  const normalizedPage = Math.max(Number(page) || 1, 1);
+  const normalizedLimit = Math.max(Number(limit) || 10, 1);
+  const listResult = await executeStudentReadProcedure('dbo.usp_Student_List', [
+    { name: 'Page', type: sql.Int, value: 1 },
+    { name: 'PageSize', type: sql.Int, value: REAL_STUDENT_LIST_PAGE_SIZE },
   ]);
-
-  const rows = result?.recordset || [];
-  const total = rows.length ? Number(rows[0].TotalCount || 0) : 0;
+  const listRows = listResult?.recordset || [];
+  const realRows = await getRealStudentRowsByIds(listRows.map((row) => row.StudentId));
+  const realStudents = await hydrateRealStudentRows(realRows);
+  const availableClasses = [...new Set(
+    realStudents
+      .map((student) => student.className)
+      .filter(Boolean)
+  )].sort((left, right) => left.localeCompare(right));
+  const filteredStudents = filterRealStudents(realStudents, { search, className, sectionName });
+  const sortedStudents = sortRealStudents(filteredStudents, sortBy, sortOrder);
+  const total = sortedStudents.length;
+  const startIndex = (normalizedPage - 1) * normalizedLimit;
+  const paginatedStudents = sortedStudents.slice(startIndex, startIndex + normalizedLimit);
 
   return {
-    students: rows.map(mapStudentRow),
+    students: paginatedStudents,
     total,
-    page: Number(page) || 1,
-    limit: Number(limit) || 10,
+    page: normalizedPage,
+    limit: normalizedLimit,
+    availableClasses,
+    sourceProcedure: 'dbo.usp_Student_List',
   };
 };
 
@@ -722,21 +1300,14 @@ const getAllStudents = async () => {
 
 const getStudentById = async (studentId) => {
   await ensureStudentSqlReady();
-  await syncStudentById(studentId);
-
-  const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spStudentGetById', [
-    { name: 'MongoStudentId', type: sql.NVarChar(64), value: String(studentId) },
-  ]);
-
-  return mapStudentRow(result?.recordset?.[0]);
+  return getStudentByIdFromSqlRecord(studentId);
 };
 
 const createStudentMirror = async (studentDocument, userDocument = null) => {
   await ensureStudentSqlReady();
   const payload = toSqlStudentPayload(studentDocument, userDocument);
   const result = await executeStoredProcedure('dbo.spStudentCreate', buildStudentSqlParams(payload));
-  lastStudentMirrorSyncAt = Date.now();
+  lastStudentSyncAt = Date.now();
   return mapStudentRow(result?.recordset?.[0]);
 };
 
@@ -747,7 +1318,7 @@ const updateStudentMirror = async (studentDocument, userDocument = null) => {
   const params = buildStudentSqlParams(payload)
     .filter((param) => param.name !== 'CreatedAt');
   const result = await executeStoredProcedure('dbo.spStudentUpdate', params);
-  lastStudentMirrorSyncAt = Date.now();
+  lastStudentSyncAt = Date.now();
   return mapStudentRow(result?.recordset?.[0]);
 };
 
@@ -757,30 +1328,27 @@ const deleteStudentMirror = async (studentId) => {
   await executeStoredProcedure('dbo.spStudentDelete', [
     { name: 'MongoStudentId', type: sql.NVarChar(64), value: String(studentId) },
   ]);
-  lastStudentMirrorSyncAt = 0;
+  lastStudentSyncAt = Date.now();
 };
 
 const getStudentFullProfile = async (studentId) => {
   await ensureStudentSqlReady();
-  await syncStudentById(studentId);
-
-  const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spStudentGetFullProfile', [
-    { name: 'MongoStudentId', type: sql.NVarChar(64), value: String(studentId) },
-  ]);
-
-  const recordsets = result?.recordsets || [];
-  return {
-    student: mapStudentRow(recordsets[0]?.[0]),
-    parentSnapshot: recordsets[1]?.[0] || null,
-    academicSnapshot: recordsets[2]?.[0] || null,
-  };
+  return getStudentFullProfileFromSqlRecord(studentId);
 };
 
 const getStudentCount = async ({ onlyActive = true } = {}) => {
-  await syncAllStudentsToSql();
+  await ensureStudentSqlReady();
   const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spStudentGetCount', [
+  logStudentSqlRead('query:StudentsCount', { OnlyActive: !!onlyActive });
+  const result = await executeQuery(`
+    SELECT COUNT(1) AS TotalCount
+    FROM dbo.Students S
+    WHERE (
+      @OnlyActive = 0
+      OR S.Status IS NULL
+      OR LTRIM(RTRIM(LOWER(S.Status))) <> 'inactive'
+    )
+  `, [
     { name: 'OnlyActive', type: sql.Bit, value: !!onlyActive },
   ]);
 
@@ -788,25 +1356,478 @@ const getStudentCount = async ({ onlyActive = true } = {}) => {
 };
 
 const getStudentsByClass = async (className) => {
-  await syncAllStudentsToSql();
+  const normalizedClassName = toNullableString(className);
+  if (!normalizedClassName) {
+    return [];
+  }
+
+  await ensureStudentSqlReady();
   const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spStudentListByClass', [
-    { name: 'ClassName', type: sql.NVarChar(100), value: String(className || '') },
+  logStudentSqlRead('query:ClassIdByName', { ClassName: normalizedClassName });
+  const classLookup = await executeQuery(`
+    SELECT TOP 1 ClassId
+    FROM dbo.Classes
+    WHERE ClassName = @ClassName
+  `, [
+    { name: 'ClassName', type: sql.NVarChar(100), value: normalizedClassName },
+  ]);
+  const classId = normalizeStudentNumericId(classLookup?.recordset?.[0]?.ClassId);
+  if (!classId) {
+    return [];
+  }
+
+  const result = await executeStudentReadProcedure('dbo.usp_Class_Students', [
+    { name: 'ClassId', type: sql.Int, value: classId },
   ]);
 
-  return (result?.recordset || []).map((row) => ({
-    _id: row.MongoStudentId,
-    studentId: row.MongoStudentId,
-    fullName: row.FullName,
-    rollNumber: row.RollNumber,
-    section: row.SectionName,
-    sectionId: row.SectionName,
-    email: row.Email || null,
-    phone: row.Phone || null,
-    guardianName: row.GuardianName || '',
-    guardianPhone: row.GuardianPhone || '',
-    isActive: row.IsActive === true || row.IsActive === 1,
-  }));
+  const realRows = await getRealStudentRowsByIds((result?.recordset || []).map((row) => row.StudentId));
+  const students = await hydrateRealStudentRows(realRows);
+  return sortRealStudents(
+    students.filter((student) => student.className === normalizedClassName),
+    'fullName',
+    'asc'
+  );
+};
+
+const getStudentByUserId = async (mongoUserId) => {
+  if (!mongoUserId) {
+    return null;
+  }
+
+  await ensureStudentSqlReady();
+  return getStudentByUserIdFromSqlRecord(mongoUserId);
+};
+
+const getStudentByRollNumber = async (rollNumber) => {
+  const normalizedRollNumber = toNullableString(rollNumber);
+  if (!normalizedRollNumber) {
+    return null;
+  }
+
+  await ensureStudentSqlReady();
+  return getStudentByRollNumberFromSqlRecord(normalizedRollNumber);
+};
+
+const getCurrentAcademicYearId = async (tx = null, preferredYearName = null) => {
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const normalizedYearName = toNullableString(preferredYearName);
+
+  if (normalizedYearName) {
+    const preferredYear = await runner(
+      `SELECT TOP 1 AcademicYearId
+       FROM dbo.AcademicYears
+       WHERE YearName = @YearName`,
+      [{ name: 'YearName', type: sql.NVarChar(20), value: normalizedYearName }]
+    );
+    const preferredYearId = normalizeStudentNumericId(preferredYear?.recordset?.[0]?.AcademicYearId);
+    if (preferredYearId) {
+      return preferredYearId;
+    }
+  }
+
+  const currentYear = await runner(`
+    SELECT TOP 1 AcademicYearId
+    FROM dbo.AcademicYears
+    WHERE IsCurrent = 1
+    ORDER BY AcademicYearId DESC
+  `);
+
+  return normalizeStudentNumericId(currentYear?.recordset?.[0]?.AcademicYearId);
+};
+
+const resolveClassSectionContext = async ({ className, sectionName, academicYear = null }, tx = null) => {
+  const normalizedClassName = toNullableString(className);
+  const normalizedSectionName = toNullableString(sectionName) || 'A';
+  if (!normalizedClassName) {
+    throw new Error('Class is required.');
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const classLookup = await runner(
+    `SELECT TOP 1
+       c.ClassId,
+       c.AcademicYearId,
+       sec.SectionId
+     FROM dbo.Classes c
+     LEFT JOIN dbo.Sections sec
+       ON sec.ClassId = c.ClassId
+      AND sec.SectionName = @SectionName
+     WHERE c.ClassName = @ClassName
+       AND ISNULL(c.IsActive, 1) = 1
+     ORDER BY c.ClassId DESC`,
+    [
+      { name: 'ClassName', type: sql.NVarChar(100), value: normalizedClassName },
+      { name: 'SectionName', type: sql.NVarChar(50), value: normalizedSectionName },
+    ]
+  );
+
+  const row = classLookup?.recordset?.[0] || null;
+  const classId = normalizeStudentNumericId(row?.ClassId);
+  if (!classId) {
+    throw new Error(`Class '${normalizedClassName}' was not found in SQL Server.`);
+  }
+
+  const sectionId = normalizeStudentNumericId(row?.SectionId);
+  if (!sectionId) {
+    throw new Error(`Section '${normalizedSectionName}' was not found for class '${normalizedClassName}'.`);
+  }
+
+  const academicYearId =
+    normalizeStudentNumericId(row?.AcademicYearId) ||
+    await getCurrentAcademicYearId(tx, academicYear);
+
+  if (!academicYearId) {
+    throw new Error('No active academic year was found in SQL Server.');
+  }
+
+  return {
+    classId,
+    sectionId,
+    academicYearId,
+    className: normalizedClassName,
+    sectionName: normalizedSectionName,
+  };
+};
+
+const generateAdmissionNumber = async (tx = null) => {
+  const runner = tx?.query || executeQuery;
+  const result = await runner(`
+    SELECT TOP 1 StudentId
+    FROM dbo.Students
+    ORDER BY StudentId DESC
+  `);
+  const nextStudentId = Number(result?.recordset?.[0]?.StudentId || 0) + 1;
+  return `ADM${String(nextStudentId).padStart(5, '0')}`;
+};
+
+const upsertPrimaryGuardian = async ({ studentId, guardianName, guardianPhone, guardianRelation, address = {} }, tx = null) => {
+  const normalizedStudentId = normalizeStudentNumericId(studentId);
+  if (!normalizedStudentId) {
+    return;
+  }
+
+  const normalizedGuardianName = toNullableString(guardianName);
+  const normalizedGuardianPhone = toNullableString(guardianPhone);
+  const normalizedGuardianRelation = toNullableString(guardianRelation) || 'Guardian';
+  if (!normalizedGuardianName && !normalizedGuardianPhone) {
+    return;
+  }
+
+  const normalizedAddress = normalizeAddress(address);
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const existingGuardian = await runner(
+    `SELECT TOP 1 GuardianId
+     FROM dbo.Guardians
+     WHERE StudentId = @StudentId
+     ORDER BY IsPrimaryGuardian DESC, GuardianId ASC`,
+    [{ name: 'StudentId', type: sql.Int, value: normalizedStudentId }]
+  );
+  const guardianId = normalizeStudentNumericId(existingGuardian?.recordset?.[0]?.GuardianId);
+
+  if (guardianId) {
+    await runner(
+      `UPDATE dbo.Guardians
+       SET FullName = @FullName,
+           Relation = @Relation,
+           Phone = @Phone,
+           AddressLine1 = @AddressLine1,
+           City = @City,
+           State = @State,
+           PostalCode = @PostalCode,
+           UpdatedAt = SYSUTCDATETIME()
+       WHERE GuardianId = @GuardianId`,
+      [
+        { name: 'GuardianId', type: sql.Int, value: guardianId },
+        { name: 'FullName', type: sql.NVarChar(200), value: normalizedGuardianName || 'Guardian' },
+        { name: 'Relation', type: sql.NVarChar(50), value: normalizedGuardianRelation },
+        { name: 'Phone', type: sql.NVarChar(40), value: normalizedGuardianPhone },
+        { name: 'AddressLine1', type: sql.NVarChar(255), value: normalizedAddress.street },
+        { name: 'City', type: sql.NVarChar(120), value: normalizedAddress.city },
+        { name: 'State', type: sql.NVarChar(120), value: normalizedAddress.state },
+        { name: 'PostalCode', type: sql.NVarChar(20), value: normalizedAddress.pincode },
+      ]
+    );
+    return;
+  }
+
+  await runner(
+    `INSERT INTO dbo.Guardians (
+       StudentId,
+       FullName,
+       Relation,
+       Phone,
+       AddressLine1,
+       City,
+       State,
+       PostalCode,
+       IsPrimaryGuardian,
+       CreatedAt,
+       UpdatedAt
+     )
+     VALUES (
+       @StudentId,
+       @FullName,
+       @Relation,
+       @Phone,
+       @AddressLine1,
+       @City,
+       @State,
+       @PostalCode,
+       1,
+       SYSUTCDATETIME(),
+       SYSUTCDATETIME()
+     )`,
+    [
+      { name: 'StudentId', type: sql.Int, value: normalizedStudentId },
+      { name: 'FullName', type: sql.NVarChar(200), value: normalizedGuardianName || 'Guardian' },
+      { name: 'Relation', type: sql.NVarChar(50), value: normalizedGuardianRelation },
+      { name: 'Phone', type: sql.NVarChar(40), value: normalizedGuardianPhone },
+      { name: 'AddressLine1', type: sql.NVarChar(255), value: normalizedAddress.street },
+      { name: 'City', type: sql.NVarChar(120), value: normalizedAddress.city },
+      { name: 'State', type: sql.NVarChar(120), value: normalizedAddress.state },
+      { name: 'PostalCode', type: sql.NVarChar(20), value: normalizedAddress.pincode },
+    ]
+  );
+};
+
+const createStudentRecord = async ({
+  userId = null,
+  fullName,
+  email,
+  phone,
+  className,
+  sectionName,
+  rollNumber,
+  dateOfBirth = null,
+  gender = null,
+  address = {},
+  guardianName = null,
+  guardianPhone = null,
+  guardianRelation = null,
+  bloodGroup = null,
+  admissionDate = null,
+  academicYear = null,
+  isActive = true,
+} = {}) => {
+  await ensureStudentSqlReady();
+
+  const normalizedRollNumber = toNullableString(rollNumber);
+  if (!normalizedRollNumber) {
+    throw new Error('Roll number is required.');
+  }
+
+  const createdStudentId = await executeInTransaction(async (tx) => {
+    const sql = getSqlClient();
+    const context = await resolveClassSectionContext({ className, sectionName, academicYear }, tx);
+    const nameParts = splitFullName(fullName);
+    const normalizedAddress = normalizeAddress(address);
+    const admissionNumber = await generateAdmissionNumber(tx);
+    const result = await tx.query(
+      `INSERT INTO dbo.Students (
+         UserId,
+         AdmissionNumber,
+         RollNumber,
+         AcademicYearId,
+         ClassId,
+         SectionId,
+         FirstName,
+         LastName,
+         Gender,
+         DateOfBirth,
+         BloodGroup,
+         Phone,
+         Email,
+         AddressLine1,
+         AddressLine2,
+         City,
+         State,
+         PostalCode,
+         Country,
+         AdmissionDate,
+         Status,
+         CreatedAt,
+         UpdatedAt
+       )
+       OUTPUT INSERTED.StudentId
+       VALUES (
+         @UserId,
+         @AdmissionNumber,
+         @RollNumber,
+         @AcademicYearId,
+         @ClassId,
+         @SectionId,
+         @FirstName,
+         @LastName,
+         @Gender,
+         @DateOfBirth,
+         @BloodGroup,
+         @Phone,
+         @Email,
+         @AddressLine1,
+         @AddressLine2,
+         @City,
+         @State,
+         @PostalCode,
+         @Country,
+         @AdmissionDate,
+         @Status,
+         SYSUTCDATETIME(),
+         SYSUTCDATETIME()
+       )`,
+      [
+        { name: 'UserId', type: sql.Int, value: normalizeStudentNumericId(userId) },
+        { name: 'AdmissionNumber', type: sql.NVarChar(50), value: admissionNumber },
+        { name: 'RollNumber', type: sql.NVarChar(50), value: normalizedRollNumber },
+        { name: 'AcademicYearId', type: sql.Int, value: context.academicYearId },
+        { name: 'ClassId', type: sql.Int, value: context.classId },
+        { name: 'SectionId', type: sql.Int, value: context.sectionId },
+        { name: 'FirstName', type: sql.NVarChar(100), value: nameParts.firstName || 'Student' },
+        { name: 'LastName', type: sql.NVarChar(100), value: nameParts.lastName },
+        { name: 'Gender', type: sql.NVarChar(20), value: toNullableString(gender) },
+        { name: 'DateOfBirth', type: sql.Date, value: toNullableDate(dateOfBirth) },
+        { name: 'BloodGroup', type: sql.NVarChar(20), value: toNullableString(bloodGroup) },
+        { name: 'Phone', type: sql.NVarChar(20), value: toNullableString(phone) },
+        { name: 'Email', type: sql.NVarChar(150), value: toNullableString(email) },
+        { name: 'AddressLine1', type: sql.NVarChar(255), value: normalizedAddress.street },
+        { name: 'AddressLine2', type: sql.NVarChar(255), value: normalizedAddress.line2 },
+        { name: 'City', type: sql.NVarChar(120), value: normalizedAddress.city },
+        { name: 'State', type: sql.NVarChar(120), value: normalizedAddress.state },
+        { name: 'PostalCode', type: sql.NVarChar(20), value: normalizedAddress.pincode },
+        { name: 'Country', type: sql.NVarChar(100), value: normalizedAddress.country },
+        { name: 'AdmissionDate', type: sql.Date, value: toNullableDate(admissionDate) },
+        { name: 'Status', type: sql.NVarChar(20), value: isActive === false ? 'Inactive' : 'Active' },
+      ]
+    );
+
+    const studentId = normalizeStudentNumericId(result?.recordset?.[0]?.StudentId);
+    if (!studentId) {
+      throw new Error('Failed to create student row in SQL Server.');
+    }
+
+    await upsertPrimaryGuardian({
+      studentId,
+      guardianName,
+      guardianPhone,
+      guardianRelation,
+      address: normalizedAddress,
+    }, tx);
+
+    return studentId;
+  });
+
+  return getStudentByIdFromSqlRecord(createdStudentId);
+};
+
+const updateStudentRecord = async (studentId, updates = {}) => {
+  await ensureStudentSqlReady();
+  const normalizedStudentId = normalizeStudentNumericId(studentId);
+  if (!normalizedStudentId) {
+    return null;
+  }
+
+  const existingStudent = await getStudentByIdFromSqlRecord(normalizedStudentId);
+  if (!existingStudent) {
+    return null;
+  }
+
+  await executeInTransaction(async (tx) => {
+    const sql = getSqlClient();
+    const context = await resolveClassSectionContext({
+      className: updates.className ?? existingStudent.class,
+      sectionName: updates.sectionName ?? existingStudent.section,
+      academicYear: updates.academicYear ?? existingStudent.academicYear,
+    }, tx);
+    const nextFullName = toNullableString(updates.fullName) || existingStudent.fullName;
+    const nameParts = splitFullName(nextFullName);
+    const nextAddress = normalizeAddress(updates.address !== undefined ? updates.address : existingStudent.address);
+    const nextIsActive = updates.isActive !== undefined ? updates.isActive !== false : existingStudent.isActive;
+
+    await tx.query(
+      `UPDATE dbo.Students
+       SET UserId = @UserId,
+           RollNumber = @RollNumber,
+           AcademicYearId = @AcademicYearId,
+           ClassId = @ClassId,
+           SectionId = @SectionId,
+           FirstName = @FirstName,
+           LastName = @LastName,
+           Gender = @Gender,
+           DateOfBirth = @DateOfBirth,
+           BloodGroup = @BloodGroup,
+           Phone = @Phone,
+           Email = @Email,
+           AddressLine1 = @AddressLine1,
+           AddressLine2 = @AddressLine2,
+           City = @City,
+           State = @State,
+           PostalCode = @PostalCode,
+           Country = @Country,
+           AdmissionDate = @AdmissionDate,
+           Status = @Status,
+           UpdatedAt = SYSUTCDATETIME()
+       WHERE StudentId = @StudentId`,
+      [
+        { name: 'StudentId', type: sql.Int, value: normalizedStudentId },
+        { name: 'UserId', type: sql.Int, value: normalizeStudentNumericId(updates.userId ?? existingStudent.userId?._id) },
+        { name: 'RollNumber', type: sql.NVarChar(50), value: toNullableString(updates.rollNumber) || existingStudent.rollNumber },
+        { name: 'AcademicYearId', type: sql.Int, value: context.academicYearId },
+        { name: 'ClassId', type: sql.Int, value: context.classId },
+        { name: 'SectionId', type: sql.Int, value: context.sectionId },
+        { name: 'FirstName', type: sql.NVarChar(100), value: nameParts.firstName || existingStudent.firstName || 'Student' },
+        { name: 'LastName', type: sql.NVarChar(100), value: nameParts.lastName },
+        { name: 'Gender', type: sql.NVarChar(20), value: updates.gender !== undefined ? toNullableString(updates.gender) : toNullableString(existingStudent.gender) },
+        { name: 'DateOfBirth', type: sql.Date, value: updates.dateOfBirth !== undefined ? toNullableDate(updates.dateOfBirth) : toNullableDate(existingStudent.dateOfBirth) },
+        { name: 'BloodGroup', type: sql.NVarChar(20), value: updates.bloodGroup !== undefined ? toNullableString(updates.bloodGroup) : toNullableString(existingStudent.bloodGroup) },
+        { name: 'Phone', type: sql.NVarChar(20), value: updates.phone !== undefined ? toNullableString(updates.phone) : toNullableString(existingStudent.phone) },
+        { name: 'Email', type: sql.NVarChar(150), value: updates.email !== undefined ? toNullableString(updates.email) : toNullableString(existingStudent.email) },
+        { name: 'AddressLine1', type: sql.NVarChar(255), value: nextAddress.street },
+        { name: 'AddressLine2', type: sql.NVarChar(255), value: nextAddress.line2 },
+        { name: 'City', type: sql.NVarChar(120), value: nextAddress.city },
+        { name: 'State', type: sql.NVarChar(120), value: nextAddress.state },
+        { name: 'PostalCode', type: sql.NVarChar(20), value: nextAddress.pincode },
+        { name: 'Country', type: sql.NVarChar(100), value: nextAddress.country },
+        { name: 'AdmissionDate', type: sql.Date, value: updates.admissionDate !== undefined ? toNullableDate(updates.admissionDate) : toNullableDate(existingStudent.admissionDate) },
+        { name: 'Status', type: sql.NVarChar(20), value: nextIsActive ? 'Active' : 'Inactive' },
+      ]
+    );
+
+    await upsertPrimaryGuardian({
+      studentId: normalizedStudentId,
+      guardianName: updates.guardianName !== undefined ? updates.guardianName : existingStudent.guardianName,
+      guardianPhone: updates.guardianPhone !== undefined ? updates.guardianPhone : existingStudent.guardianPhone,
+      guardianRelation: updates.guardianRelation !== undefined ? updates.guardianRelation : existingStudent.guardianRelation,
+      address: nextAddress,
+    }, tx);
+  });
+
+  return getStudentByIdFromSqlRecord(normalizedStudentId);
+};
+
+const deleteStudentRecord = async (studentId) => {
+  await ensureStudentSqlReady();
+  const normalizedStudentId = normalizeStudentNumericId(studentId);
+  if (!normalizedStudentId) {
+    return { resultCode: 'not_found' };
+  }
+
+  const student = await getStudentByIdFromSqlRecord(normalizedStudentId);
+  if (!student) {
+    return { resultCode: 'not_found' };
+  }
+
+  const sql = getSqlClient();
+  await executeQuery(
+    `UPDATE dbo.Students
+     SET Status = N'Inactive',
+         UpdatedAt = SYSUTCDATETIME()
+     WHERE StudentId = @StudentId`,
+    [{ name: 'StudentId', type: sql.Int, value: normalizedStudentId }]
+  );
+
+  return { resultCode: 'ok' };
 };
 
 module.exports = {
@@ -817,10 +1838,15 @@ module.exports = {
   getStudentList,
   getAllStudents,
   getStudentById,
+  createStudentRecord,
+  updateStudentRecord,
+  deleteStudentRecord,
   createStudentMirror,
   updateStudentMirror,
   deleteStudentMirror,
   getStudentFullProfile,
   getStudentCount,
   getStudentsByClass,
+  getStudentByUserId,
+  getStudentByRollNumber,
 };

@@ -13,6 +13,10 @@ export default function Header({ title = "Dashboard", showMenuButton = false, on
     localStorage.removeItem("sms_user");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    sessionStorage.removeItem("sms_token");
+    sessionStorage.removeItem("sms_user");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
     setOpen(false);
     navigate("/login");
   };
@@ -79,4 +83,3 @@ export default function Header({ title = "Dashboard", showMenuButton = false, on
     </header>
   );
 }
-

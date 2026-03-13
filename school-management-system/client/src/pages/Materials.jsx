@@ -16,6 +16,7 @@ const Materials = () => {
   const [materials, setMaterials] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
@@ -32,25 +33,28 @@ const Materials = () => {
 
   useEffect(() => {
     fetchData();
-  }, [filterSubject, filterGrade]);
+  }, [filterSubject, filterGrade, searchTerm]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [materialsRes, subjectsRes] = await Promise.all([
-        getMaterials({ subject: filterSubject, grade: filterGrade }),
-        getSubjects()
+        getMaterials({ subject: filterSubject, grade: filterGrade, search: searchTerm }),
+        getSubjects(filterGrade ? { grade: filterGrade } : undefined)
       ]);
-      // Safely handle materials array
-      const materialsData = materialsRes?.data?.materials || materialsRes?.data || [];
-      setMaterials(Array.isArray(materialsData) ? materialsData : []);
-      
-      // Safely handle subjects array
-      const subjectsData = subjectsRes?.data?.subjects || subjectsRes?.data || [];
-      setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
+      const materialsData = materialsRes?.data?.materials;
+      const subjectsData = subjectsRes?.data?.subjects;
+
+      if (!Array.isArray(materialsData) || !Array.isArray(subjectsData)) {
+        throw new Error('Invalid materials response');
+      }
+
+      setMaterials(materialsData);
+      setSubjects(subjectsData);
+      setLoadError('');
     } catch (error) {
       toast.error('Failed to fetch data');
-      // Ensure empty arrays on error
+      setLoadError('Unable to load live study materials from the backend API.');
       setMaterials([]);
       setSubjects([]);
     } finally {
@@ -96,12 +100,9 @@ const Materials = () => {
     });
   };
 
-  const filteredMaterials = searchTerm
-    ? materials.filter(m => 
-        m.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.subject?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : materials;
+  const subjectOptions = Array.from(
+    new Map(subjects.map((subject) => [subject.subjectId || subject._id, subject])).values()
+  );
 
   const columns = [
     { key: 'title', header: 'Title' },
@@ -186,8 +187,8 @@ const Materials = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             >
               <option value="">All Subjects</option>
-              {subjects.map(s => (
-                <option key={s._id} value={s._id}>{s.name}</option>
+              {subjectOptions.map(s => (
+                <option key={s.classSubjectId || s._id} value={s.subjectId || s._id}>{s.name}</option>
               ))}
             </select>
           </div>
@@ -218,11 +219,16 @@ const Materials = () => {
 
       <DataTable
         columns={columns}
-        data={filteredMaterials}
+        data={materials}
         loading={loading}
         onSearch={setSearchTerm}
         searchPlaceholder="Search materials..."
       />
+      {loadError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
 
       <Modal
         isOpen={showModal}
@@ -256,8 +262,8 @@ const Materials = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
               >
                 <option value="">Select Subject</option>
-                {subjects.map(s => (
-                  <option key={s._id} value={s._id}>{s.name}</option>
+                {subjectOptions.map(s => (
+                  <option key={s.classSubjectId || s._id} value={s.subjectId || s._id}>{s.name}</option>
                 ))}
               </select>
             </div>

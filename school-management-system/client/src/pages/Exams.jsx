@@ -20,6 +20,7 @@ const Exams = () => {
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [showModal, setShowModal] = useState(false);
   const [editingExam, setEditingExam] = useState(null);
@@ -47,16 +48,18 @@ const Exams = () => {
         getSubjects()
       ]);
 
-      // Safely handle exams array
-      const examsData = examsRes?.data?.exams || examsRes?.data || [];
-      setExams(Array.isArray(examsData) ? examsData : []);
-      
-      // Safely handle subjects array
-      const subjectsData = subjectsRes?.data?.subjects || subjectsRes?.data || [];
-      setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
+      const examsData = examsRes?.data?.exams;
+      const subjectsData = subjectsRes?.data?.subjects;
+      if (!Array.isArray(examsData) || !Array.isArray(subjectsData)) {
+        throw new Error("Invalid exams response");
+      }
+
+      setExams(examsData);
+      setSubjects(subjectsData);
+      setLoadError("");
     } catch (error) {
       toast.error("Failed to fetch data");
-      // Ensure empty arrays on error
+      setLoadError("Unable to load live exam data from the backend API.");
       setExams([]);
       setSubjects([]);
     } finally {
@@ -131,6 +134,10 @@ const Exams = () => {
 
     setShowModal(true);
   };
+
+  const subjectOptions = Array.from(
+    new Map(subjects.map((subject) => [subject.subjectId || subject._id, subject])).values()
+  );
 
   const columns = [
     { key: "title", header: "Exam Title" },
@@ -212,6 +219,11 @@ const Exams = () => {
       </div>
 
       <DataTable columns={columns} data={exams} loading={loading} />
+      {loadError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
 
       {/* Modal */}
       <Modal
@@ -251,8 +263,8 @@ const Exams = () => {
                 className="w-full px-3 py-2 border rounded-lg"
               >
                 <option value="">Select Subject</option>
-                {subjects.map((s)=>(
-                  <option key={s._id} value={s._id}>{s.name}</option>
+                {subjectOptions.map((s)=>(
+                  <option key={s.classSubjectId || s._id} value={s.subjectId || s._id}>{s.name}</option>
                 ))}
               </select>
             </div>

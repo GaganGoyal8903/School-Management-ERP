@@ -1,11 +1,5 @@
-const User = require('../models/User');
-const Student = require('../models/Student');
 const Timetable = require('../models/Timetable');
-const Attendance = require('../models/Attendance');
-const Fee = require('../models/Fee');
-const Grade = require('../models/Grade');
 const Parent = require('../models/Parent');
-const Subject = require('../models/Subject');
 const Homework = require('../models/Homework');
 const HomeworkSubmission = require('../models/HomeworkSubmission');
 const Bus = require('../models/Bus');
@@ -13,19 +7,32 @@ const Meeting = require('../models/Meeting');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
 const mongoose = require('mongoose');
-const { syncUserAuthRecord } = require('../services/authSqlService');
+const bcrypt = require('bcryptjs');
+const {
+  createAuthUser,
+  getAuthUserByEmail,
+  getAuthUsersByIds,
+  updateAuthUser,
+  deleteAuthUser,
+} = require('../services/authSqlService');
 const {
   ensureStudentSqlReady,
   getStudentList,
   getAllStudents: getAllStudentsFromSql,
   getStudentById: getStudentByIdFromSql,
-  createStudentMirror,
-  updateStudentMirror,
-  deleteStudentMirror,
+  createStudentRecord,
+  updateStudentRecord,
+  deleteStudentRecord,
   getStudentFullProfile,
   getStudentCount: getStudentCountFromSql,
   getStudentsByClass: getStudentsByClassFromSql,
+  getStudentByRollNumber,
+  getStudentByUserId,
 } = require('../services/studentSqlService');
+const { getStudentAttendanceReport } = require('../services/attendanceSqlService');
+const { getFeesForStudent } = require('../services/feeSqlService');
+const { getStudentExamResults } = require('../services/examSqlService');
+const { getSubjectsByGrade } = require('../services/academicSqlService');
 
 const parseBooleanInput = (value) => {
   if (value === undefined) {
@@ -44,6 +51,115 @@ const parseBooleanInput = (value) => {
   return Boolean(value);
 };
 
+const parseStudentIdParam = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isInteger(numericValue) || numericValue <= 0) {
+    return null;
+  }
+
+  return numericValue;
+};
+
+const firstDefinedValue = (...values) => values.find((value) => value !== undefined);
+
+const normalizeStudentAddressInput = (payload = {}) => {
+  const rawAddress = payload.address && typeof payload.address === 'object' ? payload.address : {};
+
+  return {
+    street: firstDefinedValue(rawAddress.street, rawAddress.addressLine1, payload.addressStreet, payload.addressLine1, payload.street) || '',
+    line2: firstDefinedValue(rawAddress.line2, rawAddress.addressLine2, payload.addressLine2, payload.line2) || '',
+    city: firstDefinedValue(rawAddress.city, payload.city) || '',
+    state: firstDefinedValue(rawAddress.state, payload.state) || '',
+    pincode: firstDefinedValue(
+      rawAddress.pincode,
+      rawAddress.postalCode,
+      rawAddress.zipCode,
+      payload.addressPincode,
+      payload.postalCode,
+      payload.zipCode,
+      payload.pincode
+    ) || '',
+    country: firstDefinedValue(rawAddress.country, payload.country) || '',
+  };
+};
+
+const hasStudentAddressInput = (payload = {}) => {
+  const rawAddress = payload.address && typeof payload.address === 'object' ? payload.address : {};
+
+  return [
+    rawAddress.street,
+    rawAddress.addressLine1,
+    rawAddress.line2,
+    rawAddress.addressLine2,
+    rawAddress.city,
+    rawAddress.state,
+    rawAddress.pincode,
+    rawAddress.postalCode,
+    rawAddress.zipCode,
+    rawAddress.country,
+    payload.addressStreet,
+    payload.addressLine1,
+    payload.addressLine2,
+    payload.street,
+    payload.line2,
+    payload.city,
+    payload.state,
+    payload.addressPincode,
+    payload.postalCode,
+    payload.zipCode,
+    payload.pincode,
+    payload.country,
+  ].some((value) => value !== undefined);
+};
+
+const normalizeStudentPayload = (payload = {}) => {
+  const derivedFullName = [payload.firstName, payload.lastName]
+    .filter((value) => String(value || '').trim())
+    .join(' ')
+    .trim();
+
+  return {
+    fullName: firstDefinedValue(payload.fullName, payload.name, derivedFullName),
+    email: firstDefinedValue(payload.email, payload.emailAddress),
+    phone: firstDefinedValue(payload.phone, payload.mobile, payload.mobileNumber, payload.contactNumber),
+    className: firstDefinedValue(payload.class, payload.className),
+    sectionName: firstDefinedValue(payload.section, payload.sectionName),
+    rollNumber: firstDefinedValue(payload.rollNumber, payload.rollNo),
+    dateOfBirth: firstDefinedValue(payload.dateOfBirth, payload.dob, payload.DOB),
+    gender: firstDefinedValue(payload.gender, payload.sex),
+    address: hasStudentAddressInput(payload) ? normalizeStudentAddressInput(payload) : undefined,
+    guardianName: firstDefinedValue(payload.guardianName, payload.parentName),
+    guardianPhone: firstDefinedValue(payload.guardianPhone, payload.parentPhone),
+    guardianRelation: firstDefinedValue(payload.guardianRelation, payload.parentRelation, payload.relation),
+    bloodGroup: firstDefinedValue(payload.bloodGroup, payload.bloodGroupType),
+    password: firstDefinedValue(payload.password, payload.passcode),
+    academicYear: firstDefinedValue(payload.academicYear, payload.academicYearName, payload.yearName),
+    admissionDate: firstDefinedValue(payload.admissionDate, payload.enrollmentDate),
+    isActive: parseBooleanInput(payload.isActive),
+  };
+};
+
+const isBcryptHash = (value = '') => /^\$2[aby]\$\d{2}\$/.test(String(value || ''));
+
+const isStoredPasswordMatch = async (inputPassword, storedPassword) => {
+  const normalizedInput = String(inputPassword || '');
+  const normalizedStored = String(storedPassword || '');
+
+  if (!normalizedStored) {
+    return false;
+  }
+
+  if (isBcryptHash(normalizedStored)) {
+    try {
+      return await bcrypt.compare(normalizedInput, normalizedStored);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  return normalizedInput === normalizedStored;
+};
+
 // @desc    Student Login
 // @route   POST /api/student/login
 // @access  Public
@@ -57,7 +173,7 @@ const studentLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await User.findOne({ email });
+  const user = await getAuthUserByEmail(email);
 
   if (!user) {
     return res.status(401).json({
@@ -73,7 +189,7 @@ const studentLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const isMatch = await user.comparePassword(password);
+  const isMatch = await isStoredPasswordMatch(password, user.password);
 
   if (!isMatch) {
     return res.status(401).json({
@@ -82,7 +198,7 @@ const studentLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const student = await Student.findOne({ userId: user._id });
+  const student = await getStudentByUserId(user._id);
 
   if (!student) {
     return res.status(404).json({
@@ -125,7 +241,7 @@ const getStudentTimetable = asyncHandler(async (req, res) => {
   const { studentId } = req.params;
   const { day } = req.query;
 
-  const student = await Student.findById(studentId);
+  const student = await getStudentByIdFromSql(studentId);
 
   if (!student) {
     return res.status(404).json({
@@ -212,14 +328,28 @@ const getStudents = asyncHandler(async (req, res) => {
     sortOrder,
   });
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[students] GET /api/students', {
+      source: result.sourceProcedure || 'sql',
+      returned: result.students.length,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      search: search || null,
+      classFilter: classFilter || null,
+      section: section || null,
+    });
+  }
+
   res.json({
     success: true,
     students: result.students,
+    availableClasses: result.availableClasses || [],
     pagination: {
       total: result.total,
-      page: Number(page) || 1,
-      pages: Math.ceil(result.total / (Number(limit) || 10)),
-      limit: Number(limit) || 10,
+      page: result.page,
+      pages: Math.ceil(result.total / result.limit),
+      limit: result.limit,
     },
   });
 });
@@ -241,12 +371,13 @@ const getAllStudents = asyncHandler(async (req, res) => {
 // @route   GET /api/students/:id
 // @access  Private
 const getStudent = asyncHandler(async (req, res) => {
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+  const studentId = parseStudentIdParam(req.params.id);
+  if (!studentId) {
     return res.status(400).json({ message: 'Invalid student ID' });
   }
 
   await ensureStudentSqlReady();
-  const student = await getStudentByIdFromSql(req.params.id);
+  const student = await getStudentByIdFromSql(studentId);
 
   if (!student) {
     return res.status(404).json({ message: 'Student not found' });
@@ -263,8 +394,9 @@ const getStudent = asyncHandler(async (req, res) => {
 // @access  Private (Admin, Teacher)
 const getStudentDetails = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const studentId = parseStudentIdParam(id);
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!studentId) {
     return res.status(400).json({
       success: false,
       message: 'Invalid student ID',
@@ -272,7 +404,7 @@ const getStudentDetails = asyncHandler(async (req, res) => {
   }
 
   await ensureStudentSqlReady();
-  const sqlSnapshot = await getStudentFullProfile(id);
+  const sqlSnapshot = await getStudentFullProfile(studentId);
   const student = sqlSnapshot.student;
 
   if (!student) {
@@ -282,262 +414,120 @@ const getStudentDetails = asyncHandler(async (req, res) => {
     });
   }
 
-  const studentObjectId = new mongoose.Types.ObjectId(id);
   const now = new Date();
+  const feeRecords = (sqlSnapshot.feeSnapshot || []).map((fee) => {
+    const amount = Number(fee.amount || 0);
+    const paidAmount = Number(fee.paidAmount || 0);
+    const pendingAmount = Number(fee.pendingAmount ?? Math.max(amount - paidAmount, 0));
+    const isOverdue = pendingAmount > 0 && fee.dueDate && new Date(fee.dueDate) < now;
 
-  const [
-    parents,
-    attendanceSummaryAgg,
-    recentAttendance,
-    fees,
-    grades,
-    subjects,
-    homeworkItems,
-    submissions,
-    bus,
-    meetings,
-  ] = await Promise.all([
-    Parent.find({ childId: id, isActive: true }).populate('userId', 'email').lean(),
-    Attendance.aggregate([
-      { $match: { studentId: studentObjectId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          present: { $sum: { $cond: [{ $eq: ['$status', 'Present'] }, 1, 0] } },
-          absent: { $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] } },
-          late: { $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] } },
-          halfDay: { $sum: { $cond: [{ $eq: ['$status', 'Half Day'] }, 1, 0] } },
-        },
-      },
-    ]),
-    Attendance.find({ studentId: id })
-      .populate('markedBy', 'fullName')
-      .sort({ date: -1 })
-      .limit(20)
-      .lean(),
-    Fee.find({ studentId: id })
-      .populate('createdBy', 'fullName')
-      .sort({ dueDate: -1, createdAt: -1 })
-      .lean(),
-    Grade.find({ studentId: id })
-      .populate('examId', 'name examDate totalMarks passingMarks')
-      .populate('subjectId', 'name')
-      .sort({ createdAt: -1 })
-      .lean(),
-    Subject.find({ grade: student.class })
-      .populate('teacher', 'fullName email phone')
-      .sort({ name: 1 })
-      .lean(),
-    Homework.find({
-      class: student.class,
-      isActive: true,
-      $or: [
-        { section: student.section },
-        { section: { $exists: false } },
-        { section: null },
-        { section: '' },
-      ],
-    })
-      .populate('subject', 'name')
-      .populate('assignedBy', 'fullName')
-      .sort({ dueDate: 1 })
-      .limit(100)
-      .lean(),
-    HomeworkSubmission.find({ studentId: id })
-      .populate('gradedBy', 'fullName')
-      .lean(),
-    Bus.findOne({ 'assignedStudents.studentId': id })
-      .select('busNumber routeName driverName driverPhone currentStatus assignedStudents')
-      .lean(),
-    Meeting.find({ studentId: id })
-      .populate('teacherId', 'fullName email')
-      .populate('parentId', 'fullName')
-      .populate('subject', 'name')
-      .sort({ requestedDate: -1 })
-      .limit(10)
-      .lean(),
-  ]);
-
-  const attendanceSummaryRaw = attendanceSummaryAgg[0] || {
-    total: 0,
-    present: 0,
-    absent: 0,
-    late: 0,
-    halfDay: 0,
-  };
-  const effectivePresence =
-    attendanceSummaryRaw.present + (attendanceSummaryRaw.late * 0.5) + (attendanceSummaryRaw.halfDay * 0.5);
-  const attendancePercentage =
-    attendanceSummaryRaw.total > 0
-      ? Number(((effectivePresence / attendanceSummaryRaw.total) * 100).toFixed(2))
-      : 0;
-
-  const feeSummary = fees.reduce(
-    (acc, fee) => {
-      const grossAmount = (fee.amount || 0) + (fee.lateFee || 0) - (fee.discount || 0);
-      const paidAmount = fee.paidAmount || 0;
-      const pendingAmount = Math.max(grossAmount - paidAmount, 0);
-      const isOverdue = pendingAmount > 0 && fee.dueDate && new Date(fee.dueDate) < now;
-
-      acc.totalFees += grossAmount;
-      acc.totalPaid += paidAmount;
-      acc.totalPending += pendingAmount;
-      if (isOverdue) {
+    return {
+      id: fee.id,
+      feeType: fee.feeType || null,
+      academicYear: fee.academicYear || student.academicYear || null,
+      dueDate: fee.dueDate || null,
+      amount,
+      paidAmount,
+      pendingAmount,
+      status: fee.status || (pendingAmount > 0 ? 'Pending' : 'Paid'),
+      description: fee.description || null,
+      paymentDate: fee.paymentDate || null,
+      paymentMode: fee.paymentMode || null,
+      receiptNumber: fee.receiptNumber || null,
+      transactionId: fee.transactionId || null,
+      remarks: fee.remarks || null,
+      isOverdue,
+    };
+  });
+  const feeSummary = feeRecords.reduce(
+    (acc, record) => {
+      acc.totalFees += record.amount;
+      acc.paidAmount += record.paidAmount;
+      acc.pendingAmount += record.pendingAmount;
+      if (record.isOverdue) {
         acc.overdueCount += 1;
       }
-
       return acc;
     },
     {
       totalFees: 0,
-      totalPaid: 0,
-      totalPending: 0,
+      paidAmount: 0,
+      pendingAmount: 0,
       overdueCount: 0,
     }
   );
-
-  const paymentHistory = fees
-    .flatMap((fee) =>
-      (fee.payments || []).map((payment) => ({
-        feeId: fee._id,
-        feeType: fee.feeType,
-        amount: payment.amount || 0,
-        date: payment.date || null,
-        mode: payment.mode || null,
-        transactionId: payment.transactionId || null,
-        receiptNumber: payment.receiptNumber || null,
-        notes: payment.notes || null,
-      }))
-    )
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-
-  let totalExamMarks = 0;
-  let totalMarksObtained = 0;
-  const examRecords = grades.map((grade) => {
-    totalExamMarks += grade.totalMarks || 0;
-    totalMarksObtained += grade.marksObtained || 0;
-    const percentage =
-      grade.totalMarks > 0 ? Number(((grade.marksObtained / grade.totalMarks) * 100).toFixed(2)) : 0;
-
-    return {
-      id: grade._id,
-      examId: grade.examId?._id || null,
-      examName: grade.examId?.name || 'N/A',
-      examDate: grade.examId?.examDate || null,
-      subject: grade.subjectId?.name || 'N/A',
-      marksObtained: grade.marksObtained || 0,
-      totalMarks: grade.totalMarks || 0,
-      percentage,
-      grade: grade.grade || null,
-      remarks: grade.remarks || null,
-    };
-  });
-  const examAverage =
-    totalExamMarks > 0 ? Number(((totalMarksObtained / totalExamMarks) * 100).toFixed(2)) : 0;
-
-  const submissionMap = new Map(
-    submissions.map((submission) => [submission.homeworkId.toString(), submission])
-  );
-
-  const homeworkRecords = homeworkItems.map((homework) => {
-    const submission = submissionMap.get(homework._id.toString());
-    const isOverdue = !submission && homework.dueDate && new Date(homework.dueDate) < now;
-    const status = submission?.status || (isOverdue ? 'overdue' : 'pending');
-
-    return {
-      id: homework._id,
-      title: homework.title,
-      description: homework.description,
-      subject: homework.subject?.name || 'N/A',
-      dueDate: homework.dueDate || null,
-      assignedBy: homework.assignedBy?.fullName || null,
-      totalMarks: homework.totalMarks || null,
-      status,
-      submission: submission
-        ? {
-            submittedAt: submission.submittedAt || null,
-            status: submission.status || null,
-            marksObtained: submission.marksObtained ?? null,
-            feedback: submission.feedback || null,
-            gradedBy: submission.gradedBy?.fullName || null,
-            gradedAt: submission.gradedAt || null,
-          }
-        : null,
-    };
-  });
-
-  const homeworkSummary = homeworkRecords.reduce(
-    (acc, hw) => {
-      acc.total += 1;
-      if (hw.status === 'submitted' || hw.status === 'graded' || hw.status === 'late') {
-        acc.submitted += 1;
-      }
-      if (hw.status === 'pending') {
-        acc.pending += 1;
-      }
-      if (hw.status === 'overdue') {
-        acc.overdue += 1;
-      }
-      if (hw.status === 'graded') {
-        acc.graded += 1;
-      }
+  const examRecords = (sqlSnapshot.examSnapshot || []).map((record) => ({
+    id: record.id,
+    examName: record.examName || 'Exam',
+    examDate: record.examDate || null,
+    subject: record.subject || 'Subject',
+    marksObtained: Number(record.marksObtained || 0),
+    totalMarks: Number(record.totalMarks || 0),
+    percentage: Number(record.percentage || 0),
+    grade: record.grade || null,
+    remarks: record.remarks || null,
+    isAbsent: record.isAbsent === true,
+  }));
+  const examSummary = examRecords.reduce(
+    (acc, record) => {
+      acc.totalExams += 1;
+      acc.totalMarks += record.totalMarks;
+      acc.totalObtained += record.marksObtained;
+      acc.percentageTotal += record.percentage;
       return acc;
     },
     {
-      total: 0,
-      submitted: 0,
-      pending: 0,
-      overdue: 0,
-      graded: 0,
+      totalExams: 0,
+      totalMarks: 0,
+      totalObtained: 0,
+      percentageTotal: 0,
     }
   );
-
-  const transportAssignment = bus?.assignedStudents?.find(
-    (entry) => String(entry.studentId) === String(id)
-  );
-
-  const parentDetails =
-    parents.length > 0
-      ? parents.map((parent) => ({
-          id: parent._id,
-          fullName: parent.fullName,
-          relation: parent.relation || null,
-          phone: parent.phone || null,
-          email: parent.email || parent.userId?.email || null,
-          occupation: parent.occupation || null,
-          address: parent.address || {},
-          isActive: parent.isActive,
-        }))
-      : sqlSnapshot.parentSnapshot && (sqlSnapshot.parentSnapshot.GuardianName || sqlSnapshot.parentSnapshot.GuardianPhone)
+  const parentDetails = (sqlSnapshot.parentDetails || []).length > 0
+    ? sqlSnapshot.parentDetails.map((parent) => ({
+        id: parent.id,
+        fullName: parent.fullName || null,
+        relation: parent.relation || null,
+        phone: parent.phone || null,
+        alternatePhone: parent.alternatePhone || null,
+        email: parent.email || null,
+        occupation: parent.occupation || null,
+        address: parent.address || {},
+        isPrimaryGuardian: parent.isPrimaryGuardian === true,
+        isActive: parent.isActive !== false,
+      }))
+    : (student.parentName || student.parentPhone)
       ? [
           {
-            id: `${id}-guardian`,
-            fullName: sqlSnapshot.parentSnapshot.GuardianName || null,
-            relation: sqlSnapshot.parentSnapshot.GuardianRelation || null,
-            phone: sqlSnapshot.parentSnapshot.GuardianPhone || null,
+            id: `guardian-${student.id}`,
+            fullName: student.parentName || student.guardianName || null,
+            relation: student.guardianRelation || null,
+            phone: student.parentPhone || student.guardianPhone || null,
+            alternatePhone: null,
             email: null,
             occupation: null,
-            address: {
-              street: sqlSnapshot.parentSnapshot.AddressStreet || '',
-              city: sqlSnapshot.parentSnapshot.AddressCity || '',
-              state: sqlSnapshot.parentSnapshot.AddressState || '',
-              pincode: sqlSnapshot.parentSnapshot.AddressPincode || '',
-            },
+            address: student.address || {},
+            isPrimaryGuardian: true,
             isActive: true,
           },
         ]
       : [];
+  const examAveragePercentage = examSummary.totalExams > 0
+    ? Number((examSummary.percentageTotal / examSummary.totalExams).toFixed(2))
+    : 0;
 
   res.json({
     success: true,
     studentProfile: {
-      id: student._id,
+      _id: student.id,
+      id: student.id,
+      studentId: student.studentId,
       fullName: student.fullName,
-      admissionNumber: student.rollNumber || null,
+      admissionNumber: student.admissionNumber || null,
       rollNumber: student.rollNumber || null,
       class: student.class,
       section: student.section,
+      academicYear: student.academicYear || null,
       email: student.email || null,
       phone: student.phone || null,
       dateOfBirth: student.dateOfBirth || null,
@@ -546,111 +536,62 @@ const getStudentDetails = asyncHandler(async (req, res) => {
       admissionDate: student.admissionDate || null,
       isActive: student.isActive,
       address: student.address || {},
-      profilePhoto: null,
+      profilePhoto: student.profilePhoto || null,
+      parentName: student.parentName || student.guardianName || null,
+      parentPhone: student.parentPhone || student.guardianPhone || null,
     },
     parentDetails,
     academicInfo: {
       class: student.class,
       section: student.section,
-      subjects: subjects.map((subject) => ({
-        id: subject._id,
-        name: subject.name,
-        description: subject.description || null,
-        teacher: subject.teacher
-          ? {
-              id: subject.teacher._id,
-              fullName: subject.teacher.fullName,
-              email: subject.teacher.email || null,
-              phone: subject.teacher.phone || null,
-            }
-          : null,
-      })),
+      academicYear: student.academicYear || null,
+      subjects: [],
     },
     attendance: {
       summary: {
-        total: attendanceSummaryRaw.total,
-        present: attendanceSummaryRaw.present,
-        absent: attendanceSummaryRaw.absent,
-        late: attendanceSummaryRaw.late,
-        halfDay: attendanceSummaryRaw.halfDay,
-        percentage: attendancePercentage,
+        total: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        halfDay: 0,
+        percentage: 0,
       },
-      recentHistory: recentAttendance.map((record) => ({
-        id: record._id,
-        date: record.date,
-        status: record.status,
-        remarks: record.remarks || null,
-        markedBy: record.markedBy?.fullName || null,
-      })),
+      recentHistory: [],
     },
     fees: {
       summary: {
         totalFees: Number(feeSummary.totalFees.toFixed(2)),
-        paidAmount: Number(feeSummary.totalPaid.toFixed(2)),
-        pendingAmount: Number(feeSummary.totalPending.toFixed(2)),
+        paidAmount: Number(feeSummary.paidAmount.toFixed(2)),
+        pendingAmount: Number(feeSummary.pendingAmount.toFixed(2)),
         overdueCount: feeSummary.overdueCount,
       },
-      records: fees.map((fee) => {
-        const grossAmount = (fee.amount || 0) + (fee.lateFee || 0) - (fee.discount || 0);
-        const paidAmount = fee.paidAmount || 0;
-        return {
-          id: fee._id,
-          feeType: fee.feeType,
-          academicYear: fee.academicYear,
-          dueDate: fee.dueDate,
-          amount: fee.amount || 0,
-          paidAmount,
-          pendingAmount: Number(Math.max(grossAmount - paidAmount, 0).toFixed(2)),
-          status: fee.status,
-          paymentDate: fee.paymentDate || null,
-          paymentMode: fee.paymentMode || null,
-          receiptNumber: fee.receiptNumber || null,
-          transactionId: fee.transactionId || null,
-          remarks: fee.remarks || null,
-        };
-      }),
-      paymentHistory,
+      records: feeRecords.map(({ isOverdue, ...fee }) => fee),
+      paymentHistory: [],
     },
     examResults: {
       summary: {
-        totalExams: examRecords.length,
-        totalMarks: totalExamMarks,
-        totalObtained: totalMarksObtained,
-        averagePercentage: examAverage,
+        totalExams: examSummary.totalExams,
+        totalMarks: examSummary.totalMarks,
+        totalObtained: examSummary.totalObtained,
+        averagePercentage: examAveragePercentage,
       },
       records: examRecords,
     },
     homework: {
-      summary: homeworkSummary,
-      records: homeworkRecords,
+      summary: {
+        total: 0,
+        submitted: 0,
+        pending: 0,
+        overdue: 0,
+        graded: 0,
+      },
+      records: [],
     },
     additionalInfo: {
-      transport: bus
-        ? {
-            assigned: true,
-            busNumber: bus.busNumber,
-            routeName: bus.routeName,
-            stopName: transportAssignment?.stopName || null,
-            driverName: bus.driverName,
-            driverPhone: bus.driverPhone,
-            currentStatus: bus.currentStatus,
-          }
-        : {
-            assigned: false,
-          },
-      meetings: meetings.map((meeting) => ({
-        id: meeting._id,
-        title: meeting.title,
-        status: meeting.status,
-        requestedDate: meeting.requestedDate || null,
-        requestedTime: meeting.requestedTime || null,
-        meetingDate: meeting.meetingDate || null,
-        meetingTime: meeting.meetingTime || null,
-        isOnline: meeting.isOnline,
-        teacher: meeting.teacherId?.fullName || null,
-        parent: meeting.parentId?.fullName || null,
-        subject: meeting.subject?.name || null,
-      })),
+      transport: {
+        assigned: false,
+      },
+      meetings: [],
       hostel: {
         available: false,
         message: 'Hostel module data is not available in current schema.',
@@ -675,8 +616,8 @@ const createStudent = asyncHandler(async (req, res) => {
     fullName,
     email,
     phone,
-    class: studentClass,
-    section,
+    className: studentClass,
+    sectionName: section,
     rollNumber,
     dateOfBirth,
     gender,
@@ -686,84 +627,45 @@ const createStudent = asyncHandler(async (req, res) => {
     bloodGroup,
     guardianRelation,
     password,
-  } = req.body;
+    academicYear,
+    admissionDate,
+    isActive,
+  } = normalizeStudentPayload(req.body);
 
-  const existingUser = await User.findOne({ email });
+  if (!fullName || !email || !studentClass || !section || !rollNumber || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Full name, email, class, section, roll number, and password are required.',
+    });
+  }
+
+  const existingUser = await getAuthUserByEmail(email);
   if (existingUser) {
     return res.status(400).json({ message: 'Email already registered' });
   }
 
-  const existingRoll = await Student.findOne({ rollNumber });
+  const existingRoll = await getStudentByRollNumber(rollNumber);
   if (existingRoll) {
     return res.status(400).json({ message: 'Roll number already exists' });
   }
 
-  let user = null;
-  let student = null;
-
-  try {
-    user = await User.create({
-      fullName,
-      email,
-      password: password || 'student123',
-      role: 'student',
-      phone,
-    });
-
-    student = await Student.create({
-      userId: user._id,
-      fullName,
-      email,
-      phone,
-      class: studentClass,
-      section,
-      rollNumber,
-      dateOfBirth,
-      gender,
-      address,
-      guardianName,
-      guardianPhone,
-      guardianRelation,
-      bloodGroup,
-    });
-
-    await syncUserAuthRecord(user);
-    const studentResponse = await createStudentMirror(student, user);
-
-    res.status(201).json({
-      success: true,
-      student: studentResponse,
-    });
-  } catch (error) {
-    if (student?._id) {
-      await Student.findByIdAndDelete(student._id);
-    }
-    if (user?._id) {
-      await User.findByIdAndDelete(user._id);
-    }
-    throw error;
-  }
-});
-
-// @desc    Update student
-// @route   PUT /api/students/:id
-// @access  Private (Admin)
-const updateStudent = asyncHandler(async (req, res) => {
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-    return res.status(400).json({ message: 'Invalid student ID' });
-  }
-
-  const student = await Student.findById(req.params.id);
-
-  if (!student) {
-    return res.status(404).json({ message: 'Student not found' });
-  }
-
-  const {
+  const passwordHash = String(password);
+  const authUser = await createAuthUser({
     fullName,
+    email,
+    passwordHash,
+    role: 'student',
     phone,
-    class: studentClass,
-    section,
+    isActive: isActive !== false,
+  });
+
+  const studentResponse = await createStudentRecord({
+    userId: authUser._id,
+    fullName,
+    email,
+    phone,
+    className: studentClass,
+    sectionName: section,
     rollNumber,
     dateOfBirth,
     gender,
@@ -772,46 +674,92 @@ const updateStudent = asyncHandler(async (req, res) => {
     guardianPhone,
     guardianRelation,
     bloodGroup,
+    admissionDate,
+    academicYear,
+    isActive: isActive !== false,
+  });
+
+  res.status(201).json({
+    success: true,
+    student: studentResponse,
+  });
+});
+
+// @desc    Update student
+// @route   PUT /api/students/:id
+// @access  Private (Admin)
+const updateStudent = asyncHandler(async (req, res) => {
+  const studentId = parseStudentIdParam(req.params.id);
+  if (!studentId) {
+    return res.status(400).json({ message: 'Invalid student ID' });
+  }
+
+  const student = await getStudentByIdFromSql(studentId);
+
+  if (!student) {
+    return res.status(404).json({ message: 'Student not found' });
+  }
+
+  const normalizedPayload = normalizeStudentPayload(req.body);
+  const {
+    fullName,
+    email,
+    phone,
+    className: studentClass,
+    sectionName: section,
+    rollNumber,
+    dateOfBirth,
+    gender,
+    address,
+    guardianName,
+    guardianPhone,
+    guardianRelation,
+    bloodGroup,
+    admissionDate,
+    academicYear,
     isActive,
-  } = req.body;
-  const normalizedIsActive = parseBooleanInput(isActive);
+  } = normalizedPayload;
+  const normalizedIsActive = isActive;
 
   if (rollNumber && rollNumber !== student.rollNumber) {
-    const existingRoll = await Student.findOne({ rollNumber });
+    const existingRoll = await getStudentByRollNumber(rollNumber);
     if (existingRoll) {
       return res.status(400).json({ message: 'Roll number already exists' });
     }
   }
 
-  if (fullName !== undefined) student.fullName = fullName;
-  if (phone !== undefined) student.phone = phone;
-  if (studentClass !== undefined) student.class = studentClass;
-  if (section !== undefined) student.section = section;
-  if (rollNumber !== undefined) student.rollNumber = rollNumber;
-  if (dateOfBirth !== undefined) student.dateOfBirth = dateOfBirth || null;
-  if (gender !== undefined) student.gender = gender || null;
-  if (address !== undefined) student.address = address || {};
-  if (guardianName !== undefined) student.guardianName = guardianName;
-  if (guardianPhone !== undefined) student.guardianPhone = guardianPhone;
-  if (guardianRelation !== undefined) student.guardianRelation = guardianRelation;
-  if (bloodGroup !== undefined) student.bloodGroup = bloodGroup;
-  if (normalizedIsActive !== undefined) student.isActive = normalizedIsActive;
-
-  await student.save();
-
-  let user = null;
-  if (student.userId) {
-    user = await User.findById(student.userId);
-    if (user) {
-      if (fullName !== undefined) user.fullName = fullName;
-      if (phone !== undefined) user.phone = phone;
-      if (normalizedIsActive !== undefined) user.isActive = normalizedIsActive;
-      await user.save();
-      await syncUserAuthRecord(user);
-    }
+  const userId = student.userId?._id || student.userId || null;
+  const nextFullName = fullName && String(fullName).trim() ? fullName : student.fullName;
+  const nextEmail = email && String(email).trim() ? email : student.email;
+  let authUser = null;
+  if (userId) {
+    authUser = await updateAuthUser(userId, {
+      fullName: nextFullName,
+      email: nextEmail,
+      phone: phone ?? student.phone,
+      isActive: normalizedIsActive ?? student.isActive,
+    });
   }
 
-  const updatedStudent = await updateStudentMirror(student, user);
+  const updatedStudent = await updateStudentRecord(studentId, {
+    userId,
+    fullName: nextFullName,
+    email: authUser?.email || nextEmail,
+    phone: phone ?? student.phone,
+    className: studentClass ?? student.class,
+    sectionName: section ?? student.section,
+    rollNumber: rollNumber ?? student.rollNumber,
+    dateOfBirth: dateOfBirth !== undefined ? dateOfBirth || null : student.dateOfBirth,
+    gender: gender !== undefined ? gender || null : student.gender,
+    address: address !== undefined ? address || {} : student.address,
+    guardianName: guardianName ?? student.guardianName,
+    guardianPhone: guardianPhone ?? student.guardianPhone,
+    guardianRelation: guardianRelation ?? student.guardianRelation,
+    bloodGroup: bloodGroup ?? student.bloodGroup,
+    admissionDate: admissionDate !== undefined ? admissionDate || null : student.admissionDate,
+    academicYear: academicYear ?? student.academicYear,
+    isActive: normalizedIsActive !== undefined ? normalizedIsActive : student.isActive,
+  });
 
   res.json({
     success: true,
@@ -823,19 +771,22 @@ const updateStudent = asyncHandler(async (req, res) => {
 // @route   DELETE /api/students/:id
 // @access  Private (Admin)
 const deleteStudent = asyncHandler(async (req, res) => {
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+  const studentId = parseStudentIdParam(req.params.id);
+  if (!studentId) {
     return res.status(400).json({ message: 'Invalid student ID' });
   }
 
-  const student = await Student.findById(req.params.id);
+  const student = await getStudentByIdFromSql(studentId);
 
   if (!student) {
     return res.status(404).json({ message: 'Student not found' });
   }
 
-  await User.findByIdAndDelete(student.userId);
-  await Student.findByIdAndDelete(req.params.id);
-  await deleteStudentMirror(req.params.id);
+  const userId = student.userId?._id || student.userId || null;
+  if (userId) {
+    await deleteAuthUser(userId);
+  }
+  await deleteStudentRecord(studentId);
 
   res.json({
     success: true,

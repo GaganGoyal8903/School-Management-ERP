@@ -4,9 +4,17 @@ const API = axios.create({
   baseURL: "http://localhost:5000/api",
 });
 
+const getStoredAuthToken = () => {
+  try {
+    return localStorage.getItem("sms_token") || sessionStorage.getItem("sms_token") || "";
+  } catch (error) {
+    return "";
+  }
+};
+
 // Attach token automatically
 API.interceptors.request.use((req) => {
-  const token = localStorage.getItem("sms_token");
+  const token = getStoredAuthToken();
   if (token) {
     req.headers.Authorization = `Bearer ${token}`;
   }
@@ -25,7 +33,7 @@ export const register = (data) => API.post("/auth/register", data);
 export const getMe = () => API.get("/auth/me");
 
 // ================= DASHBOARD =================
-export const getDashboard = () => API.get("/dashboard");
+export const getDashboard = () => API.get("/reports/dashboard");
 
 // ================= STUDENTS =================
 export const getStudents = (pageOrParams = 1, limit = 10, search = '', classFilter = '', section = '') => {
@@ -57,29 +65,20 @@ export const getStudents = (pageOrParams = 1, limit = 10, search = '', classFilt
 };
 export const getAllStudents = () => API.get("/students/all");
 export const getStudentById = (id) => API.get(`/students/${id}`);
-export const getStudentDetailsById = async (id) => {
-  try {
-    return await API.get(`/students/${id}/details`);
-  } catch (error) {
-    if (error?.response?.status === 404) {
-      return API.get(`/student/${id}/details`);
-    }
-    throw error;
-  }
-};
+export const getStudentDetailsById = (id) => API.get(`/students/${id}/details`);
 export const createStudent = (data) => API.post("/students", data);
 export const updateStudent = (id, data) => API.put(`/students/${id}`, data);
 export const deleteStudent = (id) => API.delete(`/students/${id}`);
 
 // ================= TEACHERS =================
-export const getTeachers = () => API.get("/teachers");
+export const getTeachers = (params) => API.get("/teachers", { params });
 export const getTeacherById = (id) => API.get(`/teachers/${id}`);
 export const createTeacher = (data) => API.post("/teachers", data);
 export const updateTeacher = (id, data) => API.put(`/teachers/${id}`, data);
 export const deleteTeacher = (id) => API.delete(`/teachers/${id}`);
 
 // ================= SUBJECTS =================
-export const getSubjects = () => API.get("/subjects");
+export const getSubjects = (params) => API.get("/subjects", { params });
 export const getSubjectById = (id) => API.get(`/subjects/${id}`);
 export const createSubject = (data) => API.post("/subjects", data);
 export const updateSubject = (id, data) => API.put(`/subjects/${id}`, data);
@@ -102,6 +101,7 @@ export const uploadMaterial = (data) => {
 // ================= ATTENDANCE =================
 export const getAttendance = (params) => API.get("/attendance", { params });
 export const getAttendanceByStudent = (studentId) => API.get(`/attendance/student/${studentId}`);
+export const submitAttendance = (data) => API.post("/attendance/save", data);
 export const markAttendance = (data) => API.post("/attendance", data);
 export const bulkMarkAttendance = (data) => API.post("/attendance/bulk", data);
 export const updateAttendance = (id, data) => API.put(`/attendance/${id}`, data);
@@ -182,4 +182,5 @@ export const sendNotification = (data) => API.post("/notifications", data);
 export const sendWhatsAppMessage = (data) => API.post("/notifications/whatsapp", data);
 
 export default API;
+
 

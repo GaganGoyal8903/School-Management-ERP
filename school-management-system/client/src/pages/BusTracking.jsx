@@ -49,6 +49,7 @@ const BusTracking = () => {
   const [buses, setBuses] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [editingBus, setEditingBus] = useState(null);
@@ -91,12 +92,16 @@ const BusTracking = () => {
     try {
       setLoading(true);
       const response = await getBuses({ status: filterStatus });
-      // Safely handle bus data - ensure it's always an array
-      const busesData = response?.data?.data || response?.data || [];
-      setBuses(Array.isArray(busesData) ? busesData : []);
+      const busesData = response?.data?.buses;
+      if (!Array.isArray(busesData)) {
+        throw new Error('Invalid bus response');
+      }
+      setBuses(busesData);
+      setLoadError('');
     } catch (error) {
       console.error('Error fetching buses:', error);
       toast.error('Failed to fetch buses');
+      setLoadError('Unable to load live bus data from the backend API.');
       setBuses([]);
     } finally {
       setLoading(false);
@@ -106,10 +111,10 @@ const BusTracking = () => {
   const fetchBusLocation = async (busId) => {
     try {
       const response = await getBusLocation(busId);
-      if (response?.data?.data) {
+      if (response?.data?.bus) {
         setSelectedBus(prev => ({
           ...prev,
-          gpsLocation: response.data.data.gpsLocation
+          gpsLocation: response.data.bus.gpsLocation
         }));
       }
     } catch (error) {
@@ -318,6 +323,11 @@ const BusTracking = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {loadError ? (
+          <div className="lg:col-span-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        ) : null}
         {/* Bus List */}
         <div className="lg:col-span-2 space-y-4">
           {/* Filter */}

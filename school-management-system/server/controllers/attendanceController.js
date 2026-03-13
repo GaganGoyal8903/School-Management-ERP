@@ -1,53 +1,199 @@
-const Attendance = require('../models/Attendance');
-const Student = require('../models/Student');
 const { asyncHandler } = require('../middleware/errorMiddleware');
+const { getStudentById, getStudentByUserId } = require('../services/studentSqlService');
+const {
+  ensureAttendanceSqlReady,
+  getAttendanceById,
+  upsertAttendanceRecord,
+  saveAttendanceSession,
+  getAttendanceList,
+  getStudentAttendanceReport,
+  getClassAttendanceSummary,
+  deleteAttendanceRecord,
+} = require('../services/attendanceSqlService');
+
+const normalizeClassFilter = (value, fallback = null) => {
+  return value || fallback || null;
+};
+
+const getRequestUserId = (req) => req.user?._id || req.user?.id || null;
+
+const normalizeAttendanceStudents = (body = {}) => {
+  const studentsInput = Array.isArray(body.students)
+    ? body.students
+    : Array.isArray(body.attendanceList)
+      ? body.attendanceList
+      : Array.isArray(body.attendances)
+        ? body.attendances
+        : [];
+
+  return studentsInput
+    .map((student) => ({
+      studentId: student?.studentId ?? student?._id ?? student?.id,
+      rollNumber: student?.rollNumber ?? student?.rollNo ?? null,
+      status: student?.status,
+      remarks: student?.remarks,
+      checkInTime: student?.checkInTime,
+      checkOutTime: student?.checkOutTime,
+    }))
+    .filter((student) => student.studentId);
+};
+
+const normalizeAttendanceSessionPayload = (body = {}) => ({
+  attendanceDate: body.attendanceDate || body.date,
+  academicYearId: body.academicYearId ?? null,
+  classId: body.classId ?? null,
+  sectionId: body.sectionId ?? null,
+  className: body.className || body.class || body.grade || null,
+  sectionName: body.sectionName || body.section || null,
+  markedByTeacherId: body.markedByTeacherId || body.markedBy || null,
+  remarks: body.remarks || null,
+  students: normalizeAttendanceStudents(body),
+});
+
+const saveAttendanceSessionAndRespond = async (req, res) => {
+  await ensureAttendanceSqlReady();
+
+  const payload = normalizeAttendanceSessionPayload(req.body);
+  if (!payload.students.length) {
+    return res.status(400).json({ message: 'Please provide attendance records' });
+  }
+
+  const result = await saveAttendanceSession({
+    ...payload,
+    markedByUserId: getRequestUserId(req),
+  });
+
+  return res.json({
+    success: true,
+    message: 'Attendance saved successfully',
+    attendanceId: result.attendanceId ? String(result.attendanceId) : null,
+    savedCount: result.savedCount || 0,
+  });
+};
+
+const buildAttendancePayload = async ({ studentId, date, status, className, sectionName, markedByUserId, remarks }) => {
+  const student = await getStudentById(studentId);
+  if (!student) {
+    return { student: null, payload: null };
+  }
+
+  return {
+    student,
+    payload: {
+      studentId: String(studentId),
+      date,
+      status,
+      className: className || student.class,
+      sectionName: sectionName || student.section || '',
+      markedByUserId: String(markedByUserId),
+      remarks: remarks || '',
+    },
+  };
+};
 
 // @desc    Mark attendance
 // @route   POST /api/attendance
 // @access  Private (Admin, Teacher)
 const markAttendance = asyncHandler(async (req, res) => {
-  const { studentId, date, status, class: studentClass, section, remarks } = req.body;
+  if (normalizeAttendanceStudents(req.body).length > 0) {
+    return saveAttendanceSessionAndRespond(req, res);
+  }
 
-  // Check if student exists
-  const student = await Student.findById(studentId);
+  await ensureAttendanceSqlReady();
+
+  const {
+    studentId,
+    date,
+    status,
+    class: studentClass,
+    grade,
+    section,
+    remarks,
+  } = req.body;
+
+  const { student, payload } = await buildAttendancePayload({
+    studentId,
+    date,
+    status,
+    className: normalizeClassFilter(studentClass, grade),
+    sectionName: section,
+    markedByUserId: req.user._id,
+    remarks,
+  });
+
   if (!student) {
     return res.status(404).json({ message: 'Student not found' });
   }
 
-  // Check if attendance already marked for this student on this date
-  const existingAttendance = await Attendance.findOne({
-    studentId,
-    date: new Date(date).setHours(0, 0, 0, 0)
-  });
+  const result = await upsertAttendanceRecord(payload);
+  if (!result?.attendance) {
+    return res.status(400).json({ message: 'Unable to save attendance record' });
+  }
 
-  if (existingAttendance) {
-    // Update existing attendance
-    existingAttendance.status = status;
-    existingAttendance.remarks = remarks;
-    existingAttendance.markedBy = req.user._id;
-    await existingAttendance.save();
-
+  if (result.operationType === 'updated') {
     return res.json({
       success: true,
-      attendance: existingAttendance,
-      message: 'Attendance updated'
+      attendance: result.attendance,
+      message: 'Attendance updated',
     });
   }
 
-  // Create new attendance
-  const attendance = await Attendance.create({
-    studentId,
-    date: new Date(date),
-    status,
-    class: studentClass || student.class,
-    section: section || student.section,
-    markedBy: req.user._id,
-    remarks
-  });
-
   res.status(201).json({
     success: true,
-    attendance
+    attendance: result.attendance,
+  });
+});
+
+// @desc    Update attendance by id
+// @route   PUT /api/attendance/:id
+// @access  Private (Admin, Teacher)
+const updateAttendance = asyncHandler(async (req, res) => {
+  await ensureAttendanceSqlReady();
+
+  const existingAttendance = await getAttendanceById(req.params.id);
+  if (!existingAttendance) {
+    return res.status(404).json({ message: 'Attendance record not found' });
+  }
+
+  const {
+    studentId,
+    date,
+    status,
+    class: studentClass,
+    grade,
+    section,
+    remarks,
+  } = req.body;
+
+  const effectiveStudentId =
+    studentId || (typeof existingAttendance.studentId === 'object' ? existingAttendance.studentId._id : existingAttendance.studentId);
+
+  const { student, payload } = await buildAttendancePayload({
+    studentId: effectiveStudentId,
+    date: date || existingAttendance.date,
+    status: status || existingAttendance.status,
+    className: normalizeClassFilter(studentClass, grade) || existingAttendance.class,
+    sectionName: section !== undefined ? section : existingAttendance.section,
+    markedByUserId: req.user._id,
+    remarks: remarks !== undefined ? remarks : existingAttendance.remarks,
+  });
+
+  if (!student) {
+    return res.status(404).json({ message: 'Student not found' });
+  }
+
+  const result = await upsertAttendanceRecord({
+    attendanceId: req.params.id,
+    ...payload,
+  });
+  if (!result?.attendance) {
+    return res.status(400).json({ message: 'Unable to update attendance record' });
+  }
+
+  res.json({
+    success: true,
+    attendance: result.attendance,
+    message: 'Attendance updated',
   });
 });
 
@@ -55,117 +201,51 @@ const markAttendance = asyncHandler(async (req, res) => {
 // @route   POST /api/attendance/bulk
 // @access  Private (Admin, Teacher)
 const markBulkAttendance = asyncHandler(async (req, res) => {
-  const { attendances, date, class: studentClass, section } = req.body;
-
-  if (!attendances || !Array.isArray(attendances) || attendances.length === 0) {
-    return res.status(400).json({ message: 'Please provide attendance records' });
-  }
-
-  const results = [];
-  const errors = [];
-
-  for (const record of attendances) {
-    try {
-      const student = await Student.findById(record.studentId);
-      if (!student) {
-        errors.push({ studentId: record.studentId, message: 'Student not found' });
-        continue;
-      }
-
-      // Check existing attendance
-      const existingAttendance = await Attendance.findOne({
-        studentId: record.studentId,
-        date: new Date(date).setHours(0, 0, 0, 0)
-      });
-
-      if (existingAttendance) {
-        existingAttendance.status = record.status;
-        existingAttendance.remarks = record.remarks;
-        existingAttendance.markedBy = req.user._id;
-        await existingAttendance.save();
-        results.push(existingAttendance);
-      } else {
-        const attendance = await Attendance.create({
-          studentId: record.studentId,
-          date: new Date(date),
-          status: record.status,
-          class: studentClass || student.class,
-          section: section || student.section,
-          markedBy: req.user._id,
-          remarks: record.remarks
-        });
-        results.push(attendance);
-      }
-    } catch (error) {
-      errors.push({ studentId: record.studentId, message: error.message });
-    }
-  }
-
-  res.status(201).json({
-    success: true,
-    marked: results.length,
-    errors: errors.length > 0 ? errors : undefined,
-    attendances: results
-  });
+  return saveAttendanceSessionAndRespond(req, res);
 });
+
+// @desc    Save attendance session
+// @route   POST /api/attendance/save
+// @access  Private (Admin, Teacher)
+const saveAttendance = asyncHandler(async (req, res) => saveAttendanceSessionAndRespond(req, res));
 
 // @desc    Get attendance records
 // @route   GET /api/attendance
 // @access  Private
 const getAttendance = asyncHandler(async (req, res) => {
-  const { 
-    studentId, 
-    class: classFilter, 
-    section, 
-    date, 
-    startDate, 
+  await ensureAttendanceSqlReady();
+
+  const {
+    studentId,
+    class: classFilter,
+    grade,
+    section,
+    date,
+    startDate,
     endDate,
     page = 1,
-    limit = 50
+    limit = 50,
   } = req.query;
 
-  let query = {};
-
-  if (studentId) {
-    query.studentId = studentId;
-  }
-
-  if (classFilter) {
-    query.class = classFilter;
-  }
-
-  if (section) {
-    query.section = section;
-  }
-
-  if (date) {
-    const dateObj = new Date(date);
-    const nextDay = new Date(dateObj);
-    nextDay.setDate(nextDay.getDate() + 1);
-    query.date = { $gte: dateObj, $lt: nextDay };
-  }
-
-  if (startDate && endDate) {
-    query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
-  }
-
-  const total = await Attendance.countDocuments(query);
-  
-  const attendances = await Attendance.find(query)
-    .populate('studentId', 'fullName rollNumber')
-    .populate('markedBy', 'fullName')
-    .sort({ date: -1 })
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit));
+  const result = await getAttendanceList({
+    studentId,
+    className: normalizeClassFilter(classFilter, grade),
+    sectionName: section,
+    date,
+    startDate,
+    endDate,
+    page,
+    limit,
+  });
 
   res.json({
     success: true,
-    attendances,
+    attendances: result.attendances,
     pagination: {
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit)
-    }
+      total: result.total,
+      page: Number(page) || 1,
+      pages: Math.ceil(result.total / (Number(limit) || 50)),
+    },
   });
 });
 
@@ -173,107 +253,22 @@ const getAttendance = asyncHandler(async (req, res) => {
 // @route   GET /api/attendance/report
 // @access  Private
 const getAttendanceReport = asyncHandler(async (req, res) => {
-  const { class: classFilter, section, startDate, endDate } = req.query;
+  await ensureAttendanceSqlReady();
 
-  let matchQuery = {};
+  const { class: classFilter, grade, section, startDate, endDate } = req.query;
 
-  if (classFilter) {
-    matchQuery.class = classFilter;
-  }
-
-  if (section) {
-    matchQuery.section = section;
-  }
-
-  if (startDate && endDate) {
-    matchQuery.date = { 
-      $gte: new Date(startDate), 
-      $lte: new Date(endDate) 
-    };
-  }
-
-  // Get attendance stats by status
-  const statusStats = await Attendance.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-
-  // Get daily attendance
-  const dailyStats = await Attendance.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-        present: {
-          $sum: { $cond: [{ $eq: ['$status', 'Present'] }, 1, 0] }
-        },
-        absent: {
-          $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] }
-        },
-        late: {
-          $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] }
-        },
-        total: { $sum: 1 }
-      }
-    },
-    { $sort: { _id: 1 } }
-  ]);
-
-  // Get student-wise attendance
-  const studentStats = await Attendance.aggregate([
-    { $match: matchQuery },
-    {
-      $group: {
-        _id: '$studentId',
-        present: {
-          $sum: { $cond: [{ $eq: ['$status', 'Present'] }, 1, 0] }
-        },
-        absent: {
-          $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] }
-        },
-        late: {
-          $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] }
-        },
-        total: { $sum: 1 }
-      }
-    },
-    {
-      $lookup: {
-        from: 'students',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'student'
-      }
-    },
-    { $unwind: '$student' },
-    {
-      $project: {
-        studentName: '$student.fullName',
-        rollNumber: '$student.rollNumber',
-        present: 1,
-        absent: 1,
-        late: 1,
-        total: 1,
-        percentage: {
-          $multiply: [
-            { $divide: ['$present', '$total'] },
-            100
-          ]
-        }
-      }
-    }
-  ]);
+  const report = await getClassAttendanceSummary({
+    className: normalizeClassFilter(classFilter, grade),
+    sectionName: section,
+    startDate,
+    endDate,
+  });
 
   res.json({
     success: true,
-    statusStats,
-    dailyStats,
-    studentStats
+    statusStats: report.statusStats,
+    dailyStats: report.dailyStats,
+    studentStats: report.studentStats,
   });
 });
 
@@ -281,42 +276,35 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
 // @route   GET /api/attendance/student/:studentId
 // @access  Private
 const getStudentAttendance = asyncHandler(async (req, res) => {
+  await ensureAttendanceSqlReady();
+
   const { startDate, endDate } = req.query;
   const requestedStudentId = req.params.studentId;
 
-  // STUDENT DATA ISOLATION: Students can only view their own attendance
   if (req.user.role === 'student') {
-    // Get student profile to find the logged-in student's ID
-    const Student = require('../models/Student');
-    const studentProfile = await Student.findOne({ userId: req.user._id });
-    
+    const studentProfile = await getStudentByUserId(req.user._id);
+
     if (!studentProfile) {
       return res.status(403).json({ message: 'Student profile not found' });
     }
-    
-    // Only allow access to own attendance
+
     if (studentProfile._id.toString() !== requestedStudentId) {
       return res.status(403).json({ message: 'Not authorized to view other student attendance' });
     }
   }
 
-  let query = { studentId: requestedStudentId };
+  const attendances = await getStudentAttendanceReport({
+    studentId: requestedStudentId,
+    startDate,
+    endDate,
+  });
 
-  if (startDate && endDate) {
-    query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
-  }
-
-  const attendances = await Attendance.find(query)
-    .populate('markedBy', 'fullName')
-    .sort({ date: -1 });
-
-  // Calculate percentage
   const total = attendances.length;
-  const present = attendances.filter(a => a.status === 'Present').length;
-  const absent = attendances.filter(a => a.status === 'Absent').length;
-  const late = attendances.filter(a => a.status === 'Late').length;
-
-  const percentage = total > 0 ? ((present + late * 0.5) / total * 100).toFixed(2) : 0;
+  const present = attendances.filter((item) => item.status === 'Present').length;
+  const absent = attendances.filter((item) => item.status === 'Absent').length;
+  const late = attendances.filter((item) => item.status === 'Late').length;
+  const percentage =
+    total > 0 ? (((present + late * 0.5) / total) * 100).toFixed(2) : 0;
 
   res.json({
     success: true,
@@ -326,8 +314,8 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
       present,
       absent,
       late,
-      percentage
-    }
+      percentage,
+    },
   });
 });
 
@@ -335,26 +323,28 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
 // @route   DELETE /api/attendance/:id
 // @access  Private (Admin)
 const deleteAttendance = asyncHandler(async (req, res) => {
-  const attendance = await Attendance.findById(req.params.id);
+  await ensureAttendanceSqlReady();
+  const attendance = await getAttendanceById(req.params.id);
 
   if (!attendance) {
     return res.status(404).json({ message: 'Attendance record not found' });
   }
 
-  await attendance.deleteOne();
+  await deleteAttendanceRecord(req.params.id);
 
   res.json({
     success: true,
-    message: 'Attendance deleted'
+    message: 'Attendance deleted',
   });
 });
 
 module.exports = {
   markAttendance,
+  updateAttendance,
   markBulkAttendance,
+  saveAttendance,
   getAttendance,
   getAttendanceReport,
   getStudentAttendance,
-  deleteAttendance
+  deleteAttendance,
 };
-

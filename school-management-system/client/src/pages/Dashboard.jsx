@@ -29,13 +29,15 @@ import {
 } from "recharts";
 
 import { useAuth } from "../context/AuthContext";
-import { getDashboard, getDashboardStats, getStudents, getFeeStats, getBuses, getAttendance } from "../services/api";
+import { getDashboardStats, getStudents, getFeeStats, getBuses } from "../services/api";
 import StatCard from "../components/StatCard";
 import ChartCard from "../components/ChartCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 const Dashboard = () => {
-  const { user, isAdmin, isTeacher } = useAuth();
+  const { user, isAdmin, isTeacher, isStudent, isParent, isAccountant } = useAuth();
+  const canViewStudentPreview = isAdmin || isTeacher;
+  const canViewFeeSummary = isAdmin || isAccountant;
 
   const [stats, setStats] = useState({
     students: 0,
@@ -57,6 +59,15 @@ const Dashboard = () => {
     onRoute: 0
   });
 
+  const [todayAttendanceSummary, setTodayAttendanceSummary] = useState({
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+    total: 0,
+    percentage: 0
+  });
+
   const [attendanceData, setAttendanceData] = useState([]);
   const [recentStudents, setRecentStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,12 +84,11 @@ const Dashboard = () => {
     try {
       setLoading(true);
 
-      const [statsRes, studentsRes, feeRes, busRes, attendanceRes] = await Promise.all([
+      const [statsRes, studentsRes, feeRes, busRes] = await Promise.all([
         getDashboardStats(),
-        getStudents(1, 5),
-        isAdmin ? getFeeStats() : Promise.resolve({ data: { data: {} } }),
-        isAdmin ? getBuses() : Promise.resolve({ data: { data: [] } }),
-        isAdmin ? getAttendance({ date: new Date().toISOString().split('T')[0] }) : Promise.resolve({ data: { data: [] } })
+        canViewStudentPreview ? getStudents(1, 5) : Promise.resolve({ data: { students: [] } }),
+        canViewFeeSummary ? getFeeStats() : Promise.resolve({ data: { data: {} } }),
+        isAdmin ? getBuses() : Promise.resolve({ data: { data: [] } })
       ]);
 
       const statsData = statsRes?.data?.stats || statsRes?.data || {};
@@ -102,43 +112,56 @@ const Dashboard = () => {
         onRoute: busesData.filter(b => b.currentStatus === 'On Route').length
       });
 
-      // Attendance data for pie chart
-      const attendanceRecords = attendanceRes?.data?.data || [];
-      const present = attendanceRecords.filter(a => a.status === 'Present').length;
-      const absent = attendanceRecords.filter(a => a.status === 'Absent').length;
-      const leave = attendanceRecords.filter(a => a.status === 'Leave').length;
+      const todayAttendance = statsRes?.data?.todayAttendance || {};
+      const present = Number(todayAttendance.present || 0);
+      const absent = Number(todayAttendance.absent || 0);
+      const leave = Number(todayAttendance.leave || 0);
+      const totalAttendance = Number(todayAttendance.total || 0);
 
-      setAttendanceData([
-        { name: 'Present', value: present || 85, color: '#10B981' },
-        { name: 'Absent', value: absent || 10, color: '#EF4444' },
-        { name: 'Leave', value: leave || 5, color: '#F59E0B' }
-      ]);
+      setTodayAttendanceSummary({
+        present,
+        absent,
+        late: Number(todayAttendance.late || 0),
+        leave,
+        total: totalAttendance,
+        percentage: Number(todayAttendance.percentage || 0)
+      });
+
+      setAttendanceData(
+        totalAttendance > 0
+          ? [
+              { name: 'Present', value: present, color: '#10B981' },
+              { name: 'Absent', value: absent, color: '#EF4444' },
+              { name: 'Leave', value: leave, color: '#F59E0B' }
+            ]
+          : [{ name: 'No Records', value: 1, color: '#CBD5E1' }]
+      );
 
       // Safely handle students array
       const studentsData = studentsRes?.data?.students || studentsRes?.data || [];
       setRecentStudents(Array.isArray(studentsData) ? studentsData : []);
 
-      // Generate mock chart data (in production, fetch from API)
-      setStudentGrowthData([
-        { month: 'Jan', students: 120 },
-        { month: 'Feb', students: 135 },
-        { month: 'Mar', students: 148 },
-        { month: 'Apr', students: 156 },
-        { month: 'May', students: 168 },
-        { month: 'Jun', students: 180 }
-      ]);
+      setStudentGrowthData(
+        Array.isArray(statsRes?.data?.studentGrowthTrend) ? statsRes.data.studentGrowthTrend : []
+      );
 
-      setFeeCollectionData([
-        { month: 'Jan', collected: 45000, pending: 12000 },
-        { month: 'Feb', collected: 52000, pending: 8000 },
-        { month: 'Mar', collected: 48000, pending: 15000 },
-        { month: 'Apr', collected: 61000, pending: 5000 },
-        { month: 'May', collected: 55000, pending: 10000 },
-        { month: 'Jun', collected: 67000, pending: 3000 }
-      ]);
+      setFeeCollectionData(
+        Array.isArray(statsRes?.data?.feeCollectionTrend) ? statsRes.data.feeCollectionTrend : []
+      );
     } catch (error) {
       console.error("Dashboard fetch error:", error);
       setRecentStudents([]);
+      setTodayAttendanceSummary({
+        present: 0,
+        absent: 0,
+        late: 0,
+        leave: 0,
+        total: 0,
+        percentage: 0
+      });
+      setAttendanceData([]);
+      setStudentGrowthData([]);
+      setFeeCollectionData([]);
     } finally {
       setLoading(false);
     }
@@ -232,9 +255,38 @@ const Dashboard = () => {
             />
             <StatCard
               title="Attendance Today"
-              value="95%"
+              value={`${Number(todayAttendanceSummary.percentage || 0).toFixed(1)}%`}
               icon={CheckCircle}
               color="green"
+            />
+          </>
+        )}
+
+        {isAccountant && (
+          <>
+            <StatCard
+              title="Total Fee Ledger"
+              value={`₹${(Number(feeStats.totalFees || 0) / 1000).toFixed(1)}K`}
+              icon={DollarSign}
+              color="blue"
+            />
+            <StatCard
+              title="Collected"
+              value={`₹${(Number(feeStats.totalPaid || 0) / 1000).toFixed(1)}K`}
+              icon={CheckCircle}
+              color="green"
+            />
+            <StatCard
+              title="Pending"
+              value={`₹${(Number(feeStats.totalPending || 0) / 1000).toFixed(1)}K`}
+              icon={AlertCircle}
+              color="yellow"
+            />
+            <StatCard
+              title="Overdue Accounts"
+              value={Number(feeStats.overdueCount || 0)}
+              icon={TrendingUp}
+              color="purple"
             />
           </>
         )}
@@ -291,6 +343,64 @@ const Dashboard = () => {
                   <Bar dataKey="pending" name="Pending" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+      )}
+
+      {isAccountant && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <ChartCard title="Fee Collection" subtitle="Monthly fee collection vs pending">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={feeCollectionData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
+                  <YAxis stroke="#6B7280" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="collected" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pending" name="Pending" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+
+          <ChartCard title="Collection Snapshot" subtitle="Finance summary for the current cycle">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-4">
+                <div>
+                  <p className="text-sm text-emerald-700">Collected</p>
+                  <p className="text-2xl font-semibold text-emerald-900">
+                    ₹{Number(feeStats.totalPaid || 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-amber-50 p-4">
+                <div>
+                  <p className="text-sm text-amber-700">Pending</p>
+                  <p className="text-2xl font-semibold text-amber-900">
+                    ₹{Number(feeStats.totalPending || 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4">
+                <div>
+                  <p className="text-sm text-slate-600">Overdue Accounts</p>
+                  <p className="text-2xl font-semibold text-slate-900">
+                    {Number(feeStats.overdueCount || 0)}
+                  </p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-slate-600" />
+              </div>
             </div>
           </ChartCard>
         </div>
@@ -366,38 +476,83 @@ const Dashboard = () => {
           </ChartCard>
         )}
 
+        {isAccountant && (
+          <ChartCard title="Finance Highlights" subtitle="Core numbers at a glance">
+            <div className="space-y-4">
+              <div className="rounded-lg bg-blue-50 p-4">
+                <p className="text-sm text-blue-700">Total Students Linked To Fees</p>
+                <p className="mt-2 text-2xl font-semibold text-blue-900">{stats.students || 0}</p>
+              </div>
+              <div className="rounded-lg bg-violet-50 p-4">
+                <p className="text-sm text-violet-700">Fee Structures / Subjects Snapshot</p>
+                <p className="mt-2 text-2xl font-semibold text-violet-900">{stats.subjects || 0}</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-4">
+                <p className="text-sm text-emerald-700">Materials / Notices Feed</p>
+                <p className="mt-2 text-2xl font-semibold text-emerald-900">{stats.materials || 0}</p>
+              </div>
+            </div>
+          </ChartCard>
+        )}
+
         {/* Recent Students + Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Recent Students
-          </h2>
-          <div className="space-y-3">
-            {recentStudents.length > 0 ? (
-              recentStudents.map((student) => (
-                <div
-                  key={student._id}
-                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-full bg-[#002366] flex items-center justify-center text-white font-medium">
-                    {student?.fullName?.charAt(0) || "S"}
+        {(isAdmin || isTeacher) && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Recent Students
+            </h2>
+            <div className="space-y-3">
+              {recentStudents.length > 0 ? (
+                recentStudents.map((student) => (
+                  <div
+                    key={student._id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-[#002366] flex items-center justify-center text-white font-medium">
+                      {student?.fullName?.charAt(0) || "S"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">
+                        {student?.fullName || "Unknown"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {student?.className || student?.class || "-"} {student?.section || ""}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">
-                      {student?.fullName || "Unknown"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {student?.className || student?.class || "-"} {student?.section || ""}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center py-4">
-                No students found
-              </p>
-            )}
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-4">
+                  No students found
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {(isStudent || isParent) && (
+          <ChartCard
+            title={isStudent ? "Student Access" : "Parent Access"}
+            subtitle={isStudent ? "Modules available in your portal" : "Modules available in your parent portal"}
+          >
+            <div className="space-y-3">
+              <div className="rounded-lg bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">Current Role</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{user?.role || 'User'}</p>
+              </div>
+              <div className="rounded-lg bg-blue-50 p-4">
+                <p className="text-sm text-blue-600">Dashboard Access</p>
+                <p className="mt-1 text-base font-medium text-blue-900">Enabled</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-4">
+                <p className="text-sm text-emerald-600">Primary Modules</p>
+                <p className="mt-1 text-base font-medium text-emerald-900">
+                  {isStudent ? 'Timetable and academic overview' : 'Timetable and transport overview'}
+                </p>
+              </div>
+            </div>
+          </ChartCard>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -406,7 +561,7 @@ const Dashboard = () => {
           Quick Actions
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {(isAdmin || isTeacher) && (
+          {isAdmin && (
             <>
               <Link
                 to="/students"
@@ -438,20 +593,87 @@ const Dashboard = () => {
               </Link>
             </>
           )}
-          <Link
-            to="/materials"
-            className="p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition text-center"
-          >
-            <FileText className="w-6 h-6 text-indigo-600 mx-auto mb-2" />
-            <p className="font-medium text-indigo-900">Materials</p>
-          </Link>
-          <Link
-            to="/timetable"
-            className="p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition text-center"
-          >
-            <BookOpen className="w-6 h-6 text-teal-600 mx-auto mb-2" />
-            <p className="font-medium text-teal-900">Timetable</p>
-          </Link>
+
+          {isTeacher && (
+            <>
+              <Link
+                to="/students"
+                className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition text-center"
+              >
+                <Users className="w-6 h-6 text-blue-600 mx-auto mb-2" />
+                <p className="font-medium text-blue-900">Students</p>
+              </Link>
+              <Link
+                to="/attendance"
+                className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition text-center"
+              >
+                <Calendar className="w-6 h-6 text-purple-600 mx-auto mb-2" />
+                <p className="font-medium text-purple-900">Attendance</p>
+              </Link>
+              <Link
+                to="/materials"
+                className="p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition text-center"
+              >
+                <FileText className="w-6 h-6 text-indigo-600 mx-auto mb-2" />
+                <p className="font-medium text-indigo-900">Materials</p>
+              </Link>
+              <Link
+                to="/timetable"
+                className="p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition text-center"
+              >
+                <BookOpen className="w-6 h-6 text-teal-600 mx-auto mb-2" />
+                <p className="font-medium text-teal-900">Timetable</p>
+              </Link>
+            </>
+          )}
+
+          {isAccountant && (
+            <>
+              <Link
+                to="/fees"
+                className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition text-center"
+              >
+                <DollarSign className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                <p className="font-medium text-green-900">Fees</p>
+              </Link>
+              <Link
+                to="/reports"
+                className="p-4 bg-sky-50 rounded-lg hover:bg-sky-100 transition text-center"
+              >
+                <TrendingUp className="w-6 h-6 text-sky-600 mx-auto mb-2" />
+                <p className="font-medium text-sky-900">Reports</p>
+              </Link>
+            </>
+          )}
+
+          {isStudent && (
+            <Link
+              to="/timetable"
+              className="p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition text-center"
+            >
+              <BookOpen className="w-6 h-6 text-teal-600 mx-auto mb-2" />
+              <p className="font-medium text-teal-900">Timetable</p>
+            </Link>
+          )}
+
+          {isParent && (
+            <>
+              <Link
+                to="/bus-tracking"
+                className="p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition text-center"
+              >
+                <Bus className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                <p className="font-medium text-orange-900">Bus Tracking</p>
+              </Link>
+              <Link
+                to="/timetable"
+                className="p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition text-center"
+              >
+                <BookOpen className="w-6 h-6 text-teal-600 mx-auto mb-2" />
+                <p className="font-medium text-teal-900">Timetable</p>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

@@ -1,12 +1,13 @@
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const Student = require('../models/Student');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
 const { sendOtpEmail } = require('../services/mailService');
 const {
   ensureAuthSqlReady,
-  syncUserAuthRecord,
+  getAuthUserById,
+  getAuthUserByEmail,
+  createAuthUser,
+  updateAuthUser,
   loginLookup,
   startLoginSession,
   getActiveLoginSession,
@@ -16,6 +17,7 @@ const {
   createOtpForSession,
   verifyOtpForSession,
 } = require('../services/authSqlService');
+const { getStudentByUserId } = require('../services/studentSqlService');
 const {
   normalizeEmail,
   normalizeCaptcha,
@@ -88,53 +90,72 @@ const getStudentProfileIfRequired = async (user) => {
     return null;
   }
 
-  return Student.findOne({ userId: user._id });
+  return getStudentByUserId(user._id);
 };
 
 const buildUserPayload = (user) => ({
-  id: user._id,
-  fullName: user.fullName,
-  email: user.email,
-  role: user.role,
-  phone: user.phone,
+  id: user._id ?? user.id ?? user.UserId ?? null,
+  fullName: user.fullName ?? user.FullName ?? null,
+  email: user.email ?? user.Email ?? null,
+  phone: user.phone ?? user.Phone ?? null,
+  roleId: user.roleId ?? user.RoleId ?? null,
+  role: user.role ?? user.RoleName ?? null,
 });
 
 const buildCredentialRateKey = (email, ipAddress) => hashAuthValue(`credential:${email}:${ipAddress}`);
 const isSqlInactiveFlag = (value) => value === false || value === 0 || String(value).toLowerCase() === 'false';
+const isBcryptHash = (value = '') => /^\$2[aby]\$\d{2}\$/.test(String(value || ''));
+const isStoredPasswordMatch = async (inputPassword, storedPassword) => {
+  const normalizedInput = String(inputPassword || '');
+  const normalizedStored = String(storedPassword || '');
+  if (!normalizedStored) {
+    return false;
+  }
 
-const getMongoUserFromLookup = async (lookupRecord) => {
+  if (isBcryptHash(normalizedStored)) {
+    try {
+      return await bcrypt.compare(normalizedInput, normalizedStored);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  return normalizedInput === normalizedStored;
+};
+
+const getSqlUserFromLookup = async (lookupRecord) => {
   if (!lookupRecord) {
     return null;
   }
 
   if (lookupRecord.MongoUserId) {
-    const userById = await User.findById(lookupRecord.MongoUserId);
+    const userById = await getAuthUserById(lookupRecord.MongoUserId);
     if (userById) {
       return userById;
     }
   }
 
   if (lookupRecord.Email) {
-    return User.findOne({ email: normalizeEmail(lookupRecord.Email) });
+    return getAuthUserByEmail(lookupRecord.Email);
   }
 
   return null;
 };
 
-const getMongoUserFromSession = async (session) => {
+const getSqlUserFromSession = async (session) => {
   if (!session) {
     return null;
   }
 
   if (session.mongoUserId) {
-    const userById = await User.findById(session.mongoUserId);
+    const userById = await getAuthUserById(session.mongoUserId);
     if (userById) {
       return userById;
     }
   }
 
   if (session.email) {
-    return User.findOne({ email: normalizeEmail(session.email) });
+    return getAuthUserByEmail(session.email);
   }
 
   return null;
@@ -208,8 +229,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const lookupRecord = await loginLookup(email);
-  const isPasswordCorrect =
-    lookupRecord?.PasswordHash ? await bcrypt.compare(password, lookupRecord.PasswordHash) : false;
+  const isPasswordCorrect = await isStoredPasswordMatch(password, lookupRecord?.PasswordHash);
 
   if (!lookupRecord || !isPasswordCorrect) {
     const failureState = await registerFailure({
@@ -242,7 +262,7 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await getMongoUserFromLookup(lookupRecord);
+  const user = await getSqlUserFromLookup(lookupRecord);
   if (!user || user.isActive === false) {
     return res.status(401).json({
       success: false,
@@ -302,27 +322,26 @@ const legacyLogin = asyncHandler(async (req, res) => {
       .json({ success: false, message: 'Account is inactive. Please contact administrator.' });
   }
 
-  const isMatch = await bcrypt.compare(password, lookupRecord.PasswordHash);
+  const isMatch = await isStoredPasswordMatch(password, lookupRecord?.PasswordHash);
   if (!isMatch) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
 
-  const user = await getMongoUserFromLookup(lookupRecord);
+  const user = await getSqlUserFromLookup(lookupRecord);
   if (!user || user.isActive === false) {
-    return res.status(401).json({ success: false, message: 'Unable to complete login for this account.' });
+    return res
+      .status(401)
+      .json({ success: false, message: 'Unable to complete login for this account.' });
   }
 
-  user.lastLogin = new Date();
-  await user.save();
-  await syncUserAuthRecord(user);
-
+  const updatedUser = await updateAuthUser(user._id, { lastLogin: new Date() });
   const token = generateToken(user._id);
-  const studentProfile = await getStudentProfileIfRequired(user);
+  const studentProfile = await getStudentProfileIfRequired(updatedUser || user);
 
   return res.json({
     success: true,
     token,
-    user: buildUserPayload(user),
+    user: buildUserPayload(updatedUser || user),
     studentProfile,
   });
 });
@@ -401,12 +420,10 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: 'Login session expired. Please login again.' });
   }
 
-  const user = await getMongoUserFromSession(session);
+  const user = await getSqlUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to continue login for this account.' });
   }
-
-  await syncUserAuthRecord(user);
 
   if (!session.captchaVerifiedAt) {
     if (!captchaValue) {
@@ -558,12 +575,10 @@ const resendOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await getMongoUserFromSession(session);
+  const user = await getSqlUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to continue login for this account.' });
   }
-
-  await syncUserAuthRecord(user);
 
   let otpState;
 
@@ -677,23 +692,20 @@ const verifyOtpAndCompleteLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const user = await getMongoUserFromSession(session);
+  const user = await getSqlUserFromSession(session);
   if (!user || user.isActive === false) {
     return res.status(401).json({ success: false, message: 'Unable to complete login for this account.' });
   }
 
-  user.lastLogin = new Date();
-  await user.save();
-  await syncUserAuthRecord(user);
-
+  const updatedUser = await updateAuthUser(user._id, { lastLogin: new Date() });
   const token = generateToken(user._id);
-  const studentProfile = await getStudentProfileIfRequired(user);
+  const studentProfile = await getStudentProfileIfRequired(updatedUser || user);
 
   return res.json({
     success: true,
     message: 'Login successful.',
     token,
-    user: buildUserPayload(user),
+    user: buildUserPayload(updatedUser || user),
     studentProfile,
   });
 });
@@ -702,6 +714,8 @@ const verifyOtpAndCompleteLogin = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/register
 // @access  Public (admin can register users)
 const register = asyncHandler(async (req, res) => {
+  await ensureAuthSqlReady();
+
   const { fullName, email, password, role, phone } = req.body;
 
   if (!fullName || !email || !password) {
@@ -719,24 +733,24 @@ const register = asyncHandler(async (req, res) => {
   const sanitizedFullName = sanitizeDisplayText(fullName);
   const sanitizedEmail = normalizeEmail(email);
 
-  const existingUser = await User.findOne({ email: sanitizedEmail });
+  const existingUser = await getAuthUserByEmail(sanitizedEmail);
   if (existingUser) {
     return res.status(400).json({ message: 'User already exists' });
   }
 
-  const user = await User.create({
+  const passwordHash = String(password);
+  const user = await createAuthUser({
     fullName: sanitizedFullName,
     email: sanitizedEmail,
-    password,
+    passwordHash,
     role: role || 'student',
     phone: sanitizeDisplayText(phone || ''),
+    isActive: true,
   });
-
-  await syncUserAuthRecord(user);
 
   const token = generateToken(user._id);
 
-  res.status(201).json({
+  return res.status(201).json({
     success: true,
     token,
     user: buildUserPayload(user),
@@ -747,7 +761,7 @@ const register = asyncHandler(async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('-password');
+  const user = await getAuthUserById(req.user._id);
 
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
@@ -755,7 +769,7 @@ const getMe = asyncHandler(async (req, res) => {
 
   const studentProfile = await getStudentProfileIfRequired(user);
 
-  res.json({
+  return res.json({
     success: true,
     user: buildUserPayload(user),
     studentProfile,
@@ -766,7 +780,7 @@ const getMe = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/logout
 // @access  Private
 const logout = asyncHandler(async (req, res) => {
-  res.json({
+  return res.json({
     success: true,
     message: 'Logged out successfully',
   });
@@ -777,20 +791,23 @@ const logout = asyncHandler(async (req, res) => {
 // @access  Private
 const updateProfile = asyncHandler(async (req, res) => {
   const { fullName, phone } = req.body;
+  const payload = {};
 
-  const user = await User.findById(req.user._id);
+  if (fullName) {
+    payload.fullName = sanitizeDisplayText(fullName);
+  }
+
+  if (phone) {
+    payload.phone = sanitizeDisplayText(phone);
+  }
+
+  const user = await updateAuthUser(req.user._id, payload);
 
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
 
-  if (fullName) user.fullName = sanitizeDisplayText(fullName);
-  if (phone) user.phone = sanitizeDisplayText(phone);
-
-  await user.save();
-  await syncUserAuthRecord(user);
-
-  res.json({
+  return res.json({
     success: true,
     user: buildUserPayload(user),
   });
@@ -810,22 +827,21 @@ const changePassword = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'New password must be at least 8 characters long' });
   }
 
-  const user = await User.findById(req.user._id);
+  const user = await getAuthUserById(req.user._id);
 
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
 
-  const isMatch = await user.comparePassword(currentPassword);
+  const isMatch = await isStoredPasswordMatch(currentPassword, user.password);
   if (!isMatch) {
     return res.status(400).json({ message: 'Current password is incorrect' });
   }
 
-  user.password = newPassword;
-  await user.save();
-  await syncUserAuthRecord(user);
+  const passwordHash = String(newPassword);
+  await updateAuthUser(req.user._id, { password: passwordHash });
 
-  res.json({
+  return res.json({
     success: true,
     message: 'Password updated successfully',
   });

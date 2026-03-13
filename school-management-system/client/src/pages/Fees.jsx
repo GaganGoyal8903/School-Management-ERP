@@ -21,6 +21,7 @@ const Fees = () => {
   const [stats, setStats] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -67,23 +68,21 @@ const Fees = () => {
         getStudents(1, 1000)
       ]);
 
-      // Safely handle fees data - ensure it's always an array
-      const feesData = feesRes?.data?.data || feesRes?.data || [];
-      setFees(Array.isArray(feesData) ? feesData : []);
-      
-      // Safely handle stats data
-      if (statsRes?.data?.data) {
-        setStats(statsRes.data.data);
-      } else if (statsRes?.data) {
-        setStats(statsRes.data);
+      const feesData = feesRes?.data?.fees;
+      const statsData = statsRes?.data?.stats;
+      const studentsData = studentsRes?.data?.students;
+      if (!Array.isArray(feesData) || !statsData || !Array.isArray(studentsData)) {
+        throw new Error('Invalid fees response');
       }
 
-      // Safely handle students data - ensure it's always an array
-      const studentsData = studentsRes?.data?.students || studentsRes?.data || [];
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      setFees(feesData);
+      setStats(statsData);
+      setStudents(studentsData);
+      setLoadError('');
     } catch (error) {
       console.error('Error fetching fees data:', error);
       toast.error('Failed to fetch fees');
+      setLoadError('Unable to load live fee data from the backend API.');
       setFees([]);
       setStats({});
       setStudents([]);
@@ -394,6 +393,11 @@ const Fees = () => {
         loading={loading}
         searchPlaceholder="Search fees..."
       />
+      {loadError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
 
       {/* Add/Edit Fee Modal */}
       <Modal

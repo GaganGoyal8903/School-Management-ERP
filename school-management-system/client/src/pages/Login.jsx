@@ -65,6 +65,22 @@ const formatCountdown = (totalSeconds) => {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 };
 
+const resolvePostLoginPath = (authenticatedUser, requestedPath) => {
+  const safeRequestedPath =
+    typeof requestedPath === "string" && requestedPath && requestedPath !== "/login"
+      ? requestedPath
+      : "/dashboard";
+
+  const roleKey = String(authenticatedUser?.role || "").trim().toLowerCase();
+  const roleId = Number(authenticatedUser?.roleId || 0);
+
+  if (roleId === 1 || roleKey === "admin") {
+    return "/dashboard";
+  }
+
+  return safeRequestedPath;
+};
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -315,7 +331,7 @@ export default function Login() {
     }
 
     syncRememberedEmail();
-    navigate(from, { replace: true });
+    navigate(resolvePostLoginPath(result.data?.user, from), { replace: true });
   };
 
   return (

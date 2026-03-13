@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Calendar, Users, CheckCircle, Clock, XCircle } from "lucide-react";
 import CrestLogo from "./CrestLogo";
-import { getStudents, submitAttendance } from "../services/api";
+import { getAttendance, getStudents, submitAttendance } from "../services/api";
 
 const sms_gradeOptions = [
   { id: "Class 6", label: "Class 6" },
@@ -54,8 +54,31 @@ export default function MarkAttendance() {
         sms_setStudents(studentsData);
 
         const nextMap = {};
+        const attendanceResponse = await getAttendance({
+          grade: sms_selectedGrade,
+          section: sms_selectedSection,
+          date: sms_date,
+          limit: 1000,
+        });
+        const savedAttendance = Array.isArray(attendanceResponse?.data?.attendances)
+          ? attendanceResponse.data.attendances
+          : [];
+        const savedStatusMap = {};
+        savedAttendance.forEach((record) => {
+          const studentId =
+            typeof record.studentId === "object"
+              ? record.studentId?._id || record.studentId?.id
+              : record.studentId;
+
+          if (!studentId) {
+            return;
+          }
+
+          savedStatusMap[String(studentId)] = record.status || "Present";
+        });
+
         studentsData.forEach((student) => {
-          nextMap[student._id] = "Present";
+          nextMap[student._id] = savedStatusMap[String(student._id)] || "Present";
         });
         sms_setAttendanceMap(nextMap);
       } catch (error) {
@@ -68,7 +91,7 @@ export default function MarkAttendance() {
     };
 
     sms_fetchStudents();
-  }, [sms_selectedGrade, sms_selectedSection]);
+  }, [sms_date, sms_selectedGrade, sms_selectedSection]);
 
   const sms_handleGradeChange = (value) => {
     sms_setSelectedGrade(value);
@@ -107,15 +130,19 @@ export default function MarkAttendance() {
 
       const attendanceList = sms_students.map((student) => ({
         studentId: student._id,
+        rollNumber: student.rollNumber || student.rollNo || null,
         status: sms_attendanceMap[student._id] || "Present",
       }));
 
       await submitAttendance({
-        date: sms_date,
-        grade: sms_selectedGrade,
-        section: sms_selectedSection,
-        attendanceList,
-        markedBy: sms_teacherId,
+        attendanceDate: sms_date,
+        academicYearId: sms_students[0]?.academicYearId || null,
+        classId: sms_students[0]?.classDbId || null,
+        sectionId: sms_students[0]?.sectionDbId || null,
+        className: sms_selectedGrade,
+        sectionName: sms_selectedSection,
+        students: attendanceList,
+        markedByTeacherId: sms_teacherId,
       });
 
       toast.success(`Attendance submitted for ${sms_selectedGrade} - Section ${sms_selectedSection}`);
@@ -335,4 +362,3 @@ export default function MarkAttendance() {
     </section>
   );
 }
-

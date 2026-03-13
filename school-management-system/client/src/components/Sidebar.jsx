@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
-  const { user, logout, isAdmin, isTeacher, isParent } = useAuth();
+  const { user, logout, isAdmin, isTeacher, isParent, isAccountant } = useAuth();
 
   const adminLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -49,21 +49,30 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const studentLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/materials', icon: FileText, label: 'Materials' },
-    { path: '/attendance', icon: Calendar, label: 'Attendance' },
-    { path: '/exams', icon: ClipboardCheck, label: 'Exams' },
     { path: '/timetable', icon: Clock, label: 'Timetable' },
   ];
 
   const parentLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/attendance', icon: Calendar, label: 'Child Attendance' },
-    { path: '/exams', icon: ClipboardCheck, label: 'Exam Results' },
-    { path: '/fees', icon: DollarSign, label: 'Fee Status' },
+    { path: '/bus-tracking', icon: Bus, label: 'Bus Tracking' },
     { path: '/timetable', icon: Clock, label: 'Timetable' },
   ];
 
-  const links = isAdmin ? adminLinks : isTeacher ? teacherLinks : isParent ? parentLinks : studentLinks;
+  const accountantLinks = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/fees', icon: DollarSign, label: 'Fees' },
+    { path: '/reports', icon: BarChart3, label: 'Reports' },
+  ];
+
+  const links = isAdmin
+    ? adminLinks
+    : isTeacher
+      ? teacherLinks
+      : isAccountant
+        ? accountantLinks
+        : isParent
+          ? parentLinks
+          : studentLinks;
 
   return (
     <>

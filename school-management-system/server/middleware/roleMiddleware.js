@@ -1,14 +1,20 @@
 // Role-based access control middleware
 // Usage: authorize('admin', 'teacher')
 
+const normalize = (role) => String(role || "").toLowerCase();
+
 const authorize = (...roles) => {
+  const allowedRoles = roles.map(normalize);
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
+    const userRole = normalize(req.user.role);
+
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({
         message: `User role '${req.user.role}' is not authorized to access this route. Required roles: ${roles.join(', ')}`
       });
     }
@@ -23,7 +29,9 @@ const isAdmin = (req, res, next) => {
     return res.status(401).json({ message: 'Not authorized' });
   }
 
-  if (req.user.role !== 'admin') {
+  const role = normalize(req.user.role);
+
+  if (role !== 'admin') {
     return res.status(403).json({ message: 'Admin access required' });
   }
 
@@ -36,7 +44,9 @@ const isAdminOrTeacher = (req, res, next) => {
     return res.status(401).json({ message: 'Not authorized' });
   }
 
-  if (!['admin', 'teacher'].includes(req.user.role)) {
+  const role = normalize(req.user.role);
+
+  if (!['admin', 'teacher'].includes(role)) {
     return res.status(403).json({ message: 'Admin or Teacher access required' });
   }
 
@@ -44,4 +54,3 @@ const isAdminOrTeacher = (req, res, next) => {
 };
 
 module.exports = { authorize, isAdmin, isAdminOrTeacher };
-

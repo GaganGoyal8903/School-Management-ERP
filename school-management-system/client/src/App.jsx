@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 
@@ -19,6 +20,34 @@ import BusTracking from "./pages/BusTracking";
 import Timetable from "./pages/Timetable";
 import AITools from "./pages/AITools";
 
+function LoginRoute() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-10 w-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />;
+}
+
+function RootRedirect() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-10 w-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -26,7 +55,7 @@ function App() {
         <Routes>
 
           {/* Public Route */}
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<LoginRoute />} />
 
           {/* Protected Layout */}
           <Route
@@ -40,7 +69,7 @@ function App() {
             <Route
               path="/dashboard"
               element={
-                <ProtectedRoute allowedRoles={["admin", "teacher", "student"]}>
+                <ProtectedRoute allowedRoles={["admin", "teacher", "student", "parent", "accountant"]}>
                   <Dashboard />
                 </ProtectedRoute>
               }
@@ -118,7 +147,7 @@ function App() {
             <Route
               path="/reports"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "accountant"]}>
                   <Reports />
                 </ProtectedRoute>
               }
@@ -138,7 +167,7 @@ function App() {
             <Route
               path="/fees"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "accountant"]}>
                   <Fees />
                 </ProtectedRoute>
               }
@@ -176,8 +205,8 @@ function App() {
           </Route>
 
           {/* Redirects */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="*" element={<RootRedirect />} />
 
         </Routes>
       </BrowserRouter>

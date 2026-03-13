@@ -14,15 +14,42 @@ import {
   deleteStudent 
 } from '../services/api';
 
+const formClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
+
+const normalizeStudent = (student = {}) => {
+  const resolvedId = student.id || student._id || student.studentId || '';
+  const className = student.className || student.class || '';
+  const sectionName = student.sectionName || student.section || '';
+  const parentName = student.parentName || student.guardianName || '';
+  const phone = student.phone || student.parentPhone || student.guardianPhone || '';
+
+  return {
+    ...student,
+    _id: String(resolvedId),
+    id: String(resolvedId),
+    studentId: String(student.studentId || resolvedId),
+    class: className,
+    className,
+    section: sectionName,
+    sectionName,
+    parentName,
+    guardianName: parentName,
+    phone,
+    guardianPhone: student.guardianPhone || student.parentPhone || '',
+  };
+};
+
 const Students = () => {
   const navigate = useNavigate();
   const { isAdmin, isTeacher } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('');
+  const [availableClasses, setAvailableClasses] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 10 });
 
   const [formData, setFormData] = useState({
@@ -49,22 +76,44 @@ const Students = () => {
 
   useEffect(() => {
     fetchStudents();
-  }, [pagination.page, searchTerm, filterClass]);
+  }, [pagination.page, pagination.limit, searchTerm, filterClass]);
 
   const fetchStudents = async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await getStudents(pagination.page, pagination.limit, searchTerm, filterClass);
-      // Safely handle students array
-      const studentsData = response?.data?.students || response?.data || [];
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      if (import.meta.env.DEV) {
+        console.debug('[students] list API response', response?.data);
+      }
+
+      if (!Array.isArray(response?.data?.students)) {
+        throw new Error('Students API returned an invalid response');
+      }
+
+      setStudents(response.data.students.map(normalizeStudent));
+      setAvailableClasses(
+        Array.isArray(response?.data?.availableClasses)
+          ? response.data.availableClasses.filter(Boolean)
+          : []
+      );
+
       if (response?.data?.pagination) {
-        setPagination(prev => ({ ...prev, ...response.data.pagination }));
+        setPagination((prev) => ({
+          ...prev,
+          ...response.data.pagination,
+          page: Number(response.data.pagination.page) || prev.page,
+          pages: Number(response.data.pagination.pages) || prev.pages,
+          total: Number(response.data.pagination.total) || 0,
+          limit: Number(response.data.pagination.limit) || prev.limit,
+        }));
       }
     } catch (error) {
-      toast.error('Failed to fetch students');
-      // Ensure empty array on error
+      const message = error?.response?.data?.message || error?.message || 'Failed to load students from the server';
+      setError(message);
       setStudents([]);
+      setAvailableClasses([]);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -154,7 +203,7 @@ const Students = () => {
       render: (row) => (
         <button
           type="button"
-          onClick={() => navigate(`/students/${row._id}`)}
+          onClick={() => navigate(`/students/${row.id || row._id}`)}
           className="group inline-flex items-center gap-1 font-semibold text-[#0b2a66] hover:text-[#1d56c3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2a66] focus-visible:ring-offset-2 rounded"
           title="View student details"
         >
@@ -167,14 +216,14 @@ const Students = () => {
     { key: 'class', header: 'Class' },
     { key: 'section', header: 'Section', width: '80px' },
     { 
-      key: 'guardianName', 
+      key: 'parentName', 
       header: 'Parent Name',
-      render: (row) => row.guardianName || '-'
+      render: (row) => row.parentName || row.guardianName || '-'
     },
     { 
       key: 'phone', 
       header: 'Phone',
-      render: (row) => row.phone || row.guardianPhone || '-'
+      render: (row) => row.phone || row.parentPhone || row.guardianPhone || '-'
     },
     { 
       key: 'actions', 
@@ -206,8 +255,6 @@ const Students = () => {
       )
     }
   ];
-
-  const classes = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
 
   return (
     <div>
@@ -246,7 +293,7 @@ const Students = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             >
               <option value="">All Classes</option>
-              {classes.map(c => <option key={c} value={c}>{c}</option>)}
+              {availableClasses.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -255,6 +302,18 @@ const Students = () => {
       {/* Data Table */}
       {loading ? (
         <LoadingSpinner text="Loading students..." />
+      ) : error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <p className="font-semibold">Unable to load students</p>
+          <p className="text-sm">{error}</p>
+          <button
+            type="button"
+            onClick={fetchStudents}
+            className="mt-3 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
       ) : students.length === 0 ? (
         <EmptyState
           title="No Students Found"
@@ -343,7 +402,7 @@ const Students = () => {
                 onChange={(e) => setFormData({ ...formData, class: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
               >
-                {classes.map(c => <option key={c} value={c}>{c}</option>)}
+                {formClasses.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>

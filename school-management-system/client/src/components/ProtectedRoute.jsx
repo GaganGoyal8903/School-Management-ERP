@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user, loading } = useAuth();
+  const { loading, hasRole, isAuthenticated } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -17,11 +17,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     );
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !hasRole(allowedRoles)) {
     return <Navigate to="/dashboard" replace />;
   }
 

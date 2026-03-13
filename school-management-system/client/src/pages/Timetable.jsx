@@ -47,6 +47,7 @@ const Timetable = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [editingTimetable, setEditingTimetable] = useState(null);
@@ -97,14 +98,18 @@ const Timetable = () => {
         getTeachers()
       ]);
 
-      const subjectsData = subjectsRes?.data?.subjects || subjectsRes?.data || [];
-      setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
-      
-      // Handle API response correctly - response.data contains { success, teachers, pagination }
-      const teachersData = teachersRes?.data?.teachers || teachersRes?.data || [];
-      setTeachers(Array.isArray(teachersData) ? teachersData : []);
+      const subjectsData = subjectsRes?.data?.subjects;
+      const teachersData = teachersRes?.data?.teachers;
+      if (!Array.isArray(subjectsData) || !Array.isArray(teachersData)) {
+        throw new Error('Invalid timetable dependencies response');
+      }
+
+      setSubjects(subjectsData);
+      setTeachers(teachersData);
+      setLoadError('');
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      setLoadError('Unable to load live timetable dependencies from the backend API.');
       setSubjects([]);
       setTeachers([]);
     } finally {
@@ -118,12 +123,16 @@ const Timetable = () => {
       const response = await getTimetableByClass(selectedClass, { 
         section: selectedSection 
       });
-      // Handle API response correctly - response.data contains { success, data: [...] }
-      const timetableData = response?.data?.data || response?.data || [];
-      setTimetables(Array.isArray(timetableData) ? timetableData : []);
+      const timetableData = response?.data?.timetables;
+      if (!Array.isArray(timetableData)) {
+        throw new Error('Invalid timetable response');
+      }
+      setTimetables(timetableData);
+      setLoadError('');
     } catch (error) {
       console.error('Failed to fetch timetable:', error);
       toast.error('Failed to fetch timetable');
+      setLoadError('Unable to load live timetable data from the backend API.');
       setTimetables([]);
     } finally {
       setLoading(false);
@@ -188,7 +197,14 @@ const Timetable = () => {
       section: timetable.section || selectedSection,
       academicYear: timetable.academicYear || '2024-2025',
       day: timetable.day || 'Monday',
-      periods: timetable.periods || []
+      periods: (timetable.periods || []).map((period) => ({
+        periodNumber: period.periodNumber || 0,
+        subject: period.subject?._id || period.subjectId || period.subject || '',
+        teacher: period.teacher?._id || period.teacherId || period.teacher || '',
+        startTime: period.startTime || '',
+        endTime: period.endTime || '',
+        roomNumber: period.roomNumber || ''
+      }))
     });
     setShowModal(true);
   };
@@ -218,6 +234,10 @@ const Timetable = () => {
     const updatedPeriods = formData.periods.filter((_, i) => i !== index);
     setFormData(prev => ({ ...prev, periods: updatedPeriods }));
   };
+
+  const subjectOptions = Array.from(
+    new Map(subjects.map((subject) => [subject.subjectId || subject._id, subject])).values()
+  );
 
   const getTimetableForDay = (day) => {
     const timetable = timetables.find(t => t.day === day);
@@ -257,6 +277,11 @@ const Timetable = () => {
 
       {/* Class Selection */}
       <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
+        {loadError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
@@ -482,8 +507,8 @@ const Timetable = () => {
                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                       >
                         <option value="">Select Subject</option>
-                        {subjects.map(s => (
-                          <option key={s._id} value={s._id}>{s.name}</option>
+                        {subjectOptions.map(s => (
+                          <option key={s.classSubjectId || s._id} value={s.subjectId || s._id}>{s.name}</option>
                         ))}
                       </select>
                     </div>

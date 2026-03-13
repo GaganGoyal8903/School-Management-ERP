@@ -1,0 +1,4 @@
+[dotenv@17.3.1] injecting env (10) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+School Management Server Running on http://localhost:5000
+MongoDB Connected Successfully
+[sql] Connected to (localdb)\MSSQLLocalDB / SchoolERP

@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const mongoose = require('mongoose');
 const {
   getSqlClient,
   sqlConfig,
@@ -11,6 +11,8 @@ const {
 const AUTH_USER_TABLE = 'dbo.SqlAuthUsers';
 const AUTH_SESSION_TABLE = 'dbo.SqlAuthLoginSessions';
 const AUTH_ATTEMPT_TABLE = 'dbo.SqlAuthAttempts';
+const PRIMARY_USER_TABLE = 'dbo.Users';
+const PRIMARY_ROLE_TABLE = 'dbo.Roles';
 
 let authBootstrapPromise = null;
 
@@ -18,6 +20,25 @@ const escapeSqlLiteral = (value = '') => String(value).replace(/'/g, "''");
 const escapeSqlIdentifier = (value = '') => String(value).replace(/]/g, ']]');
 
 const normalizeSqlDate = (value) => (value ? new Date(value) : null);
+const normalizeRoleName = (value = 'student') => String(value || 'student').trim().toLowerCase();
+
+const mapAuthUserRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    _id: row.UserId ?? row.MongoUserId ?? row.AuthUserId ?? null,
+    fullName: row.FullName,
+    email: row.Email,
+    password: row.PasswordHash,
+    roleId: row.RoleId != null ? Number(row.RoleId) : null,
+    role: row.RoleName || null,
+    phone: row.Phone || null,
+    isActive: row.IsActive === true || row.IsActive === 1,
+    lastLogin: normalizeSqlDate(row.LastLoginAt),
+  };
+};
 
 const mapSessionRow = (row) => {
   if (!row) {
@@ -51,6 +72,207 @@ const mapSessionRow = (row) => {
 
 const getFirstRecord = (result) => {
   return result?.recordset?.[0] || null;
+};
+
+const normalizeLoginLookupRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    AuthUserId: row.AuthUserId ?? row.UserId ?? row.Id ?? row.ID ?? null,
+    UserId: row.UserId ?? row.Id ?? row.ID ?? row.MongoUserId ?? null,
+    MongoUserId: row.MongoUserId ?? row.UserId ?? row.Id ?? row.ID ?? null,
+    FullName: row.FullName ?? row.Name ?? row.fullName ?? null,
+    Email: row.Email ?? row.email ?? null,
+    PasswordHash: row.PasswordHash ?? row.Password ?? row.password ?? null,
+    RoleId: row.RoleId ?? row.roleId ?? null,
+    RoleName: row.RoleName ?? row.Role ?? row.role ?? null,
+    Phone: row.Phone ?? row.phone ?? null,
+    IsActive: row.IsActive ?? row.isActive ?? row.Active ?? row.active ?? 1,
+    LastLoginAt: row.LastLoginAt ?? row.LastLogin ?? row.lastLogin ?? null,
+  };
+};
+
+const queryPrimaryUserRecord = async ({ userId = null, email = null } = {}) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedUserId = userId == null ? '' : String(userId).trim();
+
+  if (!normalizedUserId && !normalizedEmail) {
+    return null;
+  }
+
+  try {
+    const sql = getSqlClient();
+    const whereClauses = [];
+    const params = [];
+
+    if (normalizedUserId) {
+      whereClauses.push('CAST(u.UserId AS NVARCHAR(64)) = @userId');
+      params.push({ name: 'userId', type: sql.NVarChar(64), value: normalizedUserId });
+    }
+
+    if (normalizedEmail) {
+      whereClauses.push('LOWER(LTRIM(RTRIM(u.Email))) = @email');
+      params.push({ name: 'email', type: sql.NVarChar(320), value: normalizedEmail });
+    }
+
+    const result = await executeQuery(
+      `SELECT TOP 1
+         u.UserId,
+         CAST(u.UserId AS NVARCHAR(64)) AS MongoUserId,
+         u.FullName,
+         u.Email,
+         u.PasswordHash,
+         u.Phone,
+         u.RoleId,
+         r.RoleName,
+         ISNULL(u.IsActive, 1) AS IsActive,
+         u.LastLoginAt
+       FROM ${PRIMARY_USER_TABLE} u
+       LEFT JOIN ${PRIMARY_ROLE_TABLE} r ON r.RoleId = u.RoleId
+       WHERE ${whereClauses.join(' OR ')}`,
+      params
+    );
+
+    return normalizeLoginLookupRow(getFirstRecord(result));
+  } catch (error) {
+    return null;
+  }
+};
+
+const resolvePrimaryRoleRecord = async (roleName) => {
+  const normalizedRoleName = normalizeRoleName(roleName);
+  if (!normalizedRoleName) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  const result = await executeQuery(
+    `SELECT TOP 1
+       RoleId,
+       RoleName
+     FROM ${PRIMARY_ROLE_TABLE}
+     WHERE LOWER(LTRIM(RTRIM(RoleName))) = @roleName
+       AND ISNULL(IsActive, 1) = 1`,
+    [{ name: 'roleName', type: sql.NVarChar(50), value: normalizedRoleName }]
+  );
+
+  return getFirstRecord(result);
+};
+
+const upsertPrimaryUserRecord = async ({
+  userId = null,
+  fullName,
+  email,
+  passwordHash,
+  role = 'student',
+  phone = null,
+  isActive = true,
+  lastLogin = null,
+}) => {
+  await ensureAuthSqlReady();
+
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error('Email is required to persist an auth user.');
+  }
+
+  const roleRecord = await resolvePrimaryRoleRecord(role);
+  if (!roleRecord?.RoleId) {
+    throw new Error(`Role '${role}' does not exist in dbo.Roles.`);
+  }
+
+  const sql = getSqlClient();
+  const normalizedUserId = Number.isInteger(Number(userId)) && Number(userId) > 0
+    ? Number(userId)
+    : null;
+
+  if (normalizedUserId) {
+    await executeQuery(
+      `UPDATE ${PRIMARY_USER_TABLE}
+       SET RoleId = @RoleId,
+           FullName = @FullName,
+           Email = @Email,
+           PasswordHash = @PasswordHash,
+           Phone = @Phone,
+           IsActive = @IsActive,
+           LastLoginAt = @LastLoginAt,
+           UpdatedAt = SYSUTCDATETIME()
+       WHERE UserId = @UserId`,
+      [
+        { name: 'UserId', type: sql.Int, value: normalizedUserId },
+        { name: 'RoleId', type: sql.Int, value: Number(roleRecord.RoleId) },
+        { name: 'FullName', type: sql.NVarChar(200), value: String(fullName || '').trim() },
+        { name: 'Email', type: sql.NVarChar(320), value: normalizedEmail },
+        { name: 'PasswordHash', type: sql.NVarChar(255), value: String(passwordHash || '') },
+        { name: 'Phone', type: sql.NVarChar(40), value: phone ? String(phone).trim() : null },
+        { name: 'IsActive', type: sql.Bit, value: isActive !== false },
+        { name: 'LastLoginAt', type: sql.DateTime2(0), value: lastLogin || null },
+      ]
+    );
+
+    return getAuthUserById(normalizedUserId);
+  }
+
+  const insertResult = await executeQuery(
+    `INSERT INTO ${PRIMARY_USER_TABLE} (
+       RoleId,
+       FullName,
+       Email,
+       PasswordHash,
+       Phone,
+       IsActive,
+       LastLoginAt,
+       CreatedAt,
+       UpdatedAt
+     )
+     OUTPUT INSERTED.UserId
+     VALUES (
+       @RoleId,
+       @FullName,
+       @Email,
+       @PasswordHash,
+       @Phone,
+       @IsActive,
+       @LastLoginAt,
+       SYSUTCDATETIME(),
+       SYSUTCDATETIME()
+     )`,
+    [
+      { name: 'RoleId', type: sql.Int, value: Number(roleRecord.RoleId) },
+      { name: 'FullName', type: sql.NVarChar(200), value: String(fullName || '').trim() },
+      { name: 'Email', type: sql.NVarChar(320), value: normalizedEmail },
+      { name: 'PasswordHash', type: sql.NVarChar(255), value: String(passwordHash || '') },
+      { name: 'Phone', type: sql.NVarChar(40), value: phone ? String(phone).trim() : null },
+      { name: 'IsActive', type: sql.Bit, value: isActive !== false },
+      { name: 'LastLoginAt', type: sql.DateTime2(0), value: lastLogin || null },
+    ]
+  );
+
+  return getAuthUserById(insertResult?.recordset?.[0]?.UserId);
+};
+
+const markPrimaryUserInactive = async (userId) => {
+  const normalizedUserId = Number.isInteger(Number(userId)) && Number(userId) > 0
+    ? Number(userId)
+    : null;
+  if (!normalizedUserId) {
+    return false;
+  }
+
+  await ensureAuthSqlReady();
+
+  const sql = getSqlClient();
+  await executeQuery(
+    `UPDATE ${PRIMARY_USER_TABLE}
+     SET IsActive = 0,
+         UpdatedAt = SYSUTCDATETIME()
+     WHERE UserId = @UserId`,
+    [{ name: 'UserId', type: sql.Int, value: normalizedUserId }]
+  );
+
+  return true;
 };
 
 const bootstrapAuthDatabaseIfNeeded = async () => {
@@ -728,26 +950,183 @@ const syncUserAuthByEmail = async (email) => {
   if (!normalizedEmail) {
     return null;
   }
-
-  const user = await User.findOne({ email: normalizedEmail });
-  if (!user) {
-    return null;
-  }
-
-  return syncUserAuthRecord(user);
+  return getAuthUserByEmail(normalizedEmail);
 };
 
 const syncUserAuthById = async (mongoUserId) => {
   if (!mongoUserId) {
     return null;
   }
+  return getAuthUserById(mongoUserId);
+};
 
-  const user = await User.findById(mongoUserId);
-  if (!user) {
+const getAuthUserById = async (mongoUserId) => {
+  if (!mongoUserId) {
     return null;
   }
 
-  return syncUserAuthRecord(user);
+  await ensureAuthSqlReady();
+
+  const primaryUser = await queryPrimaryUserRecord({ userId: mongoUserId });
+  if (primaryUser) {
+    return mapAuthUserRow(primaryUser);
+  }
+
+  const sql = getSqlClient();
+  const result = await executeQuery(
+    `SELECT TOP 1
+       NULL AS UserId,
+       MongoUserId,
+       FullName,
+       Email,
+       PasswordHash,
+       NULL AS RoleId,
+       RoleName,
+       Phone,
+       IsActive,
+       LastLoginAt
+     FROM ${AUTH_USER_TABLE}
+     WHERE MongoUserId = @mongoUserId`,
+    [{ name: 'mongoUserId', type: sql.NVarChar(64), value: String(mongoUserId) }]
+  );
+
+  return mapAuthUserRow(getFirstRecord(result));
+};
+
+const getAuthUserByEmail = async (email) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  await ensureAuthSqlReady();
+
+  const primaryUser = await queryPrimaryUserRecord({ email: normalizedEmail });
+  if (primaryUser) {
+    return mapAuthUserRow(primaryUser);
+  }
+
+  const lookupRow = await loginLookup(normalizedEmail);
+  return mapAuthUserRow(lookupRow);
+};
+
+const getAuthUsersByIds = async (mongoUserIds = []) => {
+  const uniqueIds = [...new Set(mongoUserIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!uniqueIds.length) {
+    return [];
+  }
+
+  await ensureAuthSqlReady();
+
+  const safeIds = uniqueIds
+    .map((id) => String(id).replace(/'/g, "''"))
+    .map((id) => `N'${id}'`)
+    .join(', ');
+
+  const result = await executeQuery(
+    `SELECT
+       NULL AS UserId,
+       MongoUserId,
+       FullName,
+       Email,
+       PasswordHash,
+       NULL AS RoleId,
+       RoleName,
+       Phone,
+       IsActive,
+       LastLoginAt
+     FROM ${AUTH_USER_TABLE}
+     WHERE MongoUserId IN (${safeIds})`
+  );
+
+  return (result?.recordset || []).map(mapAuthUserRow);
+};
+
+const createAuthUser = async ({
+  fullName,
+  email,
+  passwordHash,
+  role = 'student',
+  phone = null,
+  isActive = true,
+}) => {
+  const primaryUser = await upsertPrimaryUserRecord({
+    fullName,
+    email,
+    passwordHash,
+    role,
+    phone,
+    isActive,
+    lastLogin: null,
+  });
+
+  if (primaryUser) {
+    await syncUserAuthRecord({
+      _id: primaryUser._id,
+      fullName: primaryUser.fullName,
+      email: primaryUser.email,
+      password: primaryUser.password,
+      role: primaryUser.role,
+      phone: primaryUser.phone,
+      isActive: primaryUser.isActive,
+      lastLogin: primaryUser.lastLogin,
+    });
+  }
+
+  return primaryUser;
+};
+
+const updateAuthUser = async (mongoUserId, updates = {}) => {
+  const existingUser = await getAuthUserById(mongoUserId);
+  if (!existingUser) {
+    return null;
+  }
+
+  const updatedUser = await upsertPrimaryUserRecord({
+    userId: existingUser._id,
+    fullName: updates.fullName ?? existingUser.fullName,
+    email: updates.email ?? existingUser.email,
+    passwordHash: updates.passwordHash ?? updates.password ?? existingUser.password,
+    role: updates.role ?? existingUser.role,
+    phone: updates.phone ?? existingUser.phone,
+    isActive: updates.isActive ?? existingUser.isActive,
+    lastLogin: updates.lastLogin ?? existingUser.lastLogin,
+  });
+
+  if (updatedUser) {
+    await syncUserAuthRecord({
+      _id: updatedUser._id,
+      fullName: updatedUser.fullName,
+      email: updatedUser.email,
+      password: updatedUser.password,
+      role: updatedUser.role,
+      phone: updatedUser.phone,
+      isActive: updatedUser.isActive,
+      lastLogin: updatedUser.lastLogin,
+    });
+  }
+
+  return updatedUser;
+};
+
+const deleteAuthUser = async (mongoUserId) => {
+  if (!mongoUserId) {
+    return false;
+  }
+
+  await markPrimaryUserInactive(mongoUserId);
+  await ensureAuthSqlReady();
+
+  const sql = getSqlClient();
+  await executeQuery(
+    `UPDATE ${AUTH_USER_TABLE}
+     SET IsActive = 0,
+         UpdatedAt = SYSUTCDATETIME()
+     WHERE MongoUserId = @mongoUserId`,
+    [{ name: 'mongoUserId', type: sql.NVarChar(64), value: String(mongoUserId) }]
+  );
+
+  return true;
 };
 
 const loginLookup = async (email) => {
@@ -756,15 +1135,46 @@ const loginLookup = async (email) => {
     return null;
   }
 
-  await syncUserAuthByEmail(normalizedEmail);
   await ensureAuthSqlReady();
 
   const sql = getSqlClient();
-  const result = await executeStoredProcedure('dbo.spAuthLoginLookup', [
-    { name: 'Email', type: sql.NVarChar(320), value: normalizedEmail },
-  ]);
+  const proceduresToTry = ['dbo.usp_User_Login', 'usp_User_Login', 'dbo.spAuthLoginLookup'];
+  const params = [{ name: 'Email', type: sql.NVarChar(320), value: normalizedEmail }];
 
-  return getFirstRecord(result);
+  for (const procedureName of proceduresToTry) {
+    try {
+      const result = await executeStoredProcedure(procedureName, params);
+      const row = normalizeLoginLookupRow(getFirstRecord(result));
+      if (row) {
+        if (!row.RoleName || row.RoleId == null) {
+          const enrichedRow = await queryPrimaryUserRecord({
+            userId: row.UserId ?? row.MongoUserId,
+            email: row.Email,
+          });
+
+          if (enrichedRow) {
+            return enrichedRow;
+          }
+        }
+
+        return row;
+      }
+    } catch (error) {
+      const message = String(error?.message || '').toLowerCase();
+      const canFallback =
+        message.includes('could not find stored procedure') ||
+        message.includes('procedure or function') ||
+        message.includes('expects parameter') ||
+        message.includes('too many arguments') ||
+        message.includes('too few arguments');
+
+      if (!canFallback || procedureName === 'dbo.spAuthLoginLookup') {
+        throw error;
+      }
+    }
+  }
+
+  return queryPrimaryUserRecord({ email: normalizedEmail });
 };
 
 const startLoginSession = async ({
@@ -906,6 +1316,12 @@ module.exports = {
   syncUserAuthRecord,
   syncUserAuthByEmail,
   syncUserAuthById,
+  getAuthUserById,
+  getAuthUserByEmail,
+  getAuthUsersByIds,
+  createAuthUser,
+  updateAuthUser,
+  deleteAuthUser,
   loginLookup,
   startLoginSession,
   getActiveLoginSession,
