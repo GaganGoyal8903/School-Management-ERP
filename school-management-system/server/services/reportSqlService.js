@@ -1,14 +1,28 @@
 const {
   getSqlClient,
+  executeQuery,
   executeStoredProcedure,
   getPool,
 } = require('../config/sqlServer');
-const { ensureStudentSqlReady, syncAllStudentsToSql } = require('./studentSqlService');
-const { ensureTeacherSqlReady, syncAllTeachersToSql } = require('./teacherSqlService');
-const { ensureAcademicSqlReady, syncAllSubjectsToSql } = require('./academicSqlService');
+const {
+  ensureStudentSqlReady,
+  syncAllStudentsToSql,
+  getStudentCount,
+} = require('./studentSqlService');
+const {
+  ensureTeacherSqlReady,
+  syncAllTeachersToSql,
+  getTeacherCount,
+} = require('./teacherSqlService');
+const {
+  ensureAcademicSqlReady,
+  syncAllSubjectsToSql,
+  getSubjectCount,
+} = require('./academicSqlService');
 const { ensureAttendanceSqlReady, syncAllAttendanceToSql, getAttendanceList, getClassAttendanceSummary } = require('./attendanceSqlService');
 const { ensureFeeSqlReady, syncAllFeesToSql, getFeeStatistics } = require('./feeSqlService');
 const { ensureExamSqlReady, syncAllExamsToSql } = require('./examSqlService');
+const { getBusStatistics } = require('./busSqlService');
 
 const REPORT_SYNC_TTL_MS = 30000;
 
@@ -80,6 +94,268 @@ const getMaterialSummary = async () => ({
   totalMaterials: 0,
   recentMaterials: [],
 });
+
+const getStatusCount = (items = [], status) =>
+  Number(
+    items.find((item) => [item?._id, item?.status, item?.name]
+      .some((value) => String(value || '').trim().toLowerCase() === String(status || '').trim().toLowerCase())
+    )?.count || 0
+  );
+
+const mapRecentDashboardStudent = (student) => {
+  if (!student) {
+    return null;
+  }
+
+  const studentId = student.studentId || student.StudentId || student.id || student._id || null;
+  const studentName = student.name || student.fullName || student.FullName || 'Student';
+  const className = student.class || student.className || student.ClassName || '';
+  const sectionName = student.section || student.sectionName || student.SectionName || '';
+  const rollNumber = student.rollNumber || student.rollNo || student.RollNumber || null;
+
+  return {
+    _id: studentId,
+    id: studentId,
+    studentId,
+    name: studentName,
+    fullName: studentName,
+    admissionNumber: student.admissionNumber || null,
+    rollNumber,
+    rollNo: rollNumber,
+    class: className,
+    className,
+    section: sectionName,
+    sectionName,
+    gender: student.gender || null,
+    parentName: student.parentName || student.guardianName || null,
+    contactNumber: student.phone || student.parentPhone || student.guardianPhone || null,
+    createdAt: student.createdAt || null,
+  };
+};
+
+const getLiveDashboardAttendanceSnapshot = async () => {
+  await ensureAttendanceSqlReady();
+
+  const [totalStudents, summaryResult, trendResult] = await Promise.all([
+    getStudentCount({ onlyActive: true }),
+    executeQuery(`
+      SELECT
+        CAST(ISNULL(COUNT(sad.AttendanceDetailId), 0) AS INT) AS MarkedCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Present' THEN 1 ELSE 0 END), 0) AS INT) AS PresentCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Absent' THEN 1 ELSE 0 END), 0) AS INT) AS AbsentCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Late' THEN 1 ELSE 0 END), 0) AS INT) AS LateCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status IN (N'Half Day', N'Excused') THEN 1 ELSE 0 END), 0) AS INT) AS LeaveCount
+      FROM dbo.StudentAttendance sa
+      LEFT JOIN dbo.StudentAttendanceDetails sad
+        ON sad.AttendanceId = sa.AttendanceId
+      WHERE sa.AttendanceDate = CAST(GETDATE() AS DATE);
+    `),
+    executeQuery(`
+      DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+      DECLARE @TrendStart DATE = DATEADD(DAY, -6, @Today);
+
+      ;WITH Days AS (
+        SELECT @TrendStart AS AttendanceDate
+        UNION ALL
+        SELECT DATEADD(DAY, 1, AttendanceDate)
+        FROM Days
+        WHERE AttendanceDate < @Today
+      )
+      SELECT
+        CONVERT(VARCHAR(10), dayset.AttendanceDate, 23) AS ReportDate,
+        LEFT(DATENAME(WEEKDAY, dayset.AttendanceDate), 3) AS DayLabel,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Present' THEN 1 ELSE 0 END), 0) AS INT) AS PresentCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Absent' THEN 1 ELSE 0 END), 0) AS INT) AS AbsentCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status = N'Late' THEN 1 ELSE 0 END), 0) AS INT) AS LateCount,
+        CAST(ISNULL(SUM(CASE WHEN sad.Status IN (N'Half Day', N'Excused') THEN 1 ELSE 0 END), 0) AS INT) AS LeaveCount,
+        CAST(ISNULL(COUNT(sad.AttendanceDetailId), 0) AS INT) AS TotalCount
+      FROM Days dayset
+      LEFT JOIN dbo.StudentAttendance sa
+        ON sa.AttendanceDate = dayset.AttendanceDate
+      LEFT JOIN dbo.StudentAttendanceDetails sad
+        ON sad.AttendanceId = sa.AttendanceId
+      GROUP BY dayset.AttendanceDate
+      ORDER BY dayset.AttendanceDate ASC
+      OPTION (MAXRECURSION 10);
+    `),
+  ]);
+
+  const summaryRow = summaryResult?.recordset?.[0] || {};
+  const markedStudents = toNumber(summaryRow.MarkedCount);
+  const present = toNumber(summaryRow.PresentCount);
+  const absent = toNumber(summaryRow.AbsentCount);
+  const late = toNumber(summaryRow.LateCount);
+  const leave = toNumber(summaryRow.LeaveCount);
+
+  return {
+    attendanceSummary: {
+      totalStudents: toNumber(totalStudents),
+      total: toNumber(totalStudents),
+      markedStudents,
+      unmarkedStudents: Math.max(toNumber(totalStudents) - markedStudents, 0),
+      present,
+      absent,
+      late,
+      leave,
+      percentage: markedStudents > 0 ? Number(((present / markedStudents) * 100).toFixed(1)) : 0,
+      isMarked: markedStudents > 0,
+    },
+    attendanceTrend: (trendResult?.recordset || []).map((row) => ({
+      date: row.ReportDate,
+      day: row.DayLabel,
+      present: toNumber(row.PresentCount),
+      absent: toNumber(row.AbsentCount),
+      late: toNumber(row.LateCount),
+      leave: toNumber(row.LeaveCount),
+      total: toNumber(row.TotalCount),
+    })),
+  };
+};
+
+const getLiveDashboardStudentGrowthTrend = async () => {
+  await ensureStudentSqlReady();
+
+  const result = await executeQuery(`
+    DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+    DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(DATEADD(MONTH, -5, @Today)), MONTH(DATEADD(MONTH, -5, @Today)), 1);
+    DECLARE @CurrentMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
+
+    ;WITH Months AS (
+      SELECT @MonthStart AS MonthStart
+      UNION ALL
+      SELECT DATEADD(MONTH, 1, MonthStart)
+      FROM Months
+      WHERE MonthStart < @CurrentMonth
+    )
+    SELECT
+      LEFT(DATENAME(MONTH, monthset.MonthStart), 3) AS [Month],
+      YEAR(monthset.MonthStart) AS [Year],
+      CAST(ISNULL(COUNT(S.StudentId), 0) AS INT) AS StudentCount
+    FROM Months monthset
+    LEFT JOIN dbo.Students S
+     ON (
+        S.Status IS NULL
+        OR LTRIM(RTRIM(LOWER(S.Status))) <> N'inactive'
+      )
+     AND COALESCE(CAST(S.AdmissionDate AS DATETIME2(0)), S.CreatedAt) >= monthset.MonthStart
+     AND COALESCE(CAST(S.AdmissionDate AS DATETIME2(0)), S.CreatedAt) < DATEADD(MONTH, 1, monthset.MonthStart)
+    GROUP BY monthset.MonthStart
+    ORDER BY monthset.MonthStart ASC
+    OPTION (MAXRECURSION 12);
+  `);
+
+  return (result?.recordset || []).map((row) => ({
+    month: row.Month,
+    year: toNumber(row.Year),
+    students: toNumber(row.StudentCount),
+  }));
+};
+
+const getLiveDashboardFeeCollectionTrend = async () => {
+  await ensureFeeSqlReady();
+
+  const result = await executeQuery(`
+    DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+    DECLARE @MonthStart DATE = DATEFROMPARTS(YEAR(DATEADD(MONTH, -5, @Today)), MONTH(DATEADD(MONTH, -5, @Today)), 1);
+    DECLARE @CurrentMonth DATE = DATEFROMPARTS(YEAR(@Today), MONTH(@Today), 1);
+
+    ;WITH Months AS (
+      SELECT @MonthStart AS MonthStart
+      UNION ALL
+      SELECT DATEADD(MONTH, 1, MonthStart)
+      FROM Months
+      WHERE MonthStart < @CurrentMonth
+    ),
+    Collections AS (
+      SELECT
+        DATEFROMPARTS(
+          YEAR(COALESCE(CAST(fp.PaymentDate AS DATE), CAST(fp.CreatedAt AS DATE))),
+          MONTH(COALESCE(CAST(fp.PaymentDate AS DATE), CAST(fp.CreatedAt AS DATE))),
+          1
+        ) AS MonthStart,
+        SUM(fp.AmountPaid) AS CollectedAmount
+      FROM dbo.FeePayments fp
+      WHERE COALESCE(CAST(fp.PaymentDate AS DATE), CAST(fp.CreatedAt AS DATE)) >= @MonthStart
+      GROUP BY DATEFROMPARTS(
+        YEAR(COALESCE(CAST(fp.PaymentDate AS DATE), CAST(fp.CreatedAt AS DATE))),
+        MONTH(COALESCE(CAST(fp.PaymentDate AS DATE), CAST(fp.CreatedAt AS DATE))),
+        1
+      )
+    ),
+    Pending AS (
+      SELECT
+        DATEFROMPARTS(
+          YEAR(COALESCE(CAST(sf.DueDate AS DATE), CAST(sf.CreatedAt AS DATE))),
+          MONTH(COALESCE(CAST(sf.DueDate AS DATE), CAST(sf.CreatedAt AS DATE))),
+          1
+        ) AS MonthStart,
+        SUM(CASE WHEN sf.BalanceAmount > 0 THEN sf.BalanceAmount ELSE 0 END) AS PendingAmount
+      FROM dbo.StudentFees sf
+      WHERE COALESCE(CAST(sf.DueDate AS DATE), CAST(sf.CreatedAt AS DATE)) >= @MonthStart
+      GROUP BY DATEFROMPARTS(
+        YEAR(COALESCE(CAST(sf.DueDate AS DATE), CAST(sf.CreatedAt AS DATE))),
+        MONTH(COALESCE(CAST(sf.DueDate AS DATE), CAST(sf.CreatedAt AS DATE))),
+        1
+      )
+    )
+    SELECT
+      LEFT(DATENAME(MONTH, monthset.MonthStart), 3) AS [Month],
+      YEAR(monthset.MonthStart) AS [Year],
+      CAST(ISNULL(c.CollectedAmount, 0) AS DECIMAL(18,2)) AS CollectedAmount,
+      CAST(ISNULL(p.PendingAmount, 0) AS DECIMAL(18,2)) AS PendingAmount
+    FROM Months monthset
+    LEFT JOIN Collections c
+      ON c.MonthStart = monthset.MonthStart
+    LEFT JOIN Pending p
+      ON p.MonthStart = monthset.MonthStart
+    ORDER BY monthset.MonthStart ASC
+    OPTION (MAXRECURSION 12);
+  `);
+
+  return (result?.recordset || []).map((row) => ({
+    month: row.Month,
+    year: toNumber(row.Year),
+    collected: toNumber(row.CollectedAmount),
+    pending: toNumber(row.PendingAmount),
+  }));
+};
+
+const getLiveDashboardRecentStudents = async ({ role = null } = {}) => {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  if (!['admin', 'teacher'].includes(normalizedRole)) {
+    return [];
+  }
+
+  await ensureStudentSqlReady();
+
+  const result = await executeQuery(`
+    SELECT TOP 5
+      s.StudentId,
+      s.FullName,
+      s.AdmissionNumber,
+      s.RollNumber,
+      c.ClassName,
+      sec.SectionName,
+      s.Gender,
+      s.Phone,
+      s.AdmissionDate,
+      s.CreatedAt
+    FROM dbo.Students s
+    LEFT JOIN dbo.Classes c
+      ON c.ClassId = s.ClassId
+    LEFT JOIN dbo.Sections sec
+      ON sec.SectionId = s.SectionId
+    WHERE (
+      s.Status IS NULL
+      OR LTRIM(RTRIM(LOWER(s.Status))) <> N'inactive'
+    )
+    ORDER BY
+      COALESCE(CAST(s.AdmissionDate AS DATETIME2(0)), s.CreatedAt) DESC,
+      s.StudentId DESC;
+  `);
+
+  return (result?.recordset || []).map(mapRecentDashboardStudent).filter(Boolean);
+};
 
 const REPORT_PROCEDURES_BATCH = `
 CREATE OR ALTER PROCEDURE dbo.spReportDashboard
@@ -560,87 +836,98 @@ const syncReportSources = async ({ force = false } = {}) => {
 };
 
 const getDashboardReport = async ({ role = null, userId = null } = {}) => {
-  await syncReportSources();
-
-  const sql = getSqlClient();
-  const [materialSummary, reportResult] = await Promise.all([
-    getMaterialSummary(),
-    executeStoredProcedure('dbo.spReportDashboard', [
-      { name: 'Role', type: sql.NVarChar(50), value: toNullableString(role) },
-      { name: 'MongoUserId', type: sql.NVarChar(64), value: userId ? String(userId) : null },
-    ]),
+  await Promise.all([
+    ensureStudentSqlReady(),
+    ensureTeacherSqlReady(),
+    ensureAcademicSqlReady(),
+    ensureAttendanceSqlReady(),
+    ensureFeeSqlReady(),
   ]);
 
-  const recordsets = reportResult?.recordsets || [];
-  const summaryRow = recordsets[0]?.[0] || {};
-  const todayAttendanceRow = recordsets[1]?.[0] || {};
-
-  const totalStudents = toNumber(summaryRow.TotalStudents);
-  const totalTeachers = toNumber(summaryRow.TotalTeachers);
-  const totalSubjects = toNumber(summaryRow.TotalSubjects);
-  const totalMaterials = toNumber(materialSummary.totalMaterials);
-  const attendanceTotal = toNumber(todayAttendanceRow.TotalCount);
-  const presentCount = toNumber(todayAttendanceRow.PresentCount);
-
-  return {
+  const [
+    materialSummary,
     totalStudents,
     totalTeachers,
     totalSubjects,
+    feeStats,
+    busStats,
+    attendanceSnapshot,
+    studentGrowthTrend,
+    feeCollectionTrend,
+    recentStudents,
+  ] = await Promise.all([
+    getMaterialSummary(),
+    getStudentCount({ onlyActive: true }),
+    getTeacherCount({ onlyActive: true }),
+    getSubjectCount(),
+    getFeeStatistics(),
+    getBusStatistics(),
+    getLiveDashboardAttendanceSnapshot(),
+    getLiveDashboardStudentGrowthTrend(),
+    getLiveDashboardFeeCollectionTrend(),
+    getLiveDashboardRecentStudents({ role }),
+  ]);
+
+  const totalMaterials = toNumber(materialSummary.totalMaterials);
+  const feeSummary = {
+    totalFees: toNumber(feeStats.totalFees),
+    collectedFees: toNumber(feeStats.totalPaid),
+    pendingFees: toNumber(feeStats.totalPending),
+    totalPaid: toNumber(feeStats.totalPaid),
+    totalPending: toNumber(feeStats.totalPending),
+    overdueCount: toNumber(feeStats.overdueCount),
+  };
+  const attendanceSummary = attendanceSnapshot.attendanceSummary;
+  const activeBusCount = getStatusCount(busStats.byStatus, 'Active');
+  const onRouteBusCount = getStatusCount(busStats.byStatus, 'On Route');
+  const busFleetStatus = {
+    total: toNumber(busStats.totalBuses),
+    totalBuses: toNumber(busStats.totalBuses),
+    active: activeBusCount,
+    activeBuses: activeBusCount,
+    onRoute: onRouteBusCount,
+    onRouteBuses: onRouteBusCount,
+    filters: {
+      total: '',
+      active: 'Active',
+      onRoute: 'On Route',
+    },
+  };
+
+  return {
+    totalStudents: toNumber(totalStudents),
+    totalTeachers: toNumber(totalTeachers),
+    totalSubjects: toNumber(totalSubjects),
     totalMaterials,
+    totalFeesCollected: feeSummary.totalPaid,
+    pendingFees: feeSummary.totalPending,
     stats: {
-      students: totalStudents,
-      teachers: totalTeachers,
-      subjects: totalSubjects,
+      students: toNumber(totalStudents),
+      teachers: toNumber(totalTeachers),
+      subjects: toNumber(totalSubjects),
       materials: totalMaterials,
+      totalStudents: toNumber(totalStudents),
+      totalTeachers: toNumber(totalTeachers),
+      totalFeesCollected: feeSummary.totalPaid,
+      pendingFees: feeSummary.totalPending,
     },
-    todayAttendance: {
-      present: presentCount,
-      absent: toNumber(todayAttendanceRow.AbsentCount),
-      late: toNumber(todayAttendanceRow.LateCount),
-      leave: toNumber(todayAttendanceRow.LeaveCount),
-      total: attendanceTotal,
-      percentage: attendanceTotal > 0 ? Number(((presentCount / attendanceTotal) * 100).toFixed(1)) : 0,
-    },
-    attendanceTrend: (recordsets[2] || []).map((row) => ({
-      date: row.ReportDate,
-      day: row.DayLabel,
-      present: toNumber(row.PresentCount),
-      absent: toNumber(row.AbsentCount),
-      late: toNumber(row.LateCount),
-      leave: toNumber(row.LeaveCount),
-      total: toNumber(row.TotalCount),
+    feeSummary,
+    todayAttendance: attendanceSummary,
+    attendanceSummary,
+    attendanceTrend: attendanceSnapshot.attendanceTrend,
+    studentGrowth: studentGrowthTrend.map((entry) => ({
+      month: entry.month,
+      year: entry.year,
+      count: entry.students,
     })),
-    studentGrowthTrend: (recordsets[3] || []).map((row) => ({
-      month: row.Month,
-      year: toNumber(row.Year),
-      students: toNumber(row.StudentCount),
-    })),
-    feeCollectionTrend: (recordsets[4] || []).map((row) => ({
-      month: row.Month,
-      year: toNumber(row.Year),
-      collected: toNumber(row.CollectedAmount),
-      pending: toNumber(row.PendingAmount),
-    })),
-    upcomingExams: (recordsets[5] || []).map(mapUpcomingExamRow).filter(Boolean),
-    teacherSummary: recordsets[6]?.[0]
-      ? {
-          assignedSubjects: toNumber(recordsets[6][0].AssignedSubjects),
-          attendanceMarkedToday: toNumber(recordsets[6][0].AttendanceMarkedToday),
-        }
-      : null,
-    studentProfileSummary: recordsets[7]?.[0]
-      ? {
-          _id: recordsets[7][0].MongoStudentId,
-          fullName: recordsets[7][0].FullName,
-          rollNumber: recordsets[7][0].RollNumber || '',
-          class: recordsets[7][0].ClassName || '',
-          section: recordsets[7][0].SectionName || '',
-          guardianName: recordsets[7][0].GuardianName || '',
-          guardianPhone: recordsets[7][0].GuardianPhone || '',
-          email: recordsets[7][0].Email || '',
-          phone: recordsets[7][0].Phone || '',
-        }
-      : null,
+    studentGrowthTrend,
+    feeCollectionTrend,
+    feeCollectionGraph: feeCollectionTrend,
+    busFleetStatus,
+    recentStudents,
+    upcomingExams: [],
+    teacherSummary: null,
+    studentProfileSummary: null,
     recentMaterials: materialSummary.recentMaterials,
   };
 };

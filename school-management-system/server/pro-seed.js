@@ -624,7 +624,62 @@ async function seed() {
   }
 }
 
-// Run the seed function
-seed();
+// ==================== ARGUMENT HANDLING ====================
+const args = process.argv.slice(2);
+const syncOnly = args.includes('--sync-sections');
+const fullSeed = !syncOnly;
+
+if (syncOnly) {
+  console.log("🔄 Running SECTIONS SYNC ONLY...");
+}
+
+// Sync Mongo → SQL if full seed
+async function syncData() {
+  if (!fullSeed) return;
+
+  // Sync Students first (populates SQL Students table)
+  console.log("\n🔄 Syncing Students to SQL...");
+  await require('./services/studentSqlService').syncAllStudentsToSql({ force: true });
+  console.log("✅ Students synced\n");
+}
+
+// ==================== MAIN EXECUTION ====================
+async function main() {
+  let connection;
+  
+  try {
+    if (fullSeed) {
+      console.log("\n" + "=".repeat(60));
+      console.log("🚀 PRO SEED SCRIPT - School ERP System");
+      console.log("=".repeat(60));
+      
+      console.log("\n📡 Connecting to MongoDB...");
+      connection = await mongoose.connect(MONGO_URI);
+      console.log("✅ MongoDB Connected!");
+
+      await syncData(); // Sync before seeding
+
+      // [EXISTING SEED LOGIC HERE - UNCHANGED]
+      await seed();
+    } else {
+      // SYNC-ONLY MODE: Direct SQL sync (no Mongo needed)
+      console.log("🔄 Syncing Sections from SQL Students table...");
+      const { ensureStudentSqlReady, syncSectionsFromStudents } = require('./services/studentSqlService');
+      await ensureStudentSqlReady();
+      const result = await syncSectionsFromStudents();
+      console.log("✅ Sections sync complete:", result);
+    }
+    
+  } catch (error) {
+    console.error("\n❌ ERROR:", error.message);
+    process.exit(1);
+  } finally {
+    if (connection) {
+      await mongoose.disconnect();
+    }
+  }
+}
+
+main();
 
 

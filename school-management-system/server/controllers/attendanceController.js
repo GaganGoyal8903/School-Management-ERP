@@ -5,6 +5,7 @@ const {
   getAttendanceById,
   upsertAttendanceRecord,
   saveAttendanceSession,
+  getAttendanceSession,
   getAttendanceList,
   getStudentAttendanceReport,
   getClassAttendanceSummary,
@@ -43,6 +44,7 @@ const normalizeAttendanceSessionPayload = (body = {}) => ({
   academicYearId: body.academicYearId ?? null,
   classId: body.classId ?? null,
   sectionId: body.sectionId ?? null,
+  subjectId: body.subjectId ?? body.subject ?? null,
   className: body.className || body.class || body.grade || null,
   sectionName: body.sectionName || body.section || null,
   markedByTeacherId: body.markedByTeacherId || body.markedBy || null,
@@ -58,10 +60,23 @@ const saveAttendanceSessionAndRespond = async (req, res) => {
     return res.status(400).json({ message: 'Please provide attendance records' });
   }
 
-  const result = await saveAttendanceSession({
-    ...payload,
-    markedByUserId: getRequestUserId(req),
-  });
+  let result;
+  try {
+    result = await saveAttendanceSession({
+      ...payload,
+      markedByUserId: getRequestUserId(req),
+    });
+  } catch (error) {
+    if (error?.code === 'ATTENDANCE_VALIDATION_FAILED') {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        invalidStudents: Array.isArray(error.invalidStudents) ? error.invalidStudents : [],
+      });
+    }
+
+    throw error;
+  }
 
   return res.json({
     success: true,
@@ -209,6 +224,37 @@ const markBulkAttendance = asyncHandler(async (req, res) => {
 // @access  Private (Admin, Teacher)
 const saveAttendance = asyncHandler(async (req, res) => saveAttendanceSessionAndRespond(req, res));
 
+// @desc    Get attendance session roster for a class/section/date
+// @route   GET /api/attendance/session
+// @access  Private (Admin, Teacher)
+const getAttendanceSessionDetails = asyncHandler(async (req, res) => {
+  await ensureAttendanceSqlReady();
+
+  const {
+    class: classFilter,
+    grade,
+    classId,
+    section,
+    sectionName,
+    sectionId,
+    date,
+    attendanceDate,
+  } = req.query;
+
+  const session = await getAttendanceSession({
+    attendanceDate: attendanceDate || date,
+    classId,
+    sectionId,
+    className: normalizeClassFilter(classFilter, grade),
+    sectionName: sectionName || section || null,
+  });
+
+  res.json({
+    success: true,
+    session,
+  });
+});
+
 // @desc    Get attendance records
 // @route   GET /api/attendance
 // @access  Private
@@ -219,7 +265,9 @@ const getAttendance = asyncHandler(async (req, res) => {
     studentId,
     class: classFilter,
     grade,
+    classId,
     section,
+    sectionId,
     date,
     startDate,
     endDate,
@@ -229,6 +277,8 @@ const getAttendance = asyncHandler(async (req, res) => {
 
   const result = await getAttendanceList({
     studentId,
+    classId,
+    sectionId,
     className: normalizeClassFilter(classFilter, grade),
     sectionName: section,
     date,
@@ -343,6 +393,7 @@ module.exports = {
   updateAttendance,
   markBulkAttendance,
   saveAttendance,
+  getAttendanceSessionDetails,
   getAttendance,
   getAttendanceReport,
   getStudentAttendance,

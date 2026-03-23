@@ -918,13 +918,38 @@ const mapRealExamResultRow = (row, examMetaMap = new Map()) => {
   };
 };
 
-const filterRealStudents = (students, { search = null, className = null, sectionName = null }) => {
+const filterRealStudents = (
+  students,
+  {
+    search = null,
+    className = null,
+    sectionName = null,
+    classId = null,
+    sectionId = null,
+  }
+) => {
   const normalizedSearch = toNullableString(search)?.toLowerCase() || null;
   const normalizedClass = toNullableString(className);
   const normalizedSection = toNullableString(sectionName);
+  const normalizedClassId = normalizeStudentNumericId(classId);
+  const normalizedSectionId = normalizeStudentNumericId(sectionId);
 
   return students.filter((student) => {
+    if (
+      normalizedClassId
+      && normalizeStudentNumericId(student.classDbId) !== normalizedClassId
+    ) {
+      return false;
+    }
+
     if (normalizedClass && student.className !== normalizedClass) {
+      return false;
+    }
+
+    if (
+      normalizedSectionId
+      && normalizeStudentNumericId(student.sectionDbId) !== normalizedSectionId
+    ) {
       return false;
     }
 
@@ -1258,6 +1283,8 @@ const getStudentList = async ({
   search = null,
   className = null,
   sectionName = null,
+  classId = null,
+  sectionId = null,
   sortBy = 'createdAt',
   sortOrder = 'desc',
 }) => {
@@ -1277,7 +1304,13 @@ const getStudentList = async ({
       .map((student) => student.className)
       .filter(Boolean)
   )].sort((left, right) => left.localeCompare(right));
-  const filteredStudents = filterRealStudents(realStudents, { search, className, sectionName });
+  const filteredStudents = filterRealStudents(realStudents, {
+    search,
+    className,
+    sectionName,
+    classId,
+    sectionId,
+  });
   const sortedStudents = sortRealStudents(filteredStudents, sortBy, sortOrder);
   const total = sortedStudents.length;
   const startIndex = (normalizedPage - 1) * normalizedLimit;
@@ -1830,11 +1863,75 @@ const deleteStudentRecord = async (studentId) => {
   return { resultCode: 'ok' };
 };
 
+const syncSectionsFromStudents = async () => {
+  await ensureStudentSqlReady();
+
+  const sql = getSqlClient();
+  // Get all unique class/section combos from SQL Students (populated from Mongo)
+  const studentCombos = await executeQuery(`
+    SELECT DISTINCT 
+      ClassName, 
+      SectionName
+    FROM ${STUDENT_TABLE}
+    WHERE ClassName IS NOT NULL 
+      AND SectionName IS NOT NULL 
+      AND LEN(LTRIM(RTRIM(ClassName))) > 0
+      AND LEN(LTRIM(RTRIM(SectionName))) > 0
+  `);
+
+  const createdSections = [];
+  for (const combo of studentCombos.recordset || []) {
+    const className = toNullableString(combo.ClassName);
+    const sectionName = toNullableString(combo.SectionName);
+    
+    if (!className || !sectionName) continue;
+
+    // Resolve class ID first
+    const classResult = await executeQuery(
+      `SELECT TOP 1 ClassId FROM dbo.Classes 
+       WHERE ClassName = @ClassName AND ISNULL(IsActive, 1) = 1`,
+      [{ name: 'ClassName', type: sql.NVarChar(100), value: className }]
+    );
+    
+    const classId = normalizeStudentNumericId(classResult?.recordset?.[0]?.ClassId);
+    if (!classId) continue;
+
+    // Check if section exists
+    const existingSection = await executeQuery(
+      `SELECT TOP 1 SectionId FROM dbo.Sections 
+       WHERE ClassId = @ClassId AND SectionName = @SectionName AND ISNULL(IsActive, 1) = 1`,
+      [
+        { name: 'ClassId', type: sql.Int, value: classId },
+        { name: 'SectionName', type: sql.NVarChar(50), value: sectionName }
+      ]
+    );
+
+    if (!existingSection?.recordset?.[0]) {
+      // Auto-create section
+      const insertResult = await executeQuery(
+        `INSERT INTO dbo.Sections (ClassId, SectionName, IsActive, CreatedAt)
+         OUTPUT INSERTED.SectionId
+         VALUES (@ClassId, @SectionName, 1, SYSUTCDATETIME())`,
+        [
+          { name: 'ClassId', type: sql.Int, value: classId },
+          { name: 'SectionName', type: sql.NVarChar(50), value: sectionName }
+        ]
+      );
+      const sectionId = normalizeStudentNumericId(insertResult?.recordset?.[0]?.SectionId);
+      createdSections.push({ className, sectionName, classId, sectionId });
+    }
+  }
+
+  console.log(`✅ Synced ${studentCombos.recordset?.length || 0} class/section combos. Created ${createdSections.length} new sections.`);
+  return { totalCombos: studentCombos.recordset?.length || 0, createdSections };
+};
+
 module.exports = {
   ensureStudentSqlReady,
   syncStudentMirror,
   syncStudentById,
   syncAllStudentsToSql,
+  syncSectionsFromStudents,  // ← NEW: Attendance fix sync
   getStudentList,
   getAllStudents,
   getStudentById,

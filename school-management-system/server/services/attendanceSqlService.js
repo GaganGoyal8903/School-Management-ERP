@@ -112,6 +112,14 @@ const uniqueBy = (items, getKey) => {
   return [...map.values()];
 };
 
+const createAttendanceValidationError = (message, invalidStudents = []) => {
+  const error = new Error(message);
+  error.code = 'ATTENDANCE_VALIDATION_FAILED';
+  error.statusCode = 400;
+  error.invalidStudents = Array.isArray(invalidStudents) ? invalidStudents : [];
+  return error;
+};
+
 const REAL_ATTENDANCE_SCHEMA_BATCHES = [
   `
 IF COL_LENGTH(N'dbo.StudentAttendanceDetails', N'RollNumber') IS NULL
@@ -200,6 +208,8 @@ const mapAttendanceRow = (row) => {
 
 const buildAttendanceQueryFilters = ({
   studentId = null,
+  classId = null,
+  sectionId = null,
   className = null,
   sectionName = null,
   date = null,
@@ -211,6 +221,8 @@ const buildAttendanceQueryFilters = ({
   const clauses = [];
   const params = [];
   const studentSqlId = parseNumericId(studentId);
+  const classSqlId = parseNumericId(classId);
+  const sectionSqlId = parseNumericId(sectionId);
   const attendanceSqlId = parseNumericId(attendanceDetailId);
 
   if (attendanceSqlId) {
@@ -221,6 +233,16 @@ const buildAttendanceQueryFilters = ({
   if (studentSqlId) {
     clauses.push('sad.StudentId = @StudentId');
     params.push({ name: 'StudentId', type: sql.Int, value: studentSqlId });
+  }
+
+  if (classSqlId) {
+    clauses.push('sa.ClassId = @ClassId');
+    params.push({ name: 'ClassId', type: sql.Int, value: classSqlId });
+  }
+
+  if (sectionSqlId) {
+    clauses.push('sa.SectionId = @SectionId');
+    params.push({ name: 'SectionId', type: sql.Int, value: sectionSqlId });
   }
 
   if (className) {
@@ -960,6 +982,46 @@ const resolveClassIdByName = async (className, tx = null) => {
   return parseNumericId(classResult?.recordset?.[0]?.ClassId);
 };
 
+const resolveClassContext = async ({ classId = null, className = null } = {}, tx = null) => {
+  const normalizedClassId = parseNumericId(classId);
+  const normalizedClassName = toNullableString(className);
+
+  if (!normalizedClassId && !normalizedClassName) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const classResult = await runner(
+    `SELECT TOP 1
+       ClassId,
+       ClassName,
+       AcademicYearId
+     FROM dbo.Classes
+     WHERE ISNULL(IsActive, 1) = 1
+       AND (
+         (@ClassId IS NOT NULL AND ClassId = @ClassId)
+         OR (@ClassId IS NULL AND @ClassName IS NOT NULL AND ClassName = @ClassName)
+       )
+     ORDER BY ClassId DESC;`,
+    [
+      { name: 'ClassId', type: sql.Int, value: normalizedClassId },
+      { name: 'ClassName', type: sql.NVarChar(100), value: normalizedClassName },
+    ]
+  );
+
+  const row = classResult?.recordset?.[0] || null;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    classId: parseNumericId(row.ClassId),
+    className: toNullableString(row.ClassName) || normalizedClassName,
+    academicYearId: parseNumericId(row.AcademicYearId),
+  };
+};
+
 const resolveSectionIdByName = async (classId, sectionName, tx = null) => {
   const normalizedClassId = parseNumericId(classId);
   const normalizedSectionName = toNullableString(sectionName);
@@ -985,6 +1047,94 @@ const resolveSectionIdByName = async (classId, sectionName, tx = null) => {
   return parseNumericId(sectionResult?.recordset?.[0]?.SectionId);
 };
 
+const resolveSectionContext = async ({ classId, sectionId = null, sectionName = null } = {}, tx = null) => {
+  const normalizedClassId = parseNumericId(classId);
+  const normalizedSectionId = parseNumericId(sectionId);
+  const normalizedSectionName = toNullableString(sectionName);
+
+  if (!normalizedClassId) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+
+  // First try to find existing section
+  let sectionResult = await runner(
+    `SELECT TOP 1
+       SectionId,
+       SectionName
+     FROM dbo.Sections
+     WHERE ClassId = @ClassId
+       AND ISNULL(IsActive, 1) = 1
+       AND (
+         (@SectionId IS NOT NULL AND SectionId = @SectionId)
+         OR (@SectionId IS NULL AND @SectionName IS NOT NULL AND SectionName = @SectionName)
+       )
+     ORDER BY SectionId DESC;`,
+    [
+      { name: 'ClassId', type: sql.Int, value: normalizedClassId },
+      { name: 'SectionId', type: sql.Int, value: normalizedSectionId },
+      { name: 'SectionName', type: sql.NVarChar(50), value: normalizedSectionName },
+    ]
+  );
+
+  let row = sectionResult?.recordset?.[0] || null;
+  
+  // Auto-create missing section
+  if (!row && normalizedSectionName) {
+    const insertResult = await runner(
+      `INSERT INTO dbo.Sections (ClassId, SectionName, IsActive, CreatedAt)
+       OUTPUT INSERTED.SectionId, INSERTED.SectionName
+       VALUES (@ClassId, @SectionName, 1, SYSUTCDATETIME());`,
+      [
+        { name: 'ClassId', type: sql.Int, value: normalizedClassId },
+        { name: 'SectionName', type: sql.NVarChar(50), value: normalizedSectionName },
+      ]
+    );
+    row = insertResult?.recordset?.[0] || null;
+  }
+
+  if (!row) {
+    return {
+      sectionId: null,
+      sectionName: normalizedSectionName || '',
+    };
+  }
+
+  return {
+    sectionId: parseNumericId(row.SectionId),
+    sectionName: toNullableString(row.SectionName) || normalizedSectionName,
+  };
+};
+
+const loadSectionsForClass = async (classId, tx = null) => {
+  const normalizedClassId = parseNumericId(classId);
+  if (!normalizedClassId) {
+    return [];
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const result = await runner(
+    `SELECT
+       SectionId,
+       SectionName
+     FROM dbo.Sections
+     WHERE ClassId = @ClassId
+       AND ISNULL(IsActive, 1) = 1
+     ORDER BY SectionName ASC, SectionId ASC;`,
+    [{ name: 'ClassId', type: sql.Int, value: normalizedClassId }]
+  );
+
+  return (result?.recordset || [])
+    .map((row) => ({
+      sectionId: parseNumericId(row.SectionId),
+      sectionName: toNullableString(row.SectionName),
+    }))
+    .filter((row) => row.sectionId && row.sectionName);
+};
+
 const loadAttendanceStudents = async (studentIds = [], tx = null) => {
   const normalizedIds = uniqueBy(
     studentIds.map((studentId) => parseNumericId(studentId)).filter(Boolean),
@@ -1006,6 +1156,7 @@ const loadAttendanceStudents = async (studentIds = [], tx = null) => {
        s.AcademicYearId,
        s.ClassId,
        s.SectionId,
+       s.Status,
        s.FullName,
        c.ClassName,
        sec.SectionName
@@ -1019,6 +1170,189 @@ const loadAttendanceStudents = async (studentIds = [], tx = null) => {
   );
 
   return result?.recordset || [];
+};
+
+const loadAttendanceRosterStudents = async ({ classId, sectionId }, tx = null) => {
+  const normalizedClassId = parseNumericId(classId);
+  const normalizedSectionId = parseNumericId(sectionId);
+
+  if (!normalizedClassId || !normalizedSectionId) {
+    return [];
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const result = await runner(
+    `SELECT
+       s.StudentId,
+       s.RollNumber,
+       s.AdmissionNumber,
+       s.AcademicYearId,
+       s.ClassId,
+       s.SectionId,
+       s.Status,
+       s.FullName,
+       s.FirstName,
+       s.LastName,
+       c.ClassName,
+       sec.SectionName
+     FROM dbo.Students s
+     INNER JOIN dbo.Classes c
+       ON c.ClassId = s.ClassId
+     INNER JOIN dbo.Sections sec
+       ON sec.SectionId = s.SectionId
+     WHERE s.ClassId = @ClassId
+       AND s.SectionId = @SectionId
+       AND (
+         s.Status IS NULL
+         OR LTRIM(RTRIM(LOWER(s.Status))) <> N'inactive'
+       )
+     ORDER BY
+       CASE WHEN TRY_CONVERT(INT, s.RollNumber) IS NULL THEN 1 ELSE 0 END,
+       TRY_CONVERT(INT, s.RollNumber),
+       s.RollNumber,
+       s.FullName,
+       s.StudentId;`,
+    [
+      { name: 'ClassId', type: sql.Int, value: normalizedClassId },
+      { name: 'SectionId', type: sql.Int, value: normalizedSectionId },
+    ]
+  );
+
+  return result?.recordset || [];
+};
+
+const loadExistingAttendanceSession = async ({ attendanceDate, classId, sectionId }, tx = null) => {
+  const normalizedDate = normalizeDateOnly(attendanceDate);
+  const normalizedClassId = parseNumericId(classId);
+  const normalizedSectionId = parseNumericId(sectionId);
+
+  if (!normalizedDate || !normalizedClassId || !normalizedSectionId) {
+    return {
+      attendanceId: null,
+      academicYearId: null,
+      markedByTeacherId: null,
+      remarks: null,
+      detailMap: new Map(),
+    };
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const headerResult = await runner(
+    `SELECT
+       AttendanceId,
+       AcademicYearId,
+       MarkedByTeacherId,
+       Remarks
+     FROM dbo.StudentAttendance
+     WHERE AttendanceDate = @AttendanceDate
+       AND ClassId = @ClassId
+       AND SectionId = @SectionId
+     ORDER BY AttendanceId DESC;`,
+    [
+      { name: 'AttendanceDate', type: sql.Date, value: normalizedDate },
+      { name: 'ClassId', type: sql.Int, value: normalizedClassId },
+      { name: 'SectionId', type: sql.Int, value: normalizedSectionId },
+    ]
+  );
+
+  const headerRows = headerResult?.recordset || [];
+  const headerIds = headerRows
+    .map((row) => parseNumericId(row.AttendanceId))
+    .filter(Boolean);
+
+  if (!headerIds.length) {
+    return {
+      attendanceId: null,
+      academicYearId: null,
+      markedByTeacherId: null,
+      remarks: null,
+      detailMap: new Map(),
+    };
+  }
+
+  const idParams = buildNumericIdParams(headerIds, 'AttendanceHeaderId', sql.Int);
+  const detailResult = await runner(
+    `SELECT
+       sad.AttendanceDetailId,
+       sad.AttendanceId,
+       sad.StudentId,
+       COALESCE(NULLIF(sad.RollNumber, N''), s.RollNumber) AS RollNumber,
+       sad.Status,
+       sad.Remarks,
+       sad.CheckInTime,
+       sad.CheckOutTime
+     FROM dbo.StudentAttendanceDetails sad
+     LEFT JOIN dbo.Students s
+       ON s.StudentId = sad.StudentId
+     WHERE sad.AttendanceId IN (${idParams.placeholders})
+     ORDER BY sad.AttendanceId DESC, sad.AttendanceDetailId DESC;`,
+    idParams.params
+  );
+
+  const detailMap = new Map();
+  for (const row of detailResult?.recordset || []) {
+    const studentId = parseNumericId(row.StudentId);
+    if (!studentId || detailMap.has(studentId)) {
+      continue;
+    }
+
+    detailMap.set(studentId, {
+      attendanceDetailId: parseNumericId(row.AttendanceDetailId),
+      attendanceId: parseNumericId(row.AttendanceId),
+      studentId,
+      rollNumber: toNullableString(row.RollNumber),
+      status: normalizeAttendanceStatus(row.Status),
+      remarks: toNullableString(row.Remarks) || '',
+      checkInTime: row.CheckInTime || null,
+      checkOutTime: row.CheckOutTime || null,
+    });
+  }
+
+  return {
+    attendanceId: parseNumericId(headerRows[0]?.AttendanceId),
+    academicYearId: parseNumericId(headerRows[0]?.AcademicYearId),
+    markedByTeacherId: parseNumericId(headerRows[0]?.MarkedByTeacherId),
+    remarks: toNullableString(headerRows[0]?.Remarks),
+    detailMap,
+  };
+};
+
+const mapAttendanceSessionStudent = (studentRow, attendanceDetail = null) => {
+  const studentId = parseNumericId(studentRow?.StudentId);
+  if (!studentId) {
+    return null;
+  }
+
+  return {
+    _id: String(studentId),
+    id: String(studentId),
+    studentId: String(studentId),
+    dbId: studentId,
+    admissionNumber: toNullableString(studentRow.AdmissionNumber),
+    fullName:
+      toNullableString(studentRow.FullName)
+      || [studentRow.FirstName, studentRow.LastName]
+        .map((value) => toNullableString(value))
+        .filter(Boolean)
+        .join(' '),
+    rollNumber: toNullableString(studentRow.RollNumber),
+    rollNo: toNullableString(studentRow.RollNumber),
+    academicYearId: parseNumericId(studentRow.AcademicYearId),
+    classDbId: parseNumericId(studentRow.ClassId),
+    sectionDbId: parseNumericId(studentRow.SectionId),
+    className: toNullableString(studentRow.ClassName),
+    class: toNullableString(studentRow.ClassName),
+    sectionName: toNullableString(studentRow.SectionName),
+    section: toNullableString(studentRow.SectionName),
+    currentStatus: attendanceDetail?.status || '',
+    currentRemarks: attendanceDetail?.remarks || '',
+    currentCheckInTime: attendanceDetail?.checkInTime || '',
+    currentCheckOutTime: attendanceDetail?.checkOutTime || '',
+    attendanceId: attendanceDetail?.attendanceId ? String(attendanceDetail.attendanceId) : null,
+    attendanceDetailId: attendanceDetail?.attendanceDetailId ? String(attendanceDetail.attendanceDetailId) : null,
+  };
 };
 
 const saveAttendanceSession = async ({
@@ -1071,64 +1405,153 @@ const saveAttendanceSession = async ({
       normalizedStudents.map((student) => student.studentId),
       tx
     );
-
-    if (studentRows.length !== normalizedStudents.length) {
-      throw new Error('One or more selected students were not found in SQL Server.');
-    }
-
     const studentMap = new Map(
       studentRows.map((student) => [parseNumericId(student.StudentId), student])
     );
+    const requestedClassId = parseNumericId(classId);
+    const requestedClassName = toNullableString(className);
+    const requestedSectionId = parseNumericId(sectionId);
+    const requestedSectionName = toNullableString(sectionName);
 
-    let resolvedClassId = parseNumericId(classId) || await resolveClassIdByName(className, tx);
-    let resolvedSectionId = parseNumericId(sectionId);
-    let resolvedAcademicYearId = parseNumericId(academicYearId);
-    const classIds = new Set(studentRows.map((student) => parseNumericId(student.ClassId)).filter(Boolean));
-    const sectionIds = new Set(studentRows.map((student) => parseNumericId(student.SectionId)).filter(Boolean));
-    const academicYearIds = new Set(studentRows.map((student) => parseNumericId(student.AcademicYearId)).filter(Boolean));
+    let classContext = await resolveClassContext({ classId, className }, tx);
+    if (!classContext) {
+      if (requestedClassId || requestedClassName) {
+        throw createAttendanceValidationError('Selected class was not found.', []);
+      }
 
-    if (!resolvedClassId) {
+      const classIds = new Set(studentRows.map((student) => parseNumericId(student.ClassId)).filter(Boolean));
       if (classIds.size !== 1) {
         throw new Error('Please select a single class before saving attendance.');
       }
-      resolvedClassId = [...classIds][0];
+
+      const fallbackClassId = [...classIds][0];
+      classContext = await resolveClassContext({ classId: fallbackClassId }, tx) || {
+        classId: fallbackClassId,
+        className: toNullableString(
+          studentRows.find((student) => parseNumericId(student.ClassId) === fallbackClassId)?.ClassName
+        ),
+        academicYearId: null,
+      };
     }
 
-    if (!resolvedSectionId) {
-      resolvedSectionId = await resolveSectionIdByName(resolvedClassId, sectionName, tx);
-    }
-
-    if (!resolvedSectionId) {
-      if (sectionIds.size !== 1) {
-        throw new Error('Please select a section before saving attendance.');
+    let sectionContext = await resolveSectionContext(
+      { classId: classContext.classId, sectionId, sectionName },
+      tx
+    );
+    
+    // Allow NULL sections now - auto-created or student-based
+    if (!sectionContext?.sectionId && !requestedSectionId && !requestedSectionName) {
+      const sectionIds = new Set(studentRows.map((student) => parseNumericId(student.SectionId)).filter(Boolean));
+      if (sectionIds.size === 1) {
+        const fallbackSectionId = [...sectionIds][0];
+        sectionContext = await resolveSectionContext(
+          { classId: classContext.classId, sectionId: fallbackSectionId },
+          tx
+        );
       }
-      resolvedSectionId = [...sectionIds][0];
+    }
+    
+    if (!sectionContext) {
+      throw createAttendanceValidationError(`Section resolution failed for class ${classContext.className}. Available sections: ` + 
+        (await loadSectionsForClass(classContext.classId, tx)).map(s => s.sectionName).join(', ') || 'none', []);
     }
 
-    if (!resolvedAcademicYearId) {
-      if (academicYearIds.size !== 1) {
-        throw new Error('A valid academic year is required to save attendance.');
-      }
-      resolvedAcademicYearId = [...academicYearIds][0];
+    const resolvedClassId = classContext.classId;
+    const resolvedSectionId = sectionContext.sectionId;
+    const rosterStudents = await loadAttendanceRosterStudents(
+      { classId: resolvedClassId, sectionId: resolvedSectionId },
+      tx
+    );
+
+    if (!rosterStudents.length) {
+      throw createAttendanceValidationError('No students found for the selected class and section.', []);
     }
+
+    const rosterStudentIds = new Set(
+      rosterStudents.map((student) => parseNumericId(student.StudentId)).filter(Boolean)
+    );
+    const invalidStudents = [];
 
     for (const student of normalizedStudents) {
       const studentRow = studentMap.get(student.studentId);
+      let reason = null;
+
       if (!studentRow) {
-        throw new Error(`Student '${student.studentId}' was not found.`);
+        reason = 'Student record not found';
+      } else if (!parseNumericId(studentRow.ClassId) || !parseNumericId(studentRow.SectionId)) {
+        reason = 'Student is missing class or section mapping';
+      } else if (
+        parseNumericId(studentRow.ClassId) !== resolvedClassId
+        && parseNumericId(studentRow.SectionId) !== resolvedSectionId
+      ) {
+        reason = 'Mapped to different class and section';
+      } else if (parseNumericId(studentRow.ClassId) !== resolvedClassId) {
+        reason = 'Mapped to different class';
+      } else if (parseNumericId(studentRow.SectionId) !== resolvedSectionId) {
+        reason = 'Mapped to different section';
+      } else if (!rosterStudentIds.has(student.studentId)) {
+        reason = 'Student is inactive or unavailable in the selected class/section';
+      } else if (student.rollNumber && student.rollNumber !== toNullableString(studentRow.RollNumber)) {
+        reason = 'Roll number mismatch';
       }
 
-      if (parseNumericId(studentRow.ClassId) !== resolvedClassId) {
-        throw new Error(`Student '${student.studentId}' does not belong to the selected class.`);
+      if (reason) {
+        const actualClassId = parseNumericId(studentRow?.ClassId);
+        const actualSectionId = parseNumericId(studentRow?.SectionId);
+        invalidStudents.push({
+          studentId: student.studentId,
+          reason,
+          actualClassId,
+          actualSectionId,
+        });
+        console.warn('[attendance][validation]', {
+          studentId: student.studentId,
+          selectedClassId: resolvedClassId,
+          selectedSectionId: resolvedSectionId,
+          actualClassId,
+          actualSectionId,
+          reason,
+        });
       }
+    }
 
-      if (parseNumericId(studentRow.SectionId) !== resolvedSectionId) {
-        throw new Error(`Student '${student.studentId}' does not belong to the selected section.`);
-      }
+    if (invalidStudents.length) {
+      console.warn('[attendance][save-session-invalid]', {
+        attendanceDate: normalizedDate.toISOString().slice(0, 10),
+        requestedClassId: requestedClassId || null,
+        requestedSectionId: requestedSectionId || null,
+        resolvedClassId,
+        resolvedSectionId,
+        submittedStudentIds: normalizedStudents.map((student) => student.studentId),
+        invalidStudents,
+      });
+      throw createAttendanceValidationError(
+        'One or more students do not belong to the selected class/section.',
+        invalidStudents
+      );
+    }
 
-      if (student.rollNumber && student.rollNumber !== toNullableString(studentRow.RollNumber)) {
-        throw new Error(`Roll number mismatch for student '${student.studentId}'.`);
+    let resolvedAcademicYearId = parseNumericId(academicYearId) || classContext.academicYearId;
+    if (!resolvedAcademicYearId) {
+      const rosterAcademicYearIds = new Set(
+        rosterStudents.map((student) => parseNumericId(student.AcademicYearId)).filter(Boolean)
+      );
+      if (rosterAcademicYearIds.size === 1) {
+        resolvedAcademicYearId = [...rosterAcademicYearIds][0];
       }
+    }
+
+    if (!resolvedAcademicYearId) {
+      const submittedAcademicYearIds = new Set(
+        studentRows.map((student) => parseNumericId(student.AcademicYearId)).filter(Boolean)
+      );
+      if (submittedAcademicYearIds.size === 1) {
+        resolvedAcademicYearId = [...submittedAcademicYearIds][0];
+      }
+    }
+
+    if (!resolvedAcademicYearId) {
+      throw new Error('A valid academic year is required to save attendance.');
     }
 
     const resolvedMarkedByTeacherId = await resolveTeacherDbId(
@@ -1230,11 +1653,16 @@ const saveAttendanceSession = async ({
     );
 
     const existingDetailsByStudent = new Map();
-    const duplicateDetailIds = [];
+    const detailIdsToDelete = [];
     for (const row of existingDetailRows?.recordset || []) {
       const detailId = parseNumericId(row.AttendanceDetailId);
       const currentStudentId = parseNumericId(row.StudentId);
       if (!detailId || !currentStudentId) {
+        continue;
+      }
+
+      if (!rosterStudentIds.has(currentStudentId)) {
+        detailIdsToDelete.push(detailId);
         continue;
       }
 
@@ -1243,11 +1671,11 @@ const saveAttendanceSession = async ({
         continue;
       }
 
-      duplicateDetailIds.push(detailId);
+      detailIdsToDelete.push(detailId);
     }
 
-    if (duplicateDetailIds.length) {
-      const duplicateDetailParams = buildNumericIdParams(duplicateDetailIds, 'DuplicateDetailId', sql.Int);
+    if (detailIdsToDelete.length) {
+      const duplicateDetailParams = buildNumericIdParams(detailIdsToDelete, 'DuplicateDetailId', sql.Int);
       await tx.query(
         `DELETE FROM dbo.StudentAttendanceDetails
          WHERE AttendanceDetailId IN (${duplicateDetailParams.placeholders});`,
@@ -1509,8 +1937,156 @@ const upsertAttendanceRecord = async ({
   };
 };
 
+const getAttendanceSession = async ({
+  attendanceDate,
+  classId = null,
+  sectionId = null,
+  className = null,
+  sectionName = null,
+} = {}) => {
+  await ensureAttendanceSqlReady();
+
+  const normalizedDate = normalizeDateOnly(attendanceDate || new Date());
+  if (!normalizedDate) {
+    throw new Error('A valid attendance date is required.');
+  }
+
+  const classContext = await resolveClassContext({ classId, className });
+  if (!classContext?.classId) {
+    return {
+      attendanceDate: normalizedDate,
+      classId: parseNumericId(classId),
+      className: toNullableString(className),
+      sectionId: parseNumericId(sectionId),
+      sectionName: toNullableString(sectionName),
+      academicYearId: null,
+      attendanceId: null,
+      alreadyMarked: false,
+      remarks: null,
+      sections: [],
+      students: [],
+      summary: {
+        totalStudents: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        notMarked: 0,
+      },
+    };
+  }
+
+  const sections = await loadSectionsForClass(classContext.classId);
+  let effectiveSectionContext = await resolveSectionContext(
+    { classId: classContext.classId, sectionId, sectionName },
+    null
+  );
+
+  if (!effectiveSectionContext && sections.length) {
+    effectiveSectionContext = sections[0];
+  }
+
+  if (!effectiveSectionContext?.sectionId) {
+    return {
+      attendanceDate: normalizedDate,
+      classId: classContext.classId,
+      className: classContext.className,
+      sectionId: parseNumericId(sectionId),
+      sectionName: toNullableString(sectionName),
+      academicYearId: classContext.academicYearId,
+      attendanceId: null,
+      alreadyMarked: false,
+      remarks: null,
+      sections: sections.map((section) => ({
+        id: String(section.sectionId),
+        sectionId: section.sectionId,
+        name: section.sectionName,
+        sectionName: section.sectionName,
+      })),
+      students: [],
+      summary: {
+        totalStudents: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        notMarked: 0,
+      },
+    };
+  }
+
+  const rosterStudents = await loadAttendanceRosterStudents({
+    classId: classContext.classId,
+    sectionId: effectiveSectionContext.sectionId,
+  });
+  const existingSession = await loadExistingAttendanceSession({
+    attendanceDate: normalizedDate,
+    classId: classContext.classId,
+    sectionId: effectiveSectionContext.sectionId,
+  });
+
+  const students = rosterStudents
+    .map((student) => mapAttendanceSessionStudent(
+      student,
+      existingSession.detailMap.get(parseNumericId(student.StudentId)) || null
+    ))
+    .filter(Boolean);
+
+  const summary = students.reduce(
+    (acc, student) => {
+      acc.totalStudents += 1;
+
+      if (student.currentStatus === 'Present') {
+        acc.present += 1;
+      } else if (student.currentStatus === 'Absent') {
+        acc.absent += 1;
+      } else if (student.currentStatus === 'Late') {
+        acc.late += 1;
+      } else {
+        acc.notMarked += 1;
+      }
+
+      return acc;
+    },
+    {
+      totalStudents: 0,
+      present: 0,
+      absent: 0,
+      late: 0,
+      notMarked: 0,
+    }
+  );
+
+  const academicYearIds = new Set(
+    rosterStudents.map((student) => parseNumericId(student.AcademicYearId)).filter(Boolean)
+  );
+
+  return {
+    attendanceDate: normalizedDate,
+    classId: classContext.classId,
+    className: classContext.className,
+    sectionId: effectiveSectionContext.sectionId,
+    sectionName: effectiveSectionContext.sectionName,
+    academicYearId:
+      existingSession.academicYearId
+      || classContext.academicYearId
+      || (academicYearIds.size === 1 ? [...academicYearIds][0] : null),
+    attendanceId: existingSession.attendanceId ? String(existingSession.attendanceId) : null,
+    alreadyMarked: existingSession.detailMap.size > 0,
+    remarks: existingSession.remarks || null,
+    sections: sections.map((section) => ({
+      id: String(section.sectionId),
+      sectionId: section.sectionId,
+      name: section.sectionName,
+      sectionName: section.sectionName,
+    })),
+    students,
+    summary,
+  };
+};
+
 const getAttendanceList = async ({
   studentId = null,
+  classId = null,
+  sectionId = null,
   className = null,
   sectionName = null,
   date = null,
@@ -1527,6 +2103,8 @@ const getAttendanceList = async ({
   const offset = Math.max(safePage - 1, 0) * safeLimit;
   const filter = buildAttendanceQueryFilters({
     studentId,
+    classId,
+    sectionId,
     className,
     sectionName,
     date,
@@ -1709,6 +2287,7 @@ module.exports = {
   getAttendanceByStudentDate,
   upsertAttendanceRecord,
   saveAttendanceSession,
+  getAttendanceSession,
   getAttendanceList,
   getStudentAttendanceReport,
   getClassAttendanceSummary,

@@ -5,6 +5,7 @@ const {
   updateAttendance,
   markBulkAttendance,
   saveAttendance,
+  getAttendanceSessionDetails,
   getAttendance,
   getAttendanceReport,
   getStudentAttendance,
@@ -24,6 +25,8 @@ router.route('/')
 router.post('/save', authorize('admin', 'teacher'), saveAttendance);
 
 router.post('/bulk', authorize('admin', 'teacher'), markBulkAttendance);
+
+router.get('/session', authorize('admin', 'teacher'), getAttendanceSessionDetails);
 
 router.get('/report', authorize('admin', 'teacher'), getAttendanceReport);
 

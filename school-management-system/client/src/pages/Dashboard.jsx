@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
   BookOpen,
@@ -10,7 +10,8 @@ import {
   DollarSign,
   Bus,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  ArrowRight
 } from "lucide-react";
 import {
   LineChart,
@@ -29,141 +30,256 @@ import {
 } from "recharts";
 
 import { useAuth } from "../context/AuthContext";
-import { getDashboardStats, getStudents, getFeeStats, getBuses } from "../services/api";
+import { DASHBOARD_REFRESH_EVENT, getDashboardStats } from "../services/api";
 import StatCard from "../components/StatCard";
 import ChartCard from "../components/ChartCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 
+const currencyFormatter = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0
+});
+
+const formatCurrency = (value = 0) => `₹${currencyFormatter.format(Number(value) || 0)}`;
+
+const formatCompactCurrency = (value = 0) => {
+  const numericValue = Number(value) || 0;
+  const absoluteValue = Math.abs(numericValue);
+
+  if (absoluteValue >= 10000000) {
+    return `₹${(numericValue / 10000000).toFixed(1)}Cr`;
+  }
+
+  if (absoluteValue >= 100000) {
+    return `₹${(numericValue / 100000).toFixed(1)}L`;
+  }
+
+  if (absoluteValue >= 1000) {
+    return `₹${(numericValue / 1000).toFixed(1)}K`;
+  }
+
+  return formatCurrency(numericValue);
+};
+
+const hasMeaningfulSeriesData = (data = [], keys = []) =>
+  Array.isArray(data) && data.some((item) => keys.some((key) => Number(item?.[key] || 0) > 0));
+
+const DashboardPanelEmptyState = ({ title, description }) => (
+  <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 text-center">
+    <p className="text-sm font-semibold text-gray-900">{title}</p>
+    <p className="mt-2 max-w-sm text-sm text-gray-500">{description}</p>
+  </div>
+);
+
+const defaultStats = {
+  students: 0,
+  teachers: 0,
+  subjects: 0,
+  materials: 0
+};
+
+const defaultFeeStats = {
+  totalFees: 0,
+  totalPaid: 0,
+  totalPending: 0,
+  overdueCount: 0
+};
+
+const defaultBusStats = {
+  total: 0,
+  active: 0,
+  onRoute: 0,
+  filters: {
+    total: "",
+    active: "Active",
+    onRoute: "On Route"
+  }
+};
+
+const defaultAttendanceSummary = {
+  totalStudents: 0,
+  markedStudents: 0,
+  unmarkedStudents: 0,
+  present: 0,
+  absent: 0,
+  late: 0,
+  leave: 0,
+  percentage: 0,
+  isMarked: false
+};
+
+const normalizeRecentStudent = (student) => {
+  if (!student) {
+    return null;
+  }
+
+  const studentId = student.studentId || student.id || student._id || null;
+  if (!studentId) {
+    return null;
+  }
+
+  const name = student.name || student.fullName || "Unknown";
+  const rollNumber = student.rollNumber || student.rollNo || null;
+  const className = student.class || student.className || "";
+  const sectionName = student.section || student.sectionName || "";
+
+  return {
+    ...student,
+    _id: String(studentId),
+    id: String(studentId),
+    studentId: String(studentId),
+    name,
+    fullName: name,
+    rollNumber,
+    rollNo: rollNumber,
+    class: className,
+    className,
+    section: sectionName,
+    sectionName,
+  };
+};
+
+const normalizeStudentGrowthPoint = (point = {}) => ({
+  month: point.month || point.label || "",
+  year: Number(point.year || 0),
+  students: Number(point.students ?? point.count ?? point.total ?? 0),
+});
+
+const normalizeFeeCollectionPoint = (point = {}) => ({
+  month: point.month || point.label || "",
+  year: Number(point.year || 0),
+  collected: Number(point.collected ?? point.totalCollected ?? point.paid ?? 0),
+  pending: Number(point.pending ?? point.totalPending ?? point.due ?? 0),
+});
+
 const Dashboard = () => {
   const { user, isAdmin, isTeacher, isStudent, isParent, isAccountant } = useAuth();
+  const navigate = useNavigate();
   const canViewStudentPreview = isAdmin || isTeacher;
-  const canViewFeeSummary = isAdmin || isAccountant;
 
-  const [stats, setStats] = useState({
-    students: 0,
-    teachers: 0,
-    subjects: 0,
-    materials: 0
-  });
-
-  const [feeStats, setFeeStats] = useState({
-    totalFees: 0,
-    totalPaid: 0,
-    totalPending: 0,
-    overdueCount: 0
-  });
-
-  const [busStats, setBusStats] = useState({
-    total: 0,
-    active: 0,
-    onRoute: 0
-  });
-
-  const [todayAttendanceSummary, setTodayAttendanceSummary] = useState({
-    present: 0,
-    absent: 0,
-    late: 0,
-    leave: 0,
-    total: 0,
-    percentage: 0
-  });
-
-  const [attendanceData, setAttendanceData] = useState([]);
+  const [stats, setStats] = useState(defaultStats);
+  const [feeStats, setFeeStats] = useState(defaultFeeStats);
+  const [busStats, setBusStats] = useState(defaultBusStats);
+  const [todayAttendanceSummary, setTodayAttendanceSummary] = useState(defaultAttendanceSummary);
   const [recentStudents, setRecentStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Chart data
   const [studentGrowthData, setStudentGrowthData] = useState([]);
   const [feeCollectionData, setFeeCollectionData] = useState([]);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData({ showLoader: refreshToken === 0 });
+  }, [refreshToken]);
+
+  useEffect(() => {
+    const requestDashboardRefresh = () => {
+      setRefreshToken((currentValue) => currentValue + 1);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestDashboardRefresh();
+      }
+    };
+
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, requestDashboardRefresh);
+    window.addEventListener("focus", requestDashboardRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    const refreshIntervalId = window.setInterval(requestDashboardRefresh, 60000);
+
+    return () => {
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, requestDashboardRefresh);
+      window.removeEventListener("focus", requestDashboardRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(refreshIntervalId);
+    };
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async ({ showLoader = true } = {}) => {
     try {
-      setLoading(true);
-
-      const [statsRes, studentsRes, feeRes, busRes] = await Promise.all([
-        getDashboardStats(),
-        canViewStudentPreview ? getStudents(1, 5) : Promise.resolve({ data: { students: [] } }),
-        canViewFeeSummary ? getFeeStats() : Promise.resolve({ data: { data: {} } }),
-        isAdmin ? getBuses() : Promise.resolve({ data: { data: [] } })
-      ]);
-
-      const statsData = statsRes?.data?.stats || statsRes?.data || {};
-      setStats({
-        students: statsData.students || 0,
-        teachers: statsData.teachers || 0,
-        subjects: statsData.subjects || 0,
-        materials: statsData.materials || 0
-      });
-
-      // Fee stats
-      if (feeRes?.data?.data) {
-        setFeeStats(feeRes.data.data);
+      if (showLoader) {
+        setLoading(true);
       }
 
-      // Bus stats
-      const busesData = busRes?.data?.data || [];
-      setBusStats({
-        total: busesData.length,
-        active: busesData.filter(b => b.currentStatus === 'Active').length,
-        onRoute: busesData.filter(b => b.currentStatus === 'On Route').length
+      const response = await getDashboardStats();
+      const dashboardData = response?.data?.data || response?.data || {};
+      const statsData = dashboardData.stats || {};
+      const feeSummary = dashboardData.feeSummary || {};
+      const busFleetStatus = dashboardData.busFleetStatus || {};
+      const attendanceSummary = dashboardData.attendanceSummary || dashboardData.todayAttendance || {};
+
+      setStats({
+        students: Number(statsData.students || statsData.totalStudents || dashboardData.totalStudents || 0),
+        teachers: Number(statsData.teachers || statsData.totalTeachers || dashboardData.totalTeachers || 0),
+        subjects: Number(statsData.subjects || statsData.totalSubjects || dashboardData.totalSubjects || 0),
+        materials: Number(statsData.materials || statsData.totalMaterials || dashboardData.totalMaterials || 0)
       });
 
-      const todayAttendance = statsRes?.data?.todayAttendance || {};
-      const present = Number(todayAttendance.present || 0);
-      const absent = Number(todayAttendance.absent || 0);
-      const leave = Number(todayAttendance.leave || 0);
-      const totalAttendance = Number(todayAttendance.total || 0);
+      setFeeStats({
+        totalFees: Number(feeSummary.totalFees || statsData.totalFees || 0),
+        totalPaid: Number(feeSummary.totalPaid || statsData.totalFeesCollected || dashboardData.totalFeesCollected || 0),
+        totalPending: Number(feeSummary.totalPending || statsData.pendingFees || dashboardData.pendingFees || 0),
+        overdueCount: Number(feeSummary.overdueCount || 0)
+      });
+
+      setBusStats({
+        total: Number(busFleetStatus.total || busFleetStatus.totalBuses || 0),
+        active: Number(busFleetStatus.active || busFleetStatus.activeBuses || 0),
+        onRoute: Number(busFleetStatus.onRoute || busFleetStatus.onRouteBuses || 0),
+        filters: busFleetStatus.filters || defaultBusStats.filters
+      });
 
       setTodayAttendanceSummary({
-        present,
-        absent,
-        late: Number(todayAttendance.late || 0),
-        leave,
-        total: totalAttendance,
-        percentage: Number(todayAttendance.percentage || 0)
+        totalStudents: Number(
+          attendanceSummary.totalStudents || attendanceSummary.total || dashboardData.totalStudents || 0
+        ),
+        markedStudents: Number(attendanceSummary.markedStudents || 0),
+        unmarkedStudents: Number(attendanceSummary.unmarkedStudents || 0),
+        present: Number(attendanceSummary.present || 0),
+        absent: Number(attendanceSummary.absent || 0),
+        late: Number(attendanceSummary.late || 0),
+        leave: Number(attendanceSummary.leave || 0),
+        percentage: Number(attendanceSummary.percentage || 0),
+        isMarked: Boolean(
+          attendanceSummary.isMarked || Number(attendanceSummary.markedStudents || 0) > 0
+        )
       });
 
-      setAttendanceData(
-        totalAttendance > 0
-          ? [
-              { name: 'Present', value: present, color: '#10B981' },
-              { name: 'Absent', value: absent, color: '#EF4444' },
-              { name: 'Leave', value: leave, color: '#F59E0B' }
-            ]
-          : [{ name: 'No Records', value: 1, color: '#CBD5E1' }]
+      setRecentStudents(
+        (Array.isArray(dashboardData.recentStudents) ? dashboardData.recentStudents : [])
+          .map(normalizeRecentStudent)
+          .filter(Boolean)
       );
-
-      // Safely handle students array
-      const studentsData = studentsRes?.data?.students || studentsRes?.data || [];
-      setRecentStudents(Array.isArray(studentsData) ? studentsData : []);
-
       setStudentGrowthData(
-        Array.isArray(statsRes?.data?.studentGrowthTrend) ? statsRes.data.studentGrowthTrend : []
+        (Array.isArray(dashboardData.studentGrowthTrend)
+          ? dashboardData.studentGrowthTrend
+          : Array.isArray(dashboardData.studentGrowth)
+            ? dashboardData.studentGrowth
+            : []
+        ).map(normalizeStudentGrowthPoint)
       );
 
-      setFeeCollectionData(
-        Array.isArray(statsRes?.data?.feeCollectionTrend) ? statsRes.data.feeCollectionTrend : []
-      );
+      const feeGraphData = Array.isArray(dashboardData.feeCollectionGraph)
+        ? dashboardData.feeCollectionGraph
+        : Array.isArray(dashboardData.feeCollectionTrend)
+          ? dashboardData.feeCollectionTrend
+          : [];
+      setFeeCollectionData(feeGraphData.map(normalizeFeeCollectionPoint));
     } catch (error) {
       console.error("Dashboard fetch error:", error);
-      setRecentStudents([]);
-      setTodayAttendanceSummary({
-        present: 0,
-        absent: 0,
-        late: 0,
-        leave: 0,
-        total: 0,
-        percentage: 0
-      });
-      setAttendanceData([]);
-      setStudentGrowthData([]);
-      setFeeCollectionData([]);
+      if (showLoader) {
+        setStats(defaultStats);
+        setFeeStats(defaultFeeStats);
+        setBusStats(defaultBusStats);
+        setTodayAttendanceSummary(defaultAttendanceSummary);
+        setRecentStudents([]);
+        setStudentGrowthData([]);
+        setFeeCollectionData([]);
+      }
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
     }
   };
 
@@ -174,13 +290,149 @@ const Dashboard = () => {
     return "Good Evening";
   };
 
+  const openBusDetails = (status = "") => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    navigate(`/bus-tracking${query}`);
+  };
+
+  const openStudentDetails = (studentId) => {
+    if (!studentId) return;
+    navigate(`/students/${studentId}`);
+  };
+
+  const feeCollectionHasData = hasMeaningfulSeriesData(feeCollectionData, ["collected", "pending"]);
+  const studentGrowthHasData = hasMeaningfulSeriesData(studentGrowthData, ["students"]);
+  const attendanceData = todayAttendanceSummary.isMarked
+    ? [
+        { name: "Present", value: todayAttendanceSummary.present, color: "#10B981" },
+        { name: "Absent", value: todayAttendanceSummary.absent, color: "#EF4444" },
+        ...(todayAttendanceSummary.late > 0
+          ? [{ name: "Late", value: todayAttendanceSummary.late, color: "#F59E0B" }]
+          : []),
+        ...(todayAttendanceSummary.leave > 0
+          ? [{ name: "Leave", value: todayAttendanceSummary.leave, color: "#6366F1" }]
+          : [])
+      ].filter((entry) => entry.value > 0)
+    : [];
+  const attendanceHasData = todayAttendanceSummary.isMarked && attendanceData.length > 0;
+
+  const feeCollectionContent = (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg bg-emerald-50 p-4">
+          <p className="text-sm text-emerald-700">Collected Fees</p>
+          <p className="mt-1 text-xl font-semibold text-emerald-900">
+            {formatCurrency(feeStats.totalPaid)}
+          </p>
+        </div>
+        <div className="rounded-lg bg-amber-50 p-4">
+          <p className="text-sm text-amber-700">Pending Fees</p>
+          <p className="mt-1 text-xl font-semibold text-amber-900">
+            {formatCurrency(feeStats.totalPending)}
+          </p>
+        </div>
+      </div>
+
+      {feeCollectionHasData ? (
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={feeCollectionData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+              <XAxis dataKey="month" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis
+                stroke="#6B7280"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={formatCompactCurrency}
+              />
+              <Tooltip
+                formatter={(value, name) => [formatCurrency(value), name]}
+                contentStyle={{
+                  backgroundColor: "#fff",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: "8px"
+                }}
+              />
+              <Legend />
+              <Bar dataKey="collected" name="Collected Fees" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={36} />
+              <Bar dataKey="pending" name="Pending Fees" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={36} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <DashboardPanelEmptyState
+          title="No fee collection data available"
+          description="Monthly collected and pending fee trends will appear here once fee records are available."
+        />
+      )}
+    </div>
+  );
+
+  const attendanceSummaryCards = [
+    {
+      label: "Total Students",
+      value: todayAttendanceSummary.totalStudents,
+      className: "bg-slate-50 text-slate-900",
+      labelClassName: "text-slate-500"
+    },
+    {
+      label: "Present",
+      value: todayAttendanceSummary.present,
+      className: "bg-emerald-50 text-emerald-900",
+      labelClassName: "text-emerald-700"
+    },
+    {
+      label: "Absent",
+      value: todayAttendanceSummary.absent,
+      className: "bg-red-50 text-red-900",
+      labelClassName: "text-red-700"
+    },
+    {
+      label: "Attendance %",
+      value: `${todayAttendanceSummary.percentage.toFixed(1)}%`,
+      className: "bg-blue-50 text-blue-900",
+      labelClassName: "text-blue-700",
+      helper: `Based on ${todayAttendanceSummary.markedStudents} marked students`
+    }
+  ];
+
+  const busFleetItems = [
+    {
+      key: "total",
+      label: "Total Buses",
+      value: busStats.total,
+      icon: Bus,
+      filter: busStats.filters?.total || "",
+      containerClass: "bg-blue-50 hover:bg-blue-100",
+      iconClass: "bg-blue-100 text-blue-600"
+    },
+    {
+      key: "active",
+      label: "Active",
+      value: busStats.active,
+      icon: CheckCircle,
+      filter: busStats.filters?.active || "Active",
+      containerClass: "bg-green-50 hover:bg-green-100",
+      iconClass: "bg-green-100 text-green-600"
+    },
+    {
+      key: "onRoute",
+      label: "On Route",
+      value: busStats.onRoute,
+      icon: TrendingUp,
+      filter: busStats.filters?.onRoute || "On Route",
+      containerClass: "bg-purple-50 hover:bg-purple-100",
+      iconClass: "bg-purple-100 text-purple-600"
+    }
+  ];
+
   if (loading) {
     return <LoadingSpinner text="Loading dashboard..." />;
   }
 
   return (
     <div>
-      {/* Welcome Header */}
       <div className="bg-gradient-to-r from-[#002366] to-[#001a4d] rounded-xl p-6 mb-6 text-white">
         <h1 className="text-2xl font-bold">
           {getGreeting()}, {user?.fullName?.split(" ")[0] || "User"}!
@@ -199,34 +451,21 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         {isAdmin && (
           <>
-            <StatCard
-              title="Total Students"
-              value={stats.students}
-              icon={Users}
-              color="blue"
-              trend={5}
-            />
-            <StatCard
-              title="Total Teachers"
-              value={stats.teachers}
-              icon={GraduationCap}
-              color="green"
-              trend={2}
-            />
+            <StatCard title="Total Students" value={stats.students} icon={Users} color="blue" trend={5} />
+            <StatCard title="Total Teachers" value={stats.teachers} icon={GraduationCap} color="green" trend={2} />
             <StatCard
               title="Total Fees Collected"
-              value={`₹${(feeStats.totalPaid / 1000).toFixed(1)}K`}
+              value={formatCompactCurrency(feeStats.totalPaid)}
               icon={DollarSign}
               color="purple"
               trend={12}
             />
             <StatCard
               title="Pending Fees"
-              value={`₹${(feeStats.totalPending / 1000).toFixed(1)}K`}
+              value={formatCompactCurrency(feeStats.totalPending)}
               icon={AlertCircle}
               color="yellow"
             />
@@ -235,24 +474,9 @@ const Dashboard = () => {
 
         {isTeacher && (
           <>
-            <StatCard
-              title="My Subjects"
-              value={stats.subjects}
-              icon={BookOpen}
-              color="blue"
-            />
-            <StatCard
-              title="Students"
-              value={stats.students}
-              icon={Users}
-              color="green"
-            />
-            <StatCard
-              title="Materials"
-              value={stats.materials}
-              icon={FileText}
-              color="purple"
-            />
+            <StatCard title="My Subjects" value={stats.subjects} icon={BookOpen} color="blue" />
+            <StatCard title="Students" value={stats.students} icon={Users} color="green" />
+            <StatCard title="Materials" value={stats.materials} icon={FileText} color="purple" />
             <StatCard
               title="Attendance Today"
               value={`${Number(todayAttendanceSummary.percentage || 0).toFixed(1)}%`}
@@ -264,24 +488,9 @@ const Dashboard = () => {
 
         {isAccountant && (
           <>
-            <StatCard
-              title="Total Fee Ledger"
-              value={`₹${(Number(feeStats.totalFees || 0) / 1000).toFixed(1)}K`}
-              icon={DollarSign}
-              color="blue"
-            />
-            <StatCard
-              title="Collected"
-              value={`₹${(Number(feeStats.totalPaid || 0) / 1000).toFixed(1)}K`}
-              icon={CheckCircle}
-              color="green"
-            />
-            <StatCard
-              title="Pending"
-              value={`₹${(Number(feeStats.totalPending || 0) / 1000).toFixed(1)}K`}
-              icon={AlertCircle}
-              color="yellow"
-            />
+            <StatCard title="Total Fee Ledger" value={formatCompactCurrency(feeStats.totalFees)} icon={DollarSign} color="blue" />
+            <StatCard title="Collected" value={formatCompactCurrency(feeStats.totalPaid)} icon={CheckCircle} color="green" />
+            <StatCard title="Pending" value={formatCompactCurrency(feeStats.totalPending)} icon={AlertCircle} color="yellow" />
             <StatCard
               title="Overdue Accounts"
               value={Number(feeStats.overdueCount || 0)}
@@ -292,58 +501,45 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Charts Section */}
       {isAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Student Growth Chart */}
           <ChartCard title="Student Growth" subtitle="Monthly student enrollment">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={studentGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
-                  <YAxis stroke="#6B7280" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="students"
-                    stroke="#002366"
-                    strokeWidth={3}
-                    dot={{ fill: '#002366', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {studentGrowthHasData ? (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={studentGrowthData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                    <XAxis dataKey="month" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      formatter={(value) => [`${value} students`, "Enrolled"]}
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #E5E7EB",
+                        borderRadius: "8px"
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="students"
+                      stroke="#002366"
+                      strokeWidth={3}
+                      dot={{ fill: "#002366", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <DashboardPanelEmptyState
+                title="No student growth data available"
+                description="Monthly enrollment data will show here after student records are created."
+              />
+            )}
           </ChartCard>
 
-          {/* Fee Collection Chart */}
           <ChartCard title="Fee Collection" subtitle="Monthly fee collection vs pending">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={feeCollectionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
-                  <YAxis stroke="#6B7280" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="collected" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pending" name="Pending" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {feeCollectionContent}
           </ChartCard>
         </div>
       )}
@@ -351,25 +547,7 @@ const Dashboard = () => {
       {isAccountant && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <ChartCard title="Fee Collection" subtitle="Monthly fee collection vs pending">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={feeCollectionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
-                  <YAxis stroke="#6B7280" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="collected" name="Collected" fill="#10B981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pending" name="Pending" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {feeCollectionContent}
           </ChartCard>
 
           <ChartCard title="Collection Snapshot" subtitle="Finance summary for the current cycle">
@@ -378,7 +556,7 @@ const Dashboard = () => {
                 <div>
                   <p className="text-sm text-emerald-700">Collected</p>
                   <p className="text-2xl font-semibold text-emerald-900">
-                    ₹{Number(feeStats.totalPaid || 0).toLocaleString('en-IN')}
+                    {formatCurrency(feeStats.totalPaid)}
                   </p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-emerald-600" />
@@ -387,7 +565,7 @@ const Dashboard = () => {
                 <div>
                   <p className="text-sm text-amber-700">Pending</p>
                   <p className="text-2xl font-semibold text-amber-900">
-                    ₹{Number(feeStats.totalPending || 0).toLocaleString('en-IN')}
+                    {formatCurrency(feeStats.totalPending)}
                   </p>
                 </div>
                 <AlertCircle className="h-8 w-8 text-amber-600" />
@@ -406,72 +584,95 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Second Row: Attendance Pie & Quick Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Attendance Pie Chart */}
         {isAdmin && (
           <ChartCard title="Today's Attendance" subtitle="Attendance overview">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={attendanceData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {attendanceData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {attendanceHasData ? (
+              <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={attendanceData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={58}
+                        outerRadius={84}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {attendanceData.map((entry, index) => (
+                          <Cell key={`attendance-cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+                  {attendanceSummaryCards.map((item) => (
+                    <div key={item.label} className={`rounded-lg p-4 ${item.className}`}>
+                      <p className={`text-sm ${item.labelClassName}`}>{item.label}</p>
+                      <p className="mt-1 text-2xl font-semibold">{item.value}</p>
+                      {item.helper ? (
+                        <p className={`mt-1 text-xs ${item.labelClassName}`}>{item.helper}</p>
+                      ) : null}
+                    </div>
+                  ))}
+
+                  {(todayAttendanceSummary.late > 0 || todayAttendanceSummary.leave > 0 || todayAttendanceSummary.unmarkedStudents > 0) && (
+                    <div className="sm:col-span-2 rounded-lg bg-amber-50 p-4">
+                      <p className="text-sm text-amber-800">
+                        Late: {todayAttendanceSummary.late} | Leave: {todayAttendanceSummary.leave}
+                        {todayAttendanceSummary.unmarkedStudents > 0
+                          ? ` | Awaiting mark: ${todayAttendanceSummary.unmarkedStudents}`
+                          : ""}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <DashboardPanelEmptyState
+                title="Attendance not marked for today"
+                description={
+                  todayAttendanceSummary.totalStudents > 0
+                    ? `No attendance records are available yet for ${todayAttendanceSummary.totalStudents} students.`
+                    : "No attendance records are available yet."
+                }
+              />
+            )}
           </ChartCard>
         )}
 
-        {/* Bus Stats */}
         {isAdmin && (
           <ChartCard title="Bus Fleet Status" subtitle="Active vehicles">
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Bus className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{busStats.total}</p>
-                    <p className="text-sm text-gray-500">Total Buses</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{busStats.active}</p>
-                    <p className="text-sm text-gray-500">Active</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <TrendingUp className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{busStats.onRoute}</p>
-                    <p className="text-sm text-gray-500">On Route</p>
-                  </div>
-                </div>
-              </div>
+              {busFleetItems.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => openBusDetails(item.filter)}
+                    className={`flex w-full items-center justify-between rounded-lg p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${item.containerClass}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-lg p-2 ${item.iconClass}`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{item.value}</p>
+                        <p className="text-sm text-gray-500">{item.label}</p>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400" />
+                  </button>
+                );
+              })}
             </div>
           </ChartCard>
         )}
@@ -495,8 +696,7 @@ const Dashboard = () => {
           </ChartCard>
         )}
 
-        {/* Recent Students + Quick Actions */}
-        {(isAdmin || isTeacher) && (
+        {canViewStudentPreview && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Recent Students
@@ -504,26 +704,36 @@ const Dashboard = () => {
             <div className="space-y-3">
               {recentStudents.length > 0 ? (
                 recentStudents.map((student) => (
-                  <div
-                    key={student._id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  <button
+                    key={student.studentId || student.id || student._id}
+                    type="button"
+                    onClick={() => openStudentDetails(student.studentId || student.id || student._id)}
+                    className="flex w-full items-center gap-3 rounded-lg bg-gray-50 p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-gray-100 hover:shadow-sm"
                   >
                     <div className="w-10 h-10 rounded-full bg-[#002366] flex items-center justify-center text-white font-medium">
-                      {student?.fullName?.charAt(0) || "S"}
+                      {(student?.name || student?.fullName || "S").charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate">
-                        {student?.fullName || "Unknown"}
+                        {student?.name || student?.fullName || "Unknown"}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {student?.className || student?.class || "-"} {student?.section || ""}
+                        {student?.class || "-"} {student?.section || ""}
                       </p>
+                      {(student?.rollNumber || student?.admissionNumber) && (
+                        <p className="text-xs text-gray-400">
+                          {student?.rollNumber
+                            ? `Roll No: ${student.rollNumber}`
+                            : `Admission No: ${student.admissionNumber}`}
+                        </p>
+                      )}
                     </div>
-                  </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400" />
+                  </button>
                 ))
               ) : (
                 <p className="text-gray-500 text-center py-4">
-                  No students found
+                  No recent students available
                 </p>
               )}
             </div>
@@ -538,7 +748,7 @@ const Dashboard = () => {
             <div className="space-y-3">
               <div className="rounded-lg bg-slate-50 p-4">
                 <p className="text-sm text-slate-500">Current Role</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{user?.role || 'User'}</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{user?.role || "User"}</p>
               </div>
               <div className="rounded-lg bg-blue-50 p-4">
                 <p className="text-sm text-blue-600">Dashboard Access</p>
@@ -547,7 +757,7 @@ const Dashboard = () => {
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-sm text-emerald-600">Primary Modules</p>
                 <p className="mt-1 text-base font-medium text-emerald-900">
-                  {isStudent ? 'Timetable and academic overview' : 'Timetable and transport overview'}
+                  {isStudent ? "Timetable and academic overview" : "Timetable and transport overview"}
                 </p>
               </div>
             </div>
@@ -555,7 +765,6 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Quick Actions
@@ -677,7 +886,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* System Info */}
       <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           System Information
@@ -702,4 +910,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

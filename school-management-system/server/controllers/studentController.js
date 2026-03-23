@@ -6,6 +6,7 @@ const Bus = require('../models/Bus');
 const Meeting = require('../models/Meeting');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
+const { getSqlClient, executeQuery } = require('../config/sqlServer');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const {
@@ -158,6 +159,167 @@ const isStoredPasswordMatch = async (inputPassword, storedPassword) => {
   }
 
   return normalizedInput === normalizedStored;
+};
+
+const mapFeeRecordForDetails = (fee, fallbackAcademicYear = null, referenceDate = new Date()) => {
+  const amount = Number(fee?.amount || 0);
+  const paidAmount = Number(fee?.paidAmount || 0);
+  const pendingAmount = Number(fee?.pendingAmount ?? Math.max(amount - paidAmount, 0));
+  const dueDate = fee?.dueDate || null;
+  const isOverdue = pendingAmount > 0 && dueDate && new Date(dueDate) < referenceDate;
+
+  return {
+    id: fee?.id || fee?._id || null,
+    feeType: fee?.feeType || null,
+    academicYear: fee?.academicYear || fallbackAcademicYear || null,
+    dueDate,
+    amount,
+    paidAmount,
+    pendingAmount,
+    status: fee?.status || (pendingAmount > 0 ? 'Pending' : 'Paid'),
+    description: fee?.description || null,
+    paymentDate: fee?.paymentDate || null,
+    paymentMode: fee?.paymentMode || null,
+    receiptNumber: fee?.receiptNumber || null,
+    transactionId: fee?.transactionId || null,
+    remarks: fee?.remarks || null,
+    payments: Array.isArray(fee?.payments) ? fee.payments : [],
+    isOverdue,
+  };
+};
+
+const summarizeFeeRecords = (feeRecords = []) => feeRecords.reduce(
+  (acc, record) => {
+    acc.totalFees += Number(record.amount || 0);
+    acc.paidAmount += Number(record.paidAmount || 0);
+    acc.pendingAmount += Number(record.pendingAmount || 0);
+    if (record.isOverdue) {
+      acc.overdueCount += 1;
+    }
+    return acc;
+  },
+  {
+    totalFees: 0,
+    paidAmount: 0,
+    pendingAmount: 0,
+    overdueCount: 0,
+  }
+);
+
+const mapExamRecordForDetails = (record) => ({
+  id: record?.id || record?._id || null,
+  examName: record?.examName || record?.examId?.name || record?.examId?.title || 'Exam',
+  examDate: record?.examDate || record?.examId?.examDate || record?.examId?.date || null,
+  subject: typeof record?.subject === 'string'
+    ? record.subject
+    : record?.subject?.name || record?.subjectId?.name || 'Subject',
+  marksObtained: Number(record?.marksObtained || record?.marks || 0),
+  totalMarks: Number(record?.totalMarks || record?.examId?.totalMarks || 0),
+  percentage: Number(record?.percentage || 0),
+  grade: record?.grade || null,
+  remarks: record?.remarks || null,
+  isAbsent: record?.isAbsent === true,
+});
+
+const summarizeExamRecords = (examRecords = []) => {
+  const totals = examRecords.reduce(
+    (acc, record) => {
+      acc.totalExams += 1;
+      acc.totalMarks += Number(record.totalMarks || 0);
+      acc.totalObtained += Number(record.marksObtained || 0);
+      acc.percentageTotal += Number(record.percentage || 0);
+      return acc;
+    },
+    {
+      totalExams: 0,
+      totalMarks: 0,
+      totalObtained: 0,
+      percentageTotal: 0,
+    }
+  );
+
+  return {
+    totalExams: totals.totalExams,
+    totalMarks: totals.totalMarks,
+    totalObtained: totals.totalObtained,
+    averagePercentage: totals.totalExams > 0
+      ? Number((totals.percentageTotal / totals.totalExams).toFixed(2))
+      : 0,
+  };
+};
+
+const buildAttendanceSnapshotForDetails = (attendanceRecords = []) => {
+  const summary = attendanceRecords.reduce(
+    (acc, record) => {
+      const normalizedStatus = String(record?.status || '').trim().toLowerCase();
+      acc.total += 1;
+
+      if (normalizedStatus === 'present') {
+        acc.present += 1;
+      } else if (normalizedStatus === 'absent') {
+        acc.absent += 1;
+      } else if (normalizedStatus === 'late') {
+        acc.late += 1;
+      } else if (normalizedStatus === 'half day' || normalizedStatus === 'excused') {
+        acc.halfDay += 1;
+      }
+
+      return acc;
+    },
+    {
+      total: 0,
+      present: 0,
+      absent: 0,
+      late: 0,
+      halfDay: 0,
+    }
+  );
+
+  return {
+    summary: {
+      ...summary,
+      percentage: summary.total > 0 ? Number(((summary.present / summary.total) * 100).toFixed(2)) : 0,
+    },
+    recentHistory: attendanceRecords.slice(0, 10).map((record) => ({
+      id: record?.id || record?._id || null,
+      date: record?.date || null,
+      status: record?.status || 'Absent',
+      markedBy: record?.markedBy?.fullName || null,
+      remarks: record?.remarks || '',
+    })),
+  };
+};
+
+const buildTransportDetails = (row) => {
+  if (!row) {
+    return {
+      assigned: false,
+    };
+  }
+
+  const hasGps = row.GpsLatitude !== null && row.GpsLatitude !== undefined
+    && row.GpsLongitude !== null && row.GpsLongitude !== undefined;
+
+  return {
+    assigned: true,
+    assignmentId: row.AssignmentId ? String(row.AssignmentId) : null,
+    busNumber: row.VehicleNumber || null,
+    routeName: row.RouteName || null,
+    stopName: row.PickupPoint || row.DropPoint || null,
+    pickupPoint: row.PickupPoint || null,
+    dropPoint: row.DropPoint || null,
+    driverName: row.DriverName || null,
+    driverPhone: row.DriverPhone || null,
+    currentStatus: row.CurrentStatus || row.AssignmentStatus || null,
+    gpsLocation: hasGps
+      ? {
+          latitude: Number(row.GpsLatitude),
+          longitude: Number(row.GpsLongitude),
+          speed: Number(row.GpsSpeed || 0),
+          lastUpdated: row.LastLocationUpdated || null,
+        }
+      : null,
+  };
 };
 
 // @desc    Student Login
@@ -313,7 +475,9 @@ const getStudents = asyncHandler(async (req, res) => {
     limit = 10,
     search,
     class: classFilter,
+    classId,
     section,
+    sectionId,
     sortBy = 'createdAt',
     sortOrder = 'desc',
   } = req.query;
@@ -324,6 +488,8 @@ const getStudents = asyncHandler(async (req, res) => {
     search,
     className: classFilter,
     sectionName: section,
+    classId,
+    sectionId,
     sortBy,
     sortOrder,
   });
@@ -337,7 +503,9 @@ const getStudents = asyncHandler(async (req, res) => {
       limit: result.limit,
       search: search || null,
       classFilter: classFilter || null,
+      classId: classId || null,
       section: section || null,
+      sectionId: sectionId || null,
     });
   }
 
@@ -415,74 +583,89 @@ const getStudentDetails = asyncHandler(async (req, res) => {
   }
 
   const now = new Date();
-  const feeRecords = (sqlSnapshot.feeSnapshot || []).map((fee) => {
-    const amount = Number(fee.amount || 0);
-    const paidAmount = Number(fee.paidAmount || 0);
-    const pendingAmount = Number(fee.pendingAmount ?? Math.max(amount - paidAmount, 0));
-    const isOverdue = pendingAmount > 0 && fee.dueDate && new Date(fee.dueDate) < now;
+  const sql = getSqlClient();
+  const [attendanceResult, subjectsResult, transportResult, feesResult, examsResult] = await Promise.allSettled([
+    getStudentAttendanceReport({ studentId }),
+    getSubjectsByGrade(student.class),
+    executeQuery(`
+      SELECT TOP 1
+        sta.AssignmentId,
+        sta.PickupPoint,
+        sta.DropPoint,
+        sta.Status AS AssignmentStatus,
+        tv.VehicleNumber,
+        tv.RouteName,
+        tv.DriverName,
+        tv.DriverPhone,
+        tv.CurrentStatus,
+        tv.GpsLatitude,
+        tv.GpsLongitude,
+        tv.GpsSpeed,
+        tv.LastLocationUpdated
+      FROM dbo.StudentTransportAssignments sta
+      INNER JOIN dbo.TransportVehicles tv
+        ON tv.VehicleId = sta.VehicleId
+      WHERE sta.StudentId = @StudentId
+        AND sta.Status = N'Active'
+        AND ISNULL(tv.IsActive, 1) = 1
+      ORDER BY sta.AssignmentId DESC;
+    `, [
+      { name: 'StudentId', type: sql.Int, value: studentId },
+    ]),
+    getFeesForStudent(studentId),
+    getStudentExamResults({ studentId, className: student.class }),
+  ]);
 
-    return {
-      id: fee.id,
+  const attendanceRecords = attendanceResult.status === 'fulfilled' ? attendanceResult.value : [];
+  const attendance = buildAttendanceSnapshotForDetails(attendanceRecords);
+  const academicSubjects = subjectsResult.status === 'fulfilled'
+    ? (subjectsResult.value || [])
+        .filter((subject) => !subject.sectionName || subject.sectionName === student.section)
+        .map((subject) => ({
+          id: subject.id || subject._id || null,
+          name: subject.name || '-',
+          code: subject.code || null,
+          teacher: subject.teacherName
+            ? {
+                fullName: subject.teacherName,
+                email: null,
+              }
+            : null,
+        }))
+    : [];
+  const transport = buildTransportDetails(
+    transportResult.status === 'fulfilled' ? transportResult.value?.recordset?.[0] || null : null
+  );
+  const feeSource = feesResult.status === 'fulfilled'
+    ? feesResult.value
+    : (sqlSnapshot.feeSnapshot || []);
+  const feeRecords = feeSource.map((fee) => mapFeeRecordForDetails(fee, student.academicYear, now));
+  const feeSummary = summarizeFeeRecords(feeRecords);
+  const paymentHistory = feeRecords
+    .flatMap((fee) => (fee.payments || []).map((payment) => ({
+      id: payment.id || null,
       feeType: fee.feeType || null,
-      academicYear: fee.academicYear || student.academicYear || null,
-      dueDate: fee.dueDate || null,
-      amount,
-      paidAmount,
-      pendingAmount,
-      status: fee.status || (pendingAmount > 0 ? 'Pending' : 'Paid'),
-      description: fee.description || null,
-      paymentDate: fee.paymentDate || null,
-      paymentMode: fee.paymentMode || null,
-      receiptNumber: fee.receiptNumber || null,
-      transactionId: fee.transactionId || null,
-      remarks: fee.remarks || null,
-      isOverdue,
-    };
-  });
-  const feeSummary = feeRecords.reduce(
-    (acc, record) => {
-      acc.totalFees += record.amount;
-      acc.paidAmount += record.paidAmount;
-      acc.pendingAmount += record.pendingAmount;
-      if (record.isOverdue) {
-        acc.overdueCount += 1;
+      amount: Number(payment.amount || 0),
+      date: payment.date || null,
+      mode: payment.mode || null,
+      transactionId: payment.transactionId || null,
+      receiptNumber: payment.receiptNumber || null,
+      notes: payment.notes || null,
+    })))
+    .sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+  const examSource = examsResult.status === 'fulfilled'
+    ? examsResult.value?.grades || []
+    : (sqlSnapshot.examSnapshot || []);
+  const examRecords = examSource.map(mapExamRecordForDetails);
+  const examSummaryFromService = examsResult.status === 'fulfilled' ? examsResult.value?.stats || null : null;
+  const examSummary = examSummaryFromService
+    ? {
+        totalExams: Number(examSummaryFromService.totalExams || 0),
+        totalMarks: Number(examSummaryFromService.totalMarks || 0),
+        totalObtained: Number(examSummaryFromService.totalObtained || 0),
+        averagePercentage: Number(examSummaryFromService.average || 0),
       }
-      return acc;
-    },
-    {
-      totalFees: 0,
-      paidAmount: 0,
-      pendingAmount: 0,
-      overdueCount: 0,
-    }
-  );
-  const examRecords = (sqlSnapshot.examSnapshot || []).map((record) => ({
-    id: record.id,
-    examName: record.examName || 'Exam',
-    examDate: record.examDate || null,
-    subject: record.subject || 'Subject',
-    marksObtained: Number(record.marksObtained || 0),
-    totalMarks: Number(record.totalMarks || 0),
-    percentage: Number(record.percentage || 0),
-    grade: record.grade || null,
-    remarks: record.remarks || null,
-    isAbsent: record.isAbsent === true,
-  }));
-  const examSummary = examRecords.reduce(
-    (acc, record) => {
-      acc.totalExams += 1;
-      acc.totalMarks += record.totalMarks;
-      acc.totalObtained += record.marksObtained;
-      acc.percentageTotal += record.percentage;
-      return acc;
-    },
-    {
-      totalExams: 0,
-      totalMarks: 0,
-      totalObtained: 0,
-      percentageTotal: 0,
-    }
-  );
+    : summarizeExamRecords(examRecords);
   const parentDetails = (sqlSnapshot.parentDetails || []).length > 0
     ? sqlSnapshot.parentDetails.map((parent) => ({
         id: parent.id,
@@ -512,9 +695,6 @@ const getStudentDetails = asyncHandler(async (req, res) => {
           },
         ]
       : [];
-  const examAveragePercentage = examSummary.totalExams > 0
-    ? Number((examSummary.percentageTotal / examSummary.totalExams).toFixed(2))
-    : 0;
 
   res.json({
     success: true,
@@ -545,19 +725,9 @@ const getStudentDetails = asyncHandler(async (req, res) => {
       class: student.class,
       section: student.section,
       academicYear: student.academicYear || null,
-      subjects: [],
+      subjects: academicSubjects,
     },
-    attendance: {
-      summary: {
-        total: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        halfDay: 0,
-        percentage: 0,
-      },
-      recentHistory: [],
-    },
+    attendance,
     fees: {
       summary: {
         totalFees: Number(feeSummary.totalFees.toFixed(2)),
@@ -566,15 +736,10 @@ const getStudentDetails = asyncHandler(async (req, res) => {
         overdueCount: feeSummary.overdueCount,
       },
       records: feeRecords.map(({ isOverdue, ...fee }) => fee),
-      paymentHistory: [],
+      paymentHistory,
     },
     examResults: {
-      summary: {
-        totalExams: examSummary.totalExams,
-        totalMarks: examSummary.totalMarks,
-        totalObtained: examSummary.totalObtained,
-        averagePercentage: examAveragePercentage,
-      },
+      summary: examSummary,
       records: examRecords,
     },
     homework: {
@@ -588,9 +753,7 @@ const getStudentDetails = asyncHandler(async (req, res) => {
       records: [],
     },
     additionalInfo: {
-      transport: {
-        assigned: false,
-      },
+      transport,
       meetings: [],
       hostel: {
         available: false,

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Bus, MapPin, Plus, Edit, Trash2, Phone, User, Route, Navigation } from 'lucide-react';
 import L from 'leaflet';
@@ -46,6 +47,7 @@ const MapUpdater = ({ center }) => {
 
 const BusTracking = () => {
   const { isAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [buses, setBuses] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ const BusTracking = () => {
   const [showModal, setShowModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [editingBus, setEditingBus] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '');
   const [mapCenter, setMapCenter] = useState([28.6139, 77.2090]); // Default: Delhi
   
   const [formData, setFormData] = useState({
@@ -75,8 +77,8 @@ const BusTracking = () => {
   });
 
   useEffect(() => {
-    fetchBuses();
-  }, []);
+    setFilterStatus(searchParams.get('status') || '');
+  }, [searchParams]);
 
   useEffect(() => {
     let interval;
@@ -125,6 +127,12 @@ const BusTracking = () => {
   useEffect(() => {
     fetchBuses();
   }, [filterStatus]);
+
+  useEffect(() => {
+    if (selectedBus && !buses.some((bus) => bus._id === selectedBus._id)) {
+      setSelectedBus(null);
+    }
+  }, [buses, selectedBus]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -303,6 +311,14 @@ const BusTracking = () => {
   ];
 
   const statusOptions = ['', 'Active', 'Inactive', 'Maintenance', 'On Route', 'Idle'];
+  const handleFilterChange = (nextStatus) => {
+    setFilterStatus(nextStatus);
+    if (nextStatus) {
+      setSearchParams({ status: nextStatus });
+      return;
+    }
+    setSearchParams({});
+  };
 
   // Get markers for all buses with locations
   const busMarkers = buses.filter(b => b.gpsLocation?.latitude && b.gpsLocation?.longitude);
@@ -334,7 +350,7 @@ const BusTracking = () => {
           <div className="bg-white rounded-xl shadow-sm border p-4">
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => handleFilterChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             >
               <option value="">All Status</option>

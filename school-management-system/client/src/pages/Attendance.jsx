@@ -9,7 +9,49 @@ import {
   submitAttendance,
 } from '../services/api';
 
-const getStudentKey = (student) => String(student?._id || student?.id || '');
+const DEFAULT_SESSION_META = {
+  classId: null,
+  sectionId: null,
+  academicYearId: null,
+  attendanceId: null,
+  alreadyMarked: false,
+};
+
+const GRADES = [
+  'Class 1',
+  'Class 2',
+  'Class 3',
+  'Class 4',
+  'Class 5',
+  'Class 6',
+  'Class 7',
+  'Class 8',
+  'Class 9',
+  'Class 10',
+  'Class 11',
+  'Class 12',
+];
+
+const getStudentKey = (student) =>
+  String(student?._id || student?.id || student?.studentId || '');
+
+const getSectionName = (student) =>
+  String(student?.sectionName || student?.section || '').trim();
+
+const getSectionId = (student) => {
+  const value = student?.sectionDbId ?? student?.sectionId ?? null;
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+
+  return String(value).trim();
+};
+
+const getClassId = (student) => {
+  const value = student?.classDbId ?? student?.classId ?? null;
+  const numericValue = Number(value);
+  return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null;
+};
 
 const normalizeAttendanceRecord = (record) => {
   const studentId =
@@ -31,6 +73,82 @@ const normalizeAttendanceRecord = (record) => {
   };
 };
 
+const normalizeRosterStudent = (student) => {
+  const studentId = getStudentKey(student);
+  if (!studentId) {
+    return null;
+  }
+
+  return {
+    ...student,
+    _id: studentId,
+    id: studentId,
+    studentId,
+    fullName: student?.fullName || student?.name || 'Student',
+    rollNumber: student?.rollNumber || student?.rollNo || '',
+    rollNo: student?.rollNumber || student?.rollNo || '',
+    classDbId: student?.classDbId ?? student?.classId ?? null,
+    sectionDbId: student?.sectionDbId ?? student?.sectionId ?? null,
+    academicYearId: student?.academicYearId ?? null,
+  };
+};
+
+const buildAttendanceMap = (records = []) => {
+  const map = {};
+
+  records.forEach((record) => {
+    const normalizedRecord = normalizeAttendanceRecord(record);
+    if (!normalizedRecord) {
+      return;
+    }
+
+    map[normalizedRecord.studentId] = normalizedRecord;
+  });
+
+  return map;
+};
+
+const buildSectionOptions = (students = []) => {
+  const sectionMap = new Map();
+  const nameCounts = new Map();
+
+  students.forEach((student) => {
+    const sectionId = getSectionId(student);
+    const sectionName = getSectionName(student);
+
+    if (!sectionId || !sectionName) {
+      return;
+    }
+
+    if (!sectionMap.has(sectionId)) {
+      sectionMap.set(sectionId, {
+        sectionId,
+        sectionName,
+        classId: getClassId(student),
+      });
+    }
+
+    nameCounts.set(sectionName, (nameCounts.get(sectionName) || 0) + 1);
+  });
+
+  return Array.from(sectionMap.values())
+    .map((section) => ({
+      ...section,
+      label:
+        (nameCounts.get(section.sectionName) || 0) > 1
+          ? `Section ${section.sectionName} (ID ${section.sectionId})`
+          : `Section ${section.sectionName}`,
+    }))
+    .sort((left, right) => {
+      const nameComparison = left.sectionName.localeCompare(right.sectionName);
+      if (nameComparison !== 0) {
+        return nameComparison;
+      }
+
+      return Number(right.sectionId) - Number(left.sectionId);
+    });
+};
+
 const Attendance = () => {
   const { isAdmin, isTeacher, user } = useAuth();
   const [students, setStudents] = useState([]);
@@ -44,93 +162,156 @@ const Attendance = () => {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [attendance, setAttendance] = useState({});
   const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [sessionMeta, setSessionMeta] = useState(DEFAULT_SESSION_META);
+
+  const clearVisibleAttendance = ({ keepSections = true } = {}) => {
+    setStudents([]);
+    setAttendance({});
+    setLoadError('');
+    setSessionMeta(DEFAULT_SESSION_META);
+    if (!keepSections) {
+      setSections([]);
+    }
+  };
 
   useEffect(() => {
     let active = true;
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
+    const fetchAttendanceData = async () => {
+      setLoading(true);
+      setLoadError('');
+      setStudents([]);
+      setAttendance({});
+      setSessionMeta(DEFAULT_SESSION_META);
 
-        const [studentsRes, subjectsRes] = await Promise.all([
-          getStudents({ page: 1, limit: 1000, class: selectedGrade }),
+      try {
+        const [classStudentsResponse, subjectsResponse] = await Promise.all([
+          getStudents({
+            page: 1,
+            limit: 1000,
+            class: selectedGrade,
+            sortBy: 'rollNumber',
+            sortOrder: 'asc',
+          }),
           getSubjects({ grade: selectedGrade }),
         ]);
-
-        const classStudents = studentsRes?.data?.students;
-        const subjectsData = subjectsRes?.data?.subjects;
-        if (!Array.isArray(classStudents) || !Array.isArray(subjectsData)) {
-          throw new Error('Invalid attendance response');
-        }
-
-        const nextSections = Array.from(
-          new Set(
-            classStudents
-              .map((student) => student.sectionName || student.section || '')
-              .filter(Boolean)
-          )
-        ).sort((left, right) => left.localeCompare(right));
 
         if (!active) {
           return;
         }
 
+        const classStudents = Array.isArray(classStudentsResponse?.data?.students)
+          ? classStudentsResponse.data.students.map(normalizeRosterStudent).filter(Boolean)
+          : null;
+        const subjectsData = Array.isArray(subjectsResponse?.data?.subjects)
+          ? subjectsResponse.data.subjects
+          : [];
+
+        if (!Array.isArray(classStudents)) {
+          throw new Error('Invalid class roster response');
+        }
+
+        const nextSections = buildSectionOptions(classStudents);
         setSubjects(subjectsData);
         setSections(nextSections);
 
         if (!nextSections.length) {
-          setSelectedSection('');
-          setStudents([]);
-          setAttendance({});
-          setLoadError('');
+          if (selectedSection) {
+            setSelectedSection('');
+          }
           return;
         }
 
         const nextSection =
-          selectedSection && nextSections.includes(selectedSection)
+          selectedSection && nextSections.some((section) => section.sectionId === selectedSection)
             ? selectedSection
-            : nextSections[0];
+            : nextSections[0].sectionId;
 
         if (nextSection !== selectedSection) {
           setSelectedSection(nextSection);
-          setStudents([]);
-          setAttendance({});
-          setLoadError('');
           return;
         }
 
-        const filteredStudents = classStudents.filter(
-          (student) => (student.sectionName || student.section || '') === nextSection
-        );
-        const attendanceRes = await getAttendance({
-          grade: selectedGrade,
-          section: nextSection,
-          date: selectedDate,
-          limit: 1000,
-        });
-        const attendanceRecords = attendanceRes?.data?.attendances;
-        if (!Array.isArray(attendanceRecords)) {
-          throw new Error('Invalid attendance response');
+        const selectedSectionOption =
+          nextSections.find((section) => section.sectionId === nextSection) || nextSections[0];
+        const resolvedClassId = selectedSectionOption?.classId || classStudents[0]?.classDbId || null;
+
+        if (!resolvedClassId) {
+          throw new Error('Unable to resolve the selected class for attendance.');
         }
 
-        const attendanceMap = {};
-        attendanceRecords.forEach((record) => {
-          const normalizedRecord = normalizeAttendanceRecord(record);
-          if (!normalizedRecord) {
-            return;
-          }
+        const [rosterResult, attendanceResult] = await Promise.allSettled([
+          getStudents({
+            page: 1,
+            limit: 1000,
+            class: selectedGrade,
+            classId: resolvedClassId,
+            sectionId: nextSection,
+            sortBy: 'rollNumber',
+            sortOrder: 'asc',
+          }),
+          getAttendance({
+            classId: resolvedClassId,
+            sectionId: nextSection,
+            date: selectedDate,
+            limit: 1000,
+          }),
+        ]);
 
-          attendanceMap[normalizedRecord.studentId] = normalizedRecord;
+        if (!active) {
+          return;
+        }
+
+        if (rosterResult.status !== 'fulfilled') {
+          throw rosterResult.reason;
+        }
+
+        const rosterStudents = Array.isArray(rosterResult.value?.data?.students)
+          ? rosterResult.value.data.students.map(normalizeRosterStudent).filter(Boolean)
+          : null;
+
+        if (!Array.isArray(rosterStudents)) {
+          throw new Error('Invalid attendance roster response');
+        }
+
+        const attendanceRecords =
+          attendanceResult.status === 'fulfilled' && Array.isArray(attendanceResult.value?.data?.attendances)
+            ? attendanceResult.value.data.attendances
+            : [];
+        const attendanceMap = buildAttendanceMap(attendanceRecords);
+        const firstStudent = rosterStudents[0] || null;
+        const firstAttendanceRecord = Object.values(attendanceMap)[0] || null;
+
+        setStudents(rosterStudents);
+        setAttendance(attendanceMap);
+        setSessionMeta({
+          classId: resolvedClassId,
+          sectionId: Number(nextSection) || firstStudent?.sectionDbId || null,
+          academicYearId: firstStudent?.academicYearId ?? null,
+          attendanceId: firstAttendanceRecord?.attendanceId || null,
+          alreadyMarked: Object.keys(attendanceMap).length > 0,
         });
 
-        setStudents(filteredStudents);
-        setAttendance(attendanceMap);
-        setLoadError('');
+        if (attendanceResult.status === 'rejected') {
+          setLoadError(
+            attendanceResult.reason?.response?.data?.message
+            || 'Failed to load existing attendance details for the selected date.'
+          );
+        }
       } catch (error) {
-        setLoadError('Unable to load live attendance data from the backend API.');
+        if (!active) {
+          return;
+        }
+
         setStudents([]);
-        setSubjects([]);
         setAttendance({});
+        setSessionMeta(DEFAULT_SESSION_META);
+        setLoadError(
+          error.response?.status === 404
+            ? 'Failed to load attendance data from the server.'
+            : error.response?.data?.message || 'Failed to load attendance data.'
+        );
       } finally {
         if (active) {
           setLoading(false);
@@ -138,12 +319,48 @@ const Attendance = () => {
       }
     };
 
-    fetchData();
+    fetchAttendanceData();
 
     return () => {
       active = false;
     };
-  }, [selectedDate, selectedGrade, selectedSection]);
+  }, [refreshKey, selectedDate, selectedGrade, selectedSection]);
+
+  const selectedSectionOption =
+    sections.find((section) => section.sectionId === selectedSection) || null;
+  const selectedSectionName = selectedSectionOption?.sectionName || '';
+
+  const subjectOptions = Array.from(
+    new Map(
+      subjects
+        .filter((subject) => {
+          if (subject.grade !== selectedGrade) {
+            return false;
+          }
+
+          if (!selectedSection) {
+            return true;
+          }
+
+          return !subject.sectionName || subject.sectionName === selectedSectionName;
+        })
+        .map((subject) => [subject.classSubjectId || subject.subjectId || subject._id, subject])
+    ).values()
+  );
+
+  useEffect(() => {
+    if (!selectedSubject) {
+      return;
+    }
+
+    const subjectStillAvailable = subjectOptions.some(
+      (subject) => String(subject.subjectId || subject._id || '') === String(selectedSubject)
+    );
+
+    if (!subjectStillAvailable) {
+      setSelectedSubject('');
+    }
+  }, [selectedSubject, subjectOptions]);
 
   const handleMarkAll = (status) => {
     setAttendance((prev) => {
@@ -177,21 +394,21 @@ const Attendance = () => {
       return;
     }
 
-    if (!selectedSection) {
-      toast.error('Please select a section before saving attendance.');
+    if (!sessionMeta.classId || !sessionMeta.sectionId) {
+      toast.error('Please select a valid class and section before saving attendance.');
       return;
     }
 
-    const firstStudent = students[0];
     const markedByTeacherId = user?._id || user?.id || null;
 
     setSaving(true);
     try {
       await submitAttendance({
         attendanceDate: selectedDate,
-        academicYearId: firstStudent?.academicYearId || null,
-        classId: firstStudent?.classDbId || null,
-        sectionId: firstStudent?.sectionDbId || null,
+        academicYearId: sessionMeta.academicYearId || students[0]?.academicYearId || null,
+        classId: sessionMeta.classId,
+        sectionId: sessionMeta.sectionId,
+        subjectId: selectedSubject || null,
         markedByTeacherId,
         students: students.map((student) => {
           const studentKey = getStudentKey(student);
@@ -208,30 +425,27 @@ const Attendance = () => {
         }),
       });
 
-      toast.success('Attendance saved successfully');
-
-      const attendanceRes = await getAttendance({
-        grade: selectedGrade,
-        section: selectedSection,
-        date: selectedDate,
-        limit: 1000,
-      });
-      const attendanceRecords = Array.isArray(attendanceRes?.data?.attendances)
-        ? attendanceRes.data.attendances
-        : [];
-      const attendanceMap = {};
-
-      attendanceRecords.forEach((record) => {
-        const normalizedRecord = normalizeAttendanceRecord(record);
-        if (!normalizedRecord) {
-          return;
-        }
-        attendanceMap[normalizedRecord.studentId] = normalizedRecord;
-      });
-
-      setAttendance(attendanceMap);
+      toast.success(
+        sessionMeta.alreadyMarked ? 'Attendance updated successfully' : 'Attendance saved successfully'
+      );
+      setRefreshKey((value) => value + 1);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to save attendance');
+      const message = error.response?.data?.message || 'Failed to save attendance';
+      const invalidStudents = Array.isArray(error.response?.data?.invalidStudents)
+        ? error.response.data.invalidStudents
+        : [];
+
+      if (invalidStudents.length) {
+        const invalidPreview = invalidStudents
+          .slice(0, 2)
+          .map((student) => `#${student.studentId}: ${student.reason}`)
+          .join(' | ');
+
+        toast.error(invalidPreview ? `${message} ${invalidPreview}` : message);
+        setRefreshKey((value) => value + 1);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -240,29 +454,8 @@ const Attendance = () => {
   const getStatusCount = (status) =>
     students.filter((student) => attendance[getStudentKey(student)]?.status === status).length;
 
-  const subjectOptions = Array.from(
-    new Map(
-      subjects
-        .filter((subject) => {
-          if (subject.grade !== selectedGrade) {
-            return false;
-          }
-
-          if (!selectedSection) {
-            return true;
-          }
-
-          return !subject.sectionName || subject.sectionName === selectedSection;
-        })
-        .map((subject) => [subject.classSubjectId || subject.subjectId || subject._id, subject])
-    ).values()
-  );
-
-  const grades = [
-    'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
-    'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10',
-    'Class 11', 'Class 12',
-  ];
+  const showNoSections = !loading && !loadError && sections.length === 0;
+  const showNoStudents = !loading && !loadError && sections.length > 0 && selectedSection && students.length === 0;
 
   return (
     <div>
@@ -277,7 +470,10 @@ const Attendance = () => {
             <input
               type="date"
               value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
+              onChange={(event) => {
+                clearVisibleAttendance();
+                setSelectedDate(event.target.value);
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             />
           </div>
@@ -285,10 +481,15 @@ const Attendance = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
             <select
               value={selectedGrade}
-              onChange={(event) => setSelectedGrade(event.target.value)}
+              onChange={(event) => {
+                clearVisibleAttendance({ keepSections: false });
+                setSelectedGrade(event.target.value);
+                setSelectedSection('');
+                setSelectedSubject('');
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             >
-              {grades.map((grade) => (
+              {GRADES.map((grade) => (
                 <option key={grade} value={grade}>
                   {grade}
                 </option>
@@ -299,16 +500,17 @@ const Attendance = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
             <select
               value={selectedSection}
-              onChange={(event) => setSelectedSection(event.target.value)}
+              onChange={(event) => {
+                clearVisibleAttendance();
+                setSelectedSection(event.target.value);
+              }}
               disabled={!sections.length}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366] disabled:bg-gray-100"
             >
-              {!sections.length ? (
-                <option value="">No Sections</option>
-              ) : null}
+              {!sections.length ? <option value="">No Sections</option> : null}
               {sections.map((section) => (
-                <option key={section} value={section}>
-                  Section {section}
+                <option key={section.sectionId} value={section.sectionId}>
+                  {section.label}
                 </option>
               ))}
             </select>
@@ -332,20 +534,22 @@ const Attendance = () => {
           <div className="flex gap-2">
             <button
               onClick={() => handleMarkAll('Present')}
-              className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+              disabled={loading || !students.length}
+              className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
             >
               Mark All Present
             </button>
             <button
               onClick={() => handleMarkAll('Absent')}
-              className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+              disabled={loading || !students.length}
+              className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50"
             >
               Mark All Absent
             </button>
             {(isAdmin || isTeacher) && (
               <button
                 onClick={handleSave}
-                disabled={saving || !students.length || !selectedSection}
+                disabled={loading || saving || !students.length || !selectedSection}
                 className="flex items-center gap-2 px-4 py-2 bg-[#002366] text-white rounded-lg hover:bg-[#001a4d] disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
@@ -354,6 +558,11 @@ const Attendance = () => {
             )}
           </div>
         </div>
+        {sessionMeta.alreadyMarked && !loading && students.length ? (
+          <div className="mt-3 text-sm text-[#002366] bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            Attendance is already marked for this date. Saving will update the current class and section roster.
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -394,19 +603,31 @@ const Attendance = () => {
             {loading ? (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                  Loading...
+                  Loading attendance...
+                </td>
+              </tr>
+            ) : loadError && students.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                  Failed to load attendance data.
+                </td>
+              </tr>
+            ) : showNoSections ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                  No sections available for the selected class.
                 </td>
               </tr>
             ) : !selectedSection ? (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                  Select a section to view and save attendance
+                  Select a section to load attendance.
                 </td>
               </tr>
-            ) : students.length === 0 ? (
+            ) : showNoStudents ? (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                  No students found in this class and section
+                  No students found for the selected class and section.
                 </td>
               </tr>
             ) : (

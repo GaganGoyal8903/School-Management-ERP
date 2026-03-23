@@ -4,6 +4,15 @@ const API = axios.create({
   baseURL: "http://localhost:5000/api",
 });
 
+export const DASHBOARD_REFRESH_EVENT = "sms:dashboard-data-changed";
+
+const DASHBOARD_MUTATION_PATHS = [
+  "/attendance",
+  "/students",
+  "/fees",
+  "/buses",
+];
+
 const getStoredAuthToken = () => {
   try {
     return localStorage.getItem("sms_token") || sessionStorage.getItem("sms_token") || "";
@@ -20,6 +29,38 @@ API.interceptors.request.use((req) => {
   }
   return req;
 });
+
+const notifyDashboardDataChanged = (detail = {}) => {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(DASHBOARD_REFRESH_EVENT, { detail }));
+};
+
+const shouldTriggerDashboardRefresh = (config = {}) => {
+  const method = String(config?.method || "get").trim().toLowerCase();
+  if (!["post", "put", "patch", "delete"].includes(method)) {
+    return false;
+  }
+
+  const url = String(config?.url || "").trim().toLowerCase();
+  return DASHBOARD_MUTATION_PATHS.some((path) => url.startsWith(path) || url.includes(path));
+};
+
+API.interceptors.response.use(
+  (response) => {
+    if (shouldTriggerDashboardRefresh(response?.config)) {
+      notifyDashboardDataChanged({
+        method: response?.config?.method || "get",
+        url: response?.config?.url || "",
+      });
+    }
+
+    return response;
+  },
+  (error) => Promise.reject(error)
+);
 
 // ================= AUTH =================
 export const login = (data) => API.post("/auth/login/legacy", data);
@@ -100,6 +141,7 @@ export const uploadMaterial = (data) => {
 
 // ================= ATTENDANCE =================
 export const getAttendance = (params) => API.get("/attendance", { params });
+export const getAttendanceSession = (params) => API.get("/attendance/session", { params });
 export const getAttendanceByStudent = (studentId) => API.get(`/attendance/student/${studentId}`);
 export const submitAttendance = (data) => API.post("/attendance/save", data);
 export const markAttendance = (data) => API.post("/attendance", data);
