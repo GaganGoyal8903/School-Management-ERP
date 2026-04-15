@@ -11,12 +11,19 @@ const {
   getClassAttendanceSummary,
   deleteAttendanceRecord,
 } = require('../services/attendanceSqlService');
+const {
+  getTeacherAssignmentScope,
+  doesTeacherOwnSubject,
+  isTeacherAllowedForClassSection,
+} = require('../services/teacherAssignmentService');
 
 const normalizeClassFilter = (value, fallback = null) => {
   return value || fallback || null;
 };
 
 const getRequestUserId = (req) => req.user?._id || req.user?.id || null;
+const getRequestRole = (req) => String(req.user?.role || '').trim().toLowerCase();
+const isTeacherRequest = (req) => getRequestRole(req) === 'teacher';
 
 const normalizeAttendanceStudents = (body = {}) => {
   const studentsInput = Array.isArray(body.students)
@@ -47,7 +54,7 @@ const normalizeAttendanceSessionPayload = (body = {}) => ({
   subjectId: body.subjectId ?? body.subject ?? null,
   className: body.className || body.class || body.grade || null,
   sectionName: body.sectionName || body.section || null,
-  markedByTeacherId: body.markedByTeacherId || body.markedBy || null,
+  markedByTeacherId: body.markedByTeacherId || body.markedByUserId || body.markedBy || null,
   remarks: body.remarks || null,
   students: normalizeAttendanceStudents(body),
 });
@@ -58,6 +65,24 @@ const saveAttendanceSessionAndRespond = async (req, res) => {
   const payload = normalizeAttendanceSessionPayload(req.body);
   if (!payload.students.length) {
     return res.status(400).json({ message: 'Please provide attendance records' });
+  }
+
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const teacherOwnsSubject = payload.subjectId
+      ? doesTeacherOwnSubject({ scope, subjectId: payload.subjectId })
+      : isTeacherAllowedForClassSection({
+          scope,
+          className: payload.className,
+          sectionName: payload.sectionName,
+        });
+
+    if (!teacherOwnsSubject) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to manage attendance for this class or subject',
+      });
+    }
   }
 
   let result;
@@ -140,6 +165,19 @@ const markAttendance = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Student not found' });
   }
 
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const allowed = isTeacherAllowedForClassSection({
+      scope,
+      className: payload.className,
+      sectionName: payload.sectionName,
+    });
+
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to manage attendance for this class or section' });
+    }
+  }
+
   const result = await upsertAttendanceRecord(payload);
   if (!result?.attendance) {
     return res.status(400).json({ message: 'Unable to save attendance record' });
@@ -197,6 +235,19 @@ const updateAttendance = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'Student not found' });
   }
 
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const allowed = isTeacherAllowedForClassSection({
+      scope,
+      className: payload.className,
+      sectionName: payload.sectionName,
+    });
+
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to update attendance for this class or section' });
+    }
+  }
+
   const result = await upsertAttendanceRecord({
     attendanceId: req.params.id,
     ...payload,
@@ -241,6 +292,19 @@ const getAttendanceSessionDetails = asyncHandler(async (req, res) => {
     attendanceDate,
   } = req.query;
 
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const allowed = isTeacherAllowedForClassSection({
+      scope,
+      className: normalizeClassFilter(classFilter, grade),
+      sectionName: sectionName || section || null,
+    });
+
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to access attendance for this class or section' });
+    }
+  }
+
   const session = await getAttendanceSession({
     attendanceDate: attendanceDate || date,
     classId,
@@ -275,6 +339,19 @@ const getAttendance = asyncHandler(async (req, res) => {
     limit = 50,
   } = req.query;
 
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const allowed = isTeacherAllowedForClassSection({
+      scope,
+      className: normalizeClassFilter(classFilter, grade),
+      sectionName: section,
+    });
+
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to access attendance for this class or section' });
+    }
+  }
+
   const result = await getAttendanceList({
     studentId,
     classId,
@@ -307,6 +384,19 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
 
   const { class: classFilter, grade, section, startDate, endDate } = req.query;
 
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: getRequestUserId(req) });
+    const allowed = isTeacherAllowedForClassSection({
+      scope,
+      className: normalizeClassFilter(classFilter, grade),
+      sectionName: section,
+    });
+
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to access attendance for this class or section' });
+    }
+  }
+
   const report = await getClassAttendanceSummary({
     className: normalizeClassFilter(classFilter, grade),
     sectionName: section,
@@ -330,9 +420,10 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
 
   const { startDate, endDate } = req.query;
   const requestedStudentId = req.params.studentId;
+  const requestRole = String(req.user?.role || '').trim().toLowerCase();
 
-  if (req.user.role === 'student') {
-    const studentProfile = await getStudentByUserId(req.user._id);
+  if (requestRole === 'student') {
+    const studentProfile = await getStudentByUserId(req.user);
 
     if (!studentProfile) {
       return res.status(403).json({ message: 'Student profile not found' });

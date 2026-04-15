@@ -20,6 +20,12 @@ const parseNumericId = (value) => {
   return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null;
 };
 
+const createMaterialValidationError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+};
+
 const mapMaterialRow = (row) => {
   if (!row) {
     return null;
@@ -107,14 +113,26 @@ const resolveSubjectId = async (subjectLookup, tx = null) => {
   const numericSubjectId = parseNumericId(subjectLookup);
 
   if (numericSubjectId) {
-    const result = await runner(
+    const directSubject = await runner(
       `SELECT TOP 1 SubjectId
        FROM dbo.Subjects
        WHERE SubjectId = @SubjectId
          AND ISNULL(IsActive, 1) = 1`,
       [{ name: 'SubjectId', type: sql.Int, value: numericSubjectId }]
     );
-    return parseNumericId(result?.recordset?.[0]?.SubjectId);
+
+    const directSubjectId = parseNumericId(directSubject?.recordset?.[0]?.SubjectId);
+    if (directSubjectId) {
+      return directSubjectId;
+    }
+
+    const classSubject = await runner(
+      `SELECT TOP 1 SubjectId
+       FROM dbo.ClassSubjects
+       WHERE ClassSubjectId = @ClassSubjectId`,
+      [{ name: 'ClassSubjectId', type: sql.Int, value: numericSubjectId }]
+    );
+    return parseNumericId(classSubject?.recordset?.[0]?.SubjectId);
   }
 
   const normalizedSubjectName = toNullableString(subjectLookup);
@@ -170,8 +188,17 @@ const buildMaterialFilters = ({ subject = null, grade = null, search = null, mat
 
   const subjectSqlId = parseNumericId(subject);
   if (subjectSqlId) {
-    clauses.push('sm.SubjectId = @SubjectId');
+    clauses.push(`(
+      sm.SubjectId = @SubjectId
+      OR EXISTS (
+        SELECT 1
+        FROM dbo.ClassSubjects cs
+        WHERE cs.ClassSubjectId = @ClassSubjectId
+          AND cs.SubjectId = sm.SubjectId
+      )
+    )`);
     params.push({ name: 'SubjectId', type: sql.Int, value: subjectSqlId });
+    params.push({ name: 'ClassSubjectId', type: sql.Int, value: subjectSqlId });
   } else if (toNullableString(subject)) {
     clauses.push('sub.SubjectName = @SubjectName');
     params.push({ name: 'SubjectName', type: sql.NVarChar(200), value: toNullableString(subject) });
@@ -252,7 +279,7 @@ const createMaterialRecord = async ({ title, subject, grade, description, fileUr
     const userId = parseNumericId(uploadedByUserId);
 
     if (!classId || !subjectId || !userId || !toNullableString(title)) {
-      throw new Error('Please provide valid material details.');
+      throw createMaterialValidationError('Please provide valid material details.');
     }
 
     const inserted = await tx.query(
@@ -311,7 +338,7 @@ const updateMaterialRecord = async (materialId, updates = {}) => {
     const classId = await resolveClassIdByName(updates.grade ?? existingMaterial.grade, tx);
     const subjectId = await resolveSubjectId(updates.subject ?? updates.subjectId ?? existingMaterial.subjectId, tx);
     if (!classId || !subjectId || !toNullableString(updates.title ?? existingMaterial.title)) {
-      throw new Error('Please provide valid material details.');
+      throw createMaterialValidationError('Please provide valid material details.');
     }
 
     await tx.query(
@@ -364,7 +391,12 @@ const deleteMaterialRecord = async (materialId) => {
 };
 
 const getMaterialsBySubject = async (subject) => {
-  const { materials } = await getMaterialList({ subject, page: 1, limit: 1000 });
+  const resolvedSubjectId = await resolveSubjectId(subject);
+  const { materials } = await getMaterialList({
+    subject: resolvedSubjectId || subject,
+    page: 1,
+    limit: 1000,
+  });
   return materials;
 };
 

@@ -1,8 +1,7 @@
-const bcrypt = require('bcryptjs');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const {
   createAuthUser,
-  getAuthUserByEmail,
+  getAuthUserByEmailRole,
   updateAuthUser,
   deleteAuthUser,
 } = require('../services/authSqlService');
@@ -20,6 +19,14 @@ const {
 const {
   replaceTeacherAssignments,
 } = require('../services/academicSqlService');
+const DUPLICATE_ROLE_EMAIL_MESSAGE = 'This email already exists for the selected role';
+const logTeacherAuthDebug = (event, payload = {}) => {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+
+  console.info('[teachers-auth]', { event, ...payload });
+};
 
 const parseBooleanInput = (value) => {
   if (value === undefined) {
@@ -282,23 +289,35 @@ const createTeacher = asyncHandler(async (req, res) => {
     isActive,
   } = normalizeTeacherPayload(req.body);
 
-  if (!fullName || !email) {
+  if (!fullName || !email || !password) {
     return res.status(400).json({
       success: false,
-      message: 'Full name and email are required.',
+      message: 'Full name, email, and password are required.',
     });
   }
 
-  const existingUser = await getAuthUserByEmail(email);
-  if (existingUser) {
-    return res.status(400).json({ message: 'Email already registered' });
+  if (String(password).length < 8) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 8 characters long.',
+    });
   }
 
-  const passwordHash = await bcrypt.hash(password || 'teacher123', 10);
+  logTeacherAuthDebug('create.duplicate-check', {
+    email,
+    role: 'teacher',
+    query: 'getAuthUserByEmailRole',
+  });
+
+  const existingUser = await getAuthUserByEmailRole(email, 'teacher');
+  if (existingUser) {
+    return res.status(400).json({ message: DUPLICATE_ROLE_EMAIL_MESSAGE });
+  }
+
   const teacherUser = await createAuthUser({
     fullName,
     email,
-    passwordHash,
+    passwordHash: String(password),
     role: 'teacher',
     phone,
     isActive: isActive !== false,
@@ -373,9 +392,16 @@ const updateTeacher = asyncHandler(async (req, res) => {
   const nextEmail = email && String(email).trim() ? email : teacher.email;
 
   if (nextEmail && nextEmail !== teacher.email) {
-    const existingUser = await getAuthUserByEmail(nextEmail);
+    logTeacherAuthDebug('update.duplicate-check', {
+      email: nextEmail,
+      role: 'teacher',
+      query: 'getAuthUserByEmailRole',
+      teacherId,
+    });
+
+    const existingUser = await getAuthUserByEmailRole(nextEmail, 'teacher');
     if (existingUser && String(existingUser._id) !== String(teacher.userId || teacher.id)) {
-      return res.status(400).json({ message: 'Email already registered' });
+      return res.status(400).json({ message: DUPLICATE_ROLE_EMAIL_MESSAGE });
     }
   }
 

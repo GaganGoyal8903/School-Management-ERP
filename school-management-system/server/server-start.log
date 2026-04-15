@@ -1,0 +1,5075 @@
+[dotenv@17.3.1] injecting env (10) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+🚀 School Management Server Secure on http://localhost:5000
+📊 Health: http://localhost:5000/api/health
+🔧 Data Sync: cd server && npm run sync-sections
+📱 Frontend: cd client && npm run dev
+✅ MongoDB Connected Successfully
+[sql] Connected to (localdb)\MSSQLLocalDB / SchoolERP
+✅ SQL Server Initialized
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  mongoUserId: '69c0e147efb2b97b58fe7a16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher1@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e147efb2b97b58fe7a18',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher2@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e147efb2b97b58fe7a1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher3@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e147efb2b97b58fe7a1c',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher4@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e147efb2b97b58fe7a1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher5@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e147efb2b97b58fe7a20',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher6@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher7@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a24',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher8@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher9@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a28',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher10@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher11@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a2c',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher12@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e148efb2b97b58fe7a2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher13@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a30',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher14@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher15@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a34',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher16@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher17@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a38',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher18@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher19@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a3c',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'teacher20@mayo.edu',
+  role: 'teacher',
+  mongoUserId: '69c0e149efb2b97b58fe7a3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student1@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e149efb2b97b58fe7aa6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student2@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aaa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student3@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student4@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ab2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student5@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ab6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student6@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student7@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7abe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student8@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ac2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student9@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ac6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student10@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student11@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ace',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student12@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ad2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student13@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ad6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student14@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ada',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student15@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ade',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student16@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ae2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student17@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ae6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student18@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7aea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student19@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7aee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student20@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7af2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student21@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7af6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student22@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7afa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student23@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7afe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student24@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student25@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student26@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student27@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student28@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student29@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student30@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student31@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student32@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student33@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student34@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student35@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student36@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student37@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student38@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student39@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student40@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student41@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student42@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student43@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student44@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student45@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student46@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student47@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student48@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student49@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student50@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student51@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student52@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student53@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student54@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student55@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student56@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student57@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student58@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student59@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student60@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student61@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student62@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student63@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student64@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7ba2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student65@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7ba6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student66@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7baa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student67@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student68@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bb2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student69@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bb6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student70@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student71@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student72@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bc2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student73@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bc6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student74@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student75@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bce',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student76@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bd2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student77@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bd6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student78@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bda',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student79@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bde',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student80@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7be2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student81@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7be6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student82@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student83@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student84@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bf2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student85@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bf6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student86@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bfa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student87@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7bfe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student88@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student89@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student90@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student91@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student92@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student93@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student94@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student95@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student96@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student97@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student98@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student99@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student100@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student101@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student102@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student103@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student104@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student105@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student106@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student107@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student108@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student109@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student110@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student111@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student112@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student113@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student114@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student115@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student116@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student117@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student118@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student119@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student120@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student121@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student122@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student123@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student124@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student125@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student126@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student127@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student128@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7ca2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student129@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7ca6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student130@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7caa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student131@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student132@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cb2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student133@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cb6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student134@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student135@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student136@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cc2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student137@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cc6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student138@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student139@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cce',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student140@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cd2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student141@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cd6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student142@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cda',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student143@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cde',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student144@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7ce2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student145@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7ce6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student146@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student147@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student148@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cf2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student149@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cf6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student150@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cfa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student151@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cfe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student152@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7d02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student153@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7d06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student154@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student155@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student156@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student157@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student158@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student159@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student160@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student161@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student162@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student163@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student164@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student165@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student166@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student167@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student168@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student169@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student170@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student171@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student172@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student173@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student174@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student175@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student176@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student177@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student178@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student179@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student180@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student181@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student182@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student183@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student184@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student185@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student186@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student187@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student188@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student189@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student190@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student191@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student192@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7da2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student193@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7da6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student194@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7daa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student195@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7dae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student196@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7db2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student197@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7db6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student198@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student199@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student200@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dc2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-parent-1774515384059@example.com',
+  role: 'parent',
+  mongoUserId: '69c4f4bf7bfdd928999e9963',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-parent-1774521264443@example.com',
+  role: 'parent',
+  mongoUserId: '69c50bb81357697d49e11b80',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-parent-1774521503560@example.com',
+  role: 'parent',
+  mongoUserId: '69c50ca71ea8ba67081bc1a8',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-parent-1774521667189@example.com',
+  role: 'parent',
+  mongoUserId: '69c50d4ad8bf033d3d64fe41',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sync] Synced 225/225 Mongo users to SQL auth.
+127.0.0.1 - - [26/Mar/2026:10:42:36 +0000] "GET /api/health HTTP/1.1" 200 142 "-" "node"
+[students][sql] query:StudentsCount { OnlyActive: true }
+[teachers][sql] query:TeacherCount { OnlyActive: true }
+[students][sql] query:StudentsCount { OnlyActive: true }
+127.0.0.1 - - [26/Mar/2026:10:42:36 +0000] "GET /api/dashboard HTTP/1.1" 200 79 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:36 +0000] "POST /api/auth/login HTTP/1.1" 400 70 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  mongoUserId: '69c0e147efb2b97b58fe7a16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:37 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 362 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'teacher',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'teacher',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'teacher',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '6',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '6',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'gagangoyal878@gmail.com',
+  role: 'teacher',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '6',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'gagangoyal878@gmail.com',
+  role: 'teacher',
+  mongoUserId: '6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '6',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:37 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 305 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'student',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'student',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'student',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '201',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '201',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'gagangoyal878@gmail.com',
+  role: 'student',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '201',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'gagangoyal878@gmail.com',
+  role: 'student',
+  mongoUserId: '201',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '201',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 201 }
+127.0.0.1 - - [26/Mar/2026:10:42:37 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 1248 "-" "node"
+[auth] {
+  event: 'login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  ipAddress: '127.0.0.1',
+  route: '/api/auth/login'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth] {
+  event: 'login.lookup',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  entity: 'dbo.Users/dbo.SqlAuthUsers',
+  found: true,
+  matchedRole: 'admin'
+}
+[auth] {
+  event: 'login.password-check',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  found: true,
+  passwordMatched: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login HTTP/1.1" 200 3933 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login/captcha/generate HTTP/1.1" 200 3668 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login/captcha/refresh HTTP/1.1" 200 3660 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login/captcha/verify HTTP/1.1" 400 81 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login/otp/resend HTTP/1.1" 400 73 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/login/otp/verify HTTP/1.1" 400 73 "-" "node"
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/register HTTP/1.1" 401 38 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth] {
+  event: 'register.duplicate-check',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  query: 'getAuthUserByEmailRole'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'lookup.by-email-role',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  source: 'dbo.SqlAuthUsers',
+  found: false
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  mongoUserId: '1249',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth] {
+  event: 'register.created',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  userId: 1249
+}
+127.0.0.1 - - [26/Mar/2026:10:42:38 +0000] "POST /api/auth/register HTTP/1.1" 201 310 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  mongoUserId: '1249',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 332 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/auth/me HTTP/1.1" 200 180 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  mongoUserId: '1249',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "PUT /api/auth/profile HTTP/1.1" 200 166 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-auth-1774521756709@example.com',
+  role: 'admin',
+  mongoUserId: '1249',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "POST /api/auth/change-password HTTP/1.1" 200 58 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1249',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "POST /api/auth/logout HTTP/1.1" 200 52 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] dbo.usp_Student_List { Page: 1, PageSize: 10000 }
+[students] GET /api/students {
+  source: 'dbo.usp_Student_List',
+  returned: 10,
+  total: 160,
+  page: 1,
+  limit: 10,
+  search: null,
+  classFilter: null,
+  classId: null,
+  section: null,
+  sectionId: null
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/students?page=1&limit=10 HTTP/1.1" 200 10211 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "POST /api/classes HTTP/1.1" 201 221 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/classes HTTP/1.1" 200 475 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/classes/6 HTTP/1.1" 200 221 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "PUT /api/classes/6 HTTP/1.1" 200 229 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "POST /api/sections HTTP/1.1" 201 211 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/sections HTTP/1.1" 200 468 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/sections/6 HTTP/1.1" 200 211 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "PUT /api/sections/6 HTTP/1.1" 200 219 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:TeacherList {
+  page: 1,
+  limit: 10,
+  search: null,
+  sortBy: 'createdAt',
+  sortOrder: 'desc'
+}
+[teachers] GET /api/teachers {
+  source: 'dbo.Teachers+dbo.Users',
+  returned: 10,
+  total: 35,
+  page: 1,
+  limit: 10,
+  search: null
+}
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/teachers HTTP/1.1" 200 10711 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:TeacherCount { OnlyActive: true }
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/teachers/count HTTP/1.1" 200 27 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:AvailableTeachers { onlyActive: true }
+127.0.0.1 - - [26/Mar/2026:10:42:39 +0000] "GET /api/teachers/available HTTP/1.1" 200 5091 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers-auth] {
+  event: 'create.duplicate-check',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  query: 'getAuthUserByEmailRole'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'lookup.by-email-role',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  source: 'dbo.SqlAuthUsers',
+  found: false
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  mongoUserId: '1250',
+  table: 'dbo.SqlAuthUsers'
+}
+[teachers][sql] query:TeacherLookup { lookupId: 44 }
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+127.0.0.1 - - [26/Mar/2026:10:42:40 +0000] "POST /api/teachers HTTP/1.1" 201 783 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] dbo.usp_Teacher_FullProfile { TeacherId: 44 }
+127.0.0.1 - - [26/Mar/2026:10:42:40 +0000] "GET /api/teachers/1250 HTTP/1.1" 200 811 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  mongoUserId: '1250',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+127.0.0.1 - - [26/Mar/2026:10:42:40 +0000] "PUT /api/teachers/1250 HTTP/1.1" 200 790 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students-auth] {
+  event: 'create.duplicate-check',
+  email: 'invalid-student-1774521756709@example.com',
+  role: 'student',
+  query: 'getAuthUserByEmailRole'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'invalid-student-1774521756709@example.com',
+  role: 'student',
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'lookup.by-email-role',
+  email: 'invalid-student-1774521756709@example.com',
+  role: 'student',
+  source: 'dbo.SqlAuthUsers',
+  found: false
+}
+[students][sql] query:StudentsByRollNumber { RollNumber: 'INV756709' }
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1251',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'invalid-student-1774521756709@example.com',
+  role: 'student',
+  mongoUserId: '1251',
+  table: 'dbo.SqlAuthUsers'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:40 +0000] "POST /api/students HTTP/1.1" 400 91 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students-auth] {
+  event: 'create.duplicate-check',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  query: 'getAuthUserByEmailRole'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'lookup.by-email-role',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  source: 'dbo.SqlAuthUsers',
+  found: false
+}
+[students][sql] query:StudentsByRollNumber { RollNumber: 'AUD756709' }
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  mongoUserId: '1252',
+  table: 'dbo.SqlAuthUsers'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "POST /api/students HTTP/1.1" 201 1031 "-" "node"
+[students-auth] {
+  event: 'login.attempt',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  query: 'getAuthUserByEmailRole'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'lookup.by-email-role',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  source: 'dbo.Users',
+  found: true
+}
+[students-auth] {
+  event: 'login.password-check',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  found: true,
+  passwordMatched: true
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "POST /api/students/login HTTP/1.1" 200 551 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  mongoUserId: '1252',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 1335 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] dbo.usp_Student_List { Page: 1, PageSize: 10000 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "GET /api/students/all HTTP/1.1" 200 136096 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsCount { OnlyActive: true }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "GET /api/students/count HTTP/1.1" 200 28 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:ClassIdByName { ClassName: 'Class 10' }
+[students][sql] dbo.usp_Class_Students { ClassId: 10 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "GET /api/students/class/Class%2010 HTTP/1.1" 200 15839 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "GET /api/students/165 HTTP/1.1" 200 1031 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] dbo.usp_Student_FullProfile { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:41 +0000] "GET /api/students/165/details HTTP/1.1" 200 7100 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentPortalProfileList { search: null, onlyPending: true }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/students/portal-profiles HTTP/1.1" 200 30 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentPortalProfileById { StudentPortalProfileId: 999999 }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/students/portal-profiles/999999 HTTP/1.1" 404 46 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentPortalProfileById { StudentPortalProfileId: 999999 }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "PUT /api/students/portal-profiles/999999 HTTP/1.1" 404 46 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentPortalProfileById { StudentPortalProfileId: 999999 }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "POST /api/students/portal-profiles/999999/promote HTTP/1.1" 404 46 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+[students][sql] dbo.usp_Student_FullProfile { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/students/me/details HTTP/1.1" 200 7100 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-student-1774521756709@example.com',
+  role: 'student',
+  mongoUserId: '1252',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "PUT /api/students/165 HTTP/1.1" 200 1031 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '31',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '26',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '16',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '35',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '15',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/subjects HTTP/1.1" 200 4007 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/subjects/count HTTP/1.1" 200 28 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '35',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '15',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '25',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/subjects/grade/Class%2010 HTTP/1.1" 200 2913 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "POST /api/subjects HTTP/1.1" 201 400 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "PUT /api/subjects/107/assign-teacher HTTP/1.1" 200 498 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/subjects/107 HTTP/1.1" 200 519 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "PUT /api/subjects/107 HTTP/1.1" 200 506 "-" "node"
+[auth] {
+  event: 'legacy-login.attempt',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  route: '/api/auth/login/legacy'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: null,
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'audit-teacher-1774521756709@example.com',
+  role: 'teacher',
+  mongoUserId: '1250',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "POST /api/auth/login/legacy HTTP/1.1" 200 335 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/materials HTTP/1.1" 200 75 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "POST /api/materials HTTP/1.1" 201 466 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/materials/subject/107 HTTP/1.1" 200 469 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "GET /api/materials/1004 HTTP/1.1" 200 466 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:42 +0000] "PUT /api/materials/1004 HTTP/1.1" 200 474 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/attendance HTTP/1.1" 201 529 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/attendance/save HTTP/1.1" 200 94 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/attendance/bulk HTTP/1.1" 200 94 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/attendance/session?class=Class%2010&section=A&date=2026-03-26 HTTP/1.1" 200 2969 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/attendance?class=Class%2010&section=A&date=2026-03-26 HTTP/1.1" 200 577 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/attendance/report?class=Class%2010&section=A&startDate=2026-03-26&endDate=2026-03-26 HTTP/1.1" 200 332 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/attendance/student/165?startDate=2026-03-26&endDate=2026-03-26 HTTP/1.1" 200 607 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "PUT /api/attendance/2025 HTTP/1.1" 200 558 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/exams HTTP/1.1" 201 816 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/exams HTTP/1.1" 200 637 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/exams/1029 HTTP/1.1" 200 828 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "PUT /api/exams/1029 HTTP/1.1" 200 785 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "PUT /api/exams/1029/paper HTTP/1.1" 200 1541 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/exams/1029/paper HTTP/1.1" 200 1491 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/exams/1029/online-session/start HTTP/1.1" 200 1494 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/exams/1029/online-session/submit HTTP/1.1" 200 1909 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/exams/1029/marks HTTP/1.1" 201 650 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/exams/results/165 HTTP/1.1" 200 710 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/exams/report/1029 HTTP/1.1" 200 2817 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "POST /api/fees HTTP/1.1" 201 1379 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/fees HTTP/1.1" 200 12860 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/fees/1309 HTTP/1.1" 200 1379 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/fees/student/165 HTTP/1.1" 200 1384 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "GET /api/fees/stats HTTP/1.1" 200 41101 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:43 +0000] "PUT /api/fees/1309 HTTP/1.1" 200 1379 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] dbo.usp_Student_List { Page: 1, PageSize: 10000 }
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/fees/bulk HTTP/1.1" 201 201508 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/fees/1309/pay HTTP/1.1" 200 2459 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/buses HTTP/1.1" 201 965 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/buses HTTP/1.1" 200 56219 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/buses/stats HTTP/1.1" 200 142 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/buses/1026 HTTP/1.1" 200 965 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "PUT /api/buses/1026 HTTP/1.1" 200 981 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "PUT /api/buses/1026/location HTTP/1.1" 200 213 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/buses/1026/location HTTP/1.1" 200 1037 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/buses/1026/students HTTP/1.1" 200 1379 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/timetables HTTP/1.1" 500 878 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/timetables?class=Class%2010&section=A&academicYear=2024-2025 HTTP/1.1" 200 42 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/timetables/class/Class%2010?section=A&academicYear=2024-2025 HTTP/1.1" 200 42 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/timetables/teacher/1250 HTTP/1.1" 200 42 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/timetables/null HTTP/1.1" 404 49 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "POST /api/timetables/copy HTTP/1.1" 404 56 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "PUT /api/timetables/null HTTP/1.1" 404 49 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1252',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsByUserId { UserId: 1252 }
+127.0.0.1 - - [26/Mar/2026:10:42:44 +0000] "GET /api/students/timetable/165 HTTP/1.1" 200 2143 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "POST /api/parent HTTP/1.1" 201 489 "-" "node"
+[students][sql] query:StudentsById { StudentId: 165 }
+Parent Login: Success - Audit Parent (audit-parent-1774521756709@example.com)
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "POST /api/parent/login HTTP/1.1" 200 618 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/students HTTP/1.1" 200 207 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/profile HTTP/1.1" 200 740 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/child HTTP/1.1" 200 196 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/attendance?month=3&year=2026 HTTP/1.1" 200 220 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/grades HTTP/1.1" 200 70 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/homework HTTP/1.1" 200 56 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/exams HTTP/1.1" 200 68 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/announcements HTTP/1.1" 200 35 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/parent/dashboard HTTP/1.1" 200 326 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c50da4b4e27bb48a426b1a',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "PUT /api/parent/profile HTTP/1.1" 200 388 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsCount { OnlyActive: true }
+[teachers][sql] query:TeacherCount { OnlyActive: true }
+[students][sql] query:StudentsCount { OnlyActive: true }
+127.0.0.1 - - [26/Mar/2026:10:42:45 +0000] "GET /api/reports/dashboard HTTP/1.1" 200 8939 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student1@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e149efb2b97b58fe7aa6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student2@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aaa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student3@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student4@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ab2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student5@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ab6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student6@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student7@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7abe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student8@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ac2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student9@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ac6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student10@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7aca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student11@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14aefb2b97b58fe7ace',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student12@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ad2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student13@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ad6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student14@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ada',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student15@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ade',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student16@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ae2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student17@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7ae6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student18@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7aea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student19@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7aee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student20@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7af2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student21@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14befb2b97b58fe7af6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student22@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7afa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student23@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7afe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student24@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student25@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student26@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student27@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student28@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student29@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student30@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student31@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student32@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14cefb2b97b58fe7b22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student33@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student34@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student35@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student36@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student37@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student38@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student39@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student40@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student41@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student42@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14defb2b97b58fe7b4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student43@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student44@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student45@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student46@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student47@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student48@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student49@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student50@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student51@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student52@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student53@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14eefb2b97b58fe7b76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student54@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student55@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student56@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student57@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student58@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student59@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student60@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student61@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student62@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student63@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7b9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student64@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e14fefb2b97b58fe7ba2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student65@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7ba6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student66@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7baa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student67@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student68@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bb2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student69@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bb6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student70@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student71@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student72@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bc2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student73@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bc6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student74@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student75@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e150efb2b97b58fe7bce',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student76@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bd2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student77@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bd6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student78@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bda',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student79@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bde',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student80@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7be2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student81@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7be6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student82@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student83@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student84@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bf2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student85@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bf6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student86@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e151efb2b97b58fe7bfa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student87@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7bfe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student88@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student89@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student90@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student91@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student92@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student93@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student94@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student95@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student96@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student97@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e152efb2b97b58fe7c26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student98@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student99@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student100@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student101@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student102@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student103@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student104@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student105@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student106@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student107@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student108@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e153efb2b97b58fe7c52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student109@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student110@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student111@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student112@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student113@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student114@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student115@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student116@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student117@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student118@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student119@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e154efb2b97b58fe7c7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student120@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student121@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student122@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student123@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student124@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student125@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student126@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student127@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7c9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student128@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7ca2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student129@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7ca6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student130@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e155efb2b97b58fe7caa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student131@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student132@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cb2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student133@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cb6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student134@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student135@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student136@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cc2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student137@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cc6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student138@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cca',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student139@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cce',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student140@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cd2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student141@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cd6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student142@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e156efb2b97b58fe7cda',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student143@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cde',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student144@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7ce2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student145@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7ce6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student146@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cea',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student147@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cee',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student148@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cf2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student149@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cf6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student150@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cfa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student151@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7cfe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student152@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7d02',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student153@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e157efb2b97b58fe7d06',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student154@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d0a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student155@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d0e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student156@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d12',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student157@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d16',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student158@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d1a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student159@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d1e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student160@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d22',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student161@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d26',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student162@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d2a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student163@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d2e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student164@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e158efb2b97b58fe7d32',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student165@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d36',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student166@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d3a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student167@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d3e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student168@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d42',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student169@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d46',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student170@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d4a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student171@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d4e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student172@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d52',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student173@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e159efb2b97b58fe7d56',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student174@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d5a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student175@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d5e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student176@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d62',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student177@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d66',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student178@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d6a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student179@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d6e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student180@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d72',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student181@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d76',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student182@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d7a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student183@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d7e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student184@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d82',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student185@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15aefb2b97b58fe7d86',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student186@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d8a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student187@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d8e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student188@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d92',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student189@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d96',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student190@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d9a',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student191@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7d9e',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student192@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7da2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student193@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7da6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student194@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7daa',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student195@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7dae',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student196@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7db2',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student197@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15befb2b97b58fe7db6',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student198@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dba',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student199@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dbe',
+  table: 'dbo.SqlAuthUsers'
+}
+[auth-sql] {
+  event: 'mirror.sync',
+  email: 'student200@mayo.edu',
+  role: 'student',
+  mongoUserId: '69c0e15cefb2b97b58fe7dc2',
+  table: 'dbo.SqlAuthUsers'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/analytics HTTP/1.1" 200 401 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/summary HTTP/1.1" 200 170 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/attendance?class=Class%2010&section=A&startDate=2026-03-26&endDate=2026-03-26 HTTP/1.1" 200 987 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/attendance/export?class=Class%2010&section=A&startDate=2026-03-26&endDate=2026-03-26 HTTP/1.1" 200 214 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/fees HTTP/1.1" 200 23792 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/exams HTTP/1.1" 200 216 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "GET /api/reports/exams/export HTTP/1.1" 200 36 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/buses/1026/students/165 HTTP/1.1" 200 527 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '1250',
+  email: null,
+  role: null,
+  found: true,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/materials/1004 HTTP/1.1" 200 45 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/attendance/2025 HTTP/1.1" 200 47 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/timetables/null HTTP/1.1" 404 49 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/fees/1309 HTTP/1.1" 400 68 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/exams/1029 HTTP/1.1" 200 41 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/buses/1026 HTTP/1.1" 200 53 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:46 +0000] "DELETE /api/subjects/107 HTTP/1.1" 200 44 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+[teachers][sql] query:TeacherLookup { lookupId: 1250 }
+127.0.0.1 - - [26/Mar/2026:10:42:47 +0000] "DELETE /api/teachers/1250 HTTP/1.1" 200 57 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+[students][sql] query:StudentsById { StudentId: 165 }
+[students][sql] query:StudentsById { StudentId: 165 }
+127.0.0.1 - - [26/Mar/2026:10:42:47 +0000] "DELETE /api/students/165 HTTP/1.1" 200 57 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:47 +0000] "DELETE /api/classes/6 HTTP/1.1" 200 42 "-" "node"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [26/Mar/2026:10:42:47 +0000] "DELETE /api/sections/6 HTTP/1.1" 200 44 "-" "node"

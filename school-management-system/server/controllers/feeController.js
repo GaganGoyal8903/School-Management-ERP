@@ -10,6 +10,26 @@ const {
   getFeeStatistics,
   bulkCreateFeeRecords,
 } = require('../services/feeSqlService');
+const { getStudentByUserId } = require('../services/studentSqlService');
+
+const parseStudentId = (value) => {
+  const numericValue = Number(value);
+  return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null;
+};
+
+const getRequestRole = (req) => String(req.user?.role || '').trim().toLowerCase();
+const STUDENT_PAYMENT_PROVIDER = String(process.env.STUDENT_PAYMENT_PROVIDER || 'mock').trim().toLowerCase();
+const STUDENT_PAYMENT_ENVIRONMENT = String(
+  process.env.STUDENT_PAYMENT_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'live' : 'sandbox')
+).trim().toLowerCase();
+const STUDENT_PAYMENT_PORTAL_ENABLED = String(
+  process.env.ENABLE_STUDENT_PAYMENT_PORTAL || (process.env.NODE_ENV === 'production' ? 'false' : 'true')
+).trim().toLowerCase() === 'true';
+
+const createMockStudentPaymentReference = (feeId, userId) => {
+  const uniqueSegment = `${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+  return `MOCK-FEE-${feeId}-${userId || 'student'}-${uniqueSegment}`;
+};
 
 // @desc    Get all fees with pagination
 // @route   GET /api/fees
@@ -58,7 +78,26 @@ const getFeeById = asyncHandler(async (req, res) => {
 // @route   GET /api/fees/student/:studentId
 // @access  Private
 const getFeesByStudent = asyncHandler(async (req, res) => {
-  const fees = await getFeesForStudent(req.params.studentId);
+  const requestedStudentId = parseStudentId(req.params.studentId);
+
+  if (!requestedStudentId) {
+    return res.status(400).json({ success: false, message: 'Invalid student ID' });
+  }
+
+  if (getRequestRole(req) === 'student') {
+    const studentProfile = await getStudentByUserId(req.user);
+    const ownStudentId = parseStudentId(studentProfile?._id ?? studentProfile?.id ?? studentProfile?.studentId);
+
+    if (!ownStudentId) {
+      return res.status(404).json({ success: false, message: 'Student profile not found' });
+    }
+
+    if (ownStudentId !== requestedStudentId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view other student fee records' });
+    }
+  }
+
+  const fees = await getFeesForStudent(requestedStudentId);
   res.status(200).json({ success: true, fees, data: fees });
 });
 
@@ -92,17 +131,78 @@ const updateFee = asyncHandler(async (req, res) => {
 // @route   POST /api/fees/:id/pay
 // @access  Private (Admin)
 const collectPayment = asyncHandler(async (req, res) => {
-  const { fee, payment, resultCode } = await collectFeePaymentRecord(req.params.id, {
-    ...req.body,
-    receivedByUserId: req.user?._id ?? null,
-  });
+  const requestRole = getRequestRole(req);
+  const feeRecord = await getFeeRecordById(req.params.id);
 
-  if (resultCode === 'not_found') {
+  if (!feeRecord) {
     return res.status(404).json({ success: false, message: 'Fee record not found' });
   }
 
+  let paymentPayload = {
+    ...req.body,
+    receivedByUserId: req.user?._id ?? req.user?.id ?? null,
+  };
+  let paymentContext = null;
+
+  if (requestRole === 'student') {
+    if (!STUDENT_PAYMENT_PORTAL_ENABLED) {
+      return res.status(503).json({
+        success: false,
+        message: 'Online student fee payments are not enabled in this deployment.',
+      });
+    }
+
+    const studentProfile = await getStudentByUserId(req.user);
+    const ownStudentId = parseStudentId(studentProfile?._id ?? studentProfile?.id ?? studentProfile?.studentId);
+    const feeStudentId = parseStudentId(feeRecord.studentId?._id ?? feeRecord.studentId);
+
+    if (!ownStudentId) {
+      return res.status(404).json({ success: false, message: 'Student profile not found' });
+    }
+
+    if (ownStudentId !== feeStudentId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to pay another student fee record' });
+    }
+
+    if (process.env.NODE_ENV === 'production' || STUDENT_PAYMENT_PROVIDER !== 'mock') {
+      return res.status(503).json({
+        success: false,
+        message: 'A production payment gateway is not configured for student self-service payments.',
+      });
+    }
+
+    paymentPayload = {
+      ...paymentPayload,
+      mode: paymentPayload.mode || 'Online',
+      transactionId: paymentPayload.transactionId || createMockStudentPaymentReference(req.params.id, req.user?._id ?? req.user?.id),
+      notes: paymentPayload.notes || 'Development sandbox payment recorded from student portal.',
+      receivedByUserId: req.user?._id ?? req.user?.id ?? null,
+    };
+
+    paymentContext = {
+      provider: STUDENT_PAYMENT_PROVIDER,
+      environment: STUDENT_PAYMENT_ENVIRONMENT,
+      chargedRealMoney: false,
+      message: 'Development sandbox payment recorded. No real money was charged.',
+    };
+  }
+
+  const { fee, payment, resultCode, pendingAmount } = await collectFeePaymentRecord(req.params.id, paymentPayload);
+
   if (resultCode === 'invalid_amount') {
     return res.status(400).json({ success: false, message: 'Invalid payment amount' });
+  }
+
+  if (resultCode === 'already_paid') {
+    return res.status(400).json({ success: false, message: 'This fee is already fully paid.' });
+  }
+
+  if (resultCode === 'exceeds_pending') {
+    return res.status(400).json({
+      success: false,
+      message: 'Payment amount cannot exceed the current pending balance.',
+      pendingAmount,
+    });
   }
 
   res.status(200).json({
@@ -110,6 +210,7 @@ const collectPayment = asyncHandler(async (req, res) => {
     fee,
     data: fee,
     receipt: payment,
+    paymentContext,
   });
 });
 

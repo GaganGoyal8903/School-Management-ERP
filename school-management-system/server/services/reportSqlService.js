@@ -102,6 +102,81 @@ const getStatusCount = (items = [], status) =>
     )?.count || 0
   );
 
+const createRestrictedDashboardReport = ({ role = null } = {}) => ({
+  totalStudents: 0,
+  totalTeachers: 0,
+  totalSubjects: 0,
+  totalMaterials: 0,
+  totalFeesCollected: 0,
+  pendingFees: 0,
+  stats: {
+    students: 0,
+    teachers: 0,
+    subjects: 0,
+    materials: 0,
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalFeesCollected: 0,
+    pendingFees: 0,
+  },
+  feeSummary: {
+    totalFees: 0,
+    collectedFees: 0,
+    pendingFees: 0,
+    totalPaid: 0,
+    totalPending: 0,
+    overdueCount: 0,
+  },
+  todayAttendance: {
+    totalStudents: 0,
+    markedStudents: 0,
+    unmarkedStudents: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+    percentage: 0,
+    isMarked: false,
+  },
+  attendanceSummary: {
+    totalStudents: 0,
+    markedStudents: 0,
+    unmarkedStudents: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+    percentage: 0,
+    isMarked: false,
+  },
+  attendanceTrend: [],
+  studentGrowth: [],
+  studentGrowthTrend: [],
+  feeCollectionTrend: [],
+  feeCollectionGraph: [],
+  busFleetStatus: {
+    total: 0,
+    totalBuses: 0,
+    active: 0,
+    activeBuses: 0,
+    onRoute: 0,
+    onRouteBuses: 0,
+    filters: {
+      total: '',
+      active: 'Active',
+      onRoute: 'On Route',
+    },
+  },
+  recentStudents: [],
+  upcomingExams: [],
+  teacherSummary: null,
+  studentProfileSummary: {
+    role,
+    dashboardMode: 'restricted',
+  },
+  recentMaterials: [],
+});
+
 const mapRecentDashboardStudent = (student) => {
   if (!student) {
     return null;
@@ -836,6 +911,11 @@ const syncReportSources = async ({ force = false } = {}) => {
 };
 
 const getDashboardReport = async ({ role = null, userId = null } = {}) => {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  if (['student', 'parent'].includes(normalizedRole)) {
+    return createRestrictedDashboardReport({ role: normalizedRole, userId });
+  }
+
   await Promise.all([
     ensureStudentSqlReady(),
     ensureTeacherSqlReady(),

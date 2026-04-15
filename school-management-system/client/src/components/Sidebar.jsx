@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getRoleHomePath } from '../utils/roleRoutes';
 import { 
   LayoutDashboard, 
   Users, 
@@ -48,8 +49,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   ];
 
   const studentLinks = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/timetable', icon: Clock, label: 'Timetable' },
+    { path: getRoleHomePath('student'), icon: LayoutDashboard, label: 'Student Portal' },
   ];
 
   const parentLinks = [

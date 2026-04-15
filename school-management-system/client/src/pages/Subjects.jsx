@@ -13,7 +13,7 @@ import {
 } from '../services/api';
 
 const Subjects = () => {
-  const { isAdmin, isTeacher } = useAuth();
+  const { isAdmin } = useAuth();
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,17 +31,19 @@ const Subjects = () => {
 
   useEffect(() => {
     fetchData();
-  }, [searchTerm]);
+  }, [searchTerm, isAdmin]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [subjectsRes, teachersRes] = await Promise.all([
-        getSubjects(searchTerm ? { search: searchTerm } : undefined),
-        getTeachers()
-      ]);
+      const requests = [getSubjects(searchTerm ? { search: searchTerm } : undefined)];
+      if (isAdmin) {
+        requests.push(getTeachers());
+      }
+
+      const [subjectsRes, teachersRes] = await Promise.all(requests);
       const subjectsData = subjectsRes?.data?.subjects;
-      const teachersData = teachersRes?.data?.teachers;
+      const teachersData = teachersRes?.data?.teachers || [];
 
       if (!Array.isArray(subjectsData) || !Array.isArray(teachersData)) {
         throw new Error('Invalid subjects response');
@@ -118,48 +120,53 @@ const Subjects = () => {
   const columns = [
     { key: 'name', header: 'Subject Name' },
     { key: 'grade', header: 'Class' },
-    { 
-      key: 'teacher', 
+    {
+      key: 'teacher',
       header: 'Teacher',
       render: (row) => row.teacher?.fullName || <span className="text-gray-400">Not Assigned</span>
     },
-    { 
-      key: 'description', 
+    {
+      key: 'description',
       header: 'Description',
       render: (row) => row.description || <span className="text-gray-400">-</span>
     },
-    { 
-      key: 'actions', 
-      header: 'Actions', 
-      width: '100px',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {(isAdmin || isTeacher) && (
-            <button
-              onClick={() => openEditModal(row)}
-              className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => handleDelete(row._id)}
-              className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      )
-    }
+    ...(isAdmin
+      ? [{
+          key: 'actions',
+          header: 'Actions',
+          width: '100px',
+          render: (row) => (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openEditModal(row)}
+                className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(row._id)}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )
+        }]
+      : [])
   ];
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Subjects</h1>
-        {(isAdmin || isTeacher) && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{isAdmin ? 'Subjects' : 'My Subjects'}</h1>
+          {!isAdmin ? (
+            <p className="mt-1 text-sm text-gray-500">
+              You are only seeing the subjects that are assigned to your teacher account.
+            </p>
+          ) : null}
+        </div>
+        {isAdmin && (
           <button
             onClick={() => { resetForm(); setShowModal(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-[#002366] text-white rounded-lg hover:bg-[#001a4d]"

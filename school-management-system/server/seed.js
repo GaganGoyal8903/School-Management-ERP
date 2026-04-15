@@ -37,15 +37,15 @@ async function seed() {
     // ==================== CREATE USERS ====================
     console.log("👤 Creating users...");
 
-    // Admin User - Use plain password, will be hashed by pre-save hook
+    // Passwords are hashed by the User model pre-save hook.
     const adminUser = await User.create({
       fullName: "Gagan Goyal",
       email: "gagangoyal878@gmail.com",
-      password: "Mayo@123", // Plain password - will be hashed by pre-save hook
+      password: "Mayo@123",
       role: "admin"
     });
 
-    // Teacher Users (6 teachers as per requirement) - Create individually to trigger password hashing
+    // Teacher Users (6 teachers as per requirement)
     const teacherUsers = [];
     const teacherData = [
       { fullName: "Vikram Singh Rathore", email: "vikram.teacher@mayo.edu", phone: "+91 98765 43210" },
@@ -60,7 +60,7 @@ async function seed() {
       const teacher = await User.create({
         fullName: t.fullName,
         email: t.email,
-        password: "Mayo@123", // Plain password - will be hashed by pre-save hook
+        password: "Mayo@123",
         role: "teacher",
         phone: t.phone
       });
@@ -68,7 +68,7 @@ async function seed() {
     }
     console.log("✅ Created 1 admin and 6 teacher users");
 
-    // Student Users (15 students) - Create individually to trigger password hashing
+    // Student Users (15 students)
     const studentUsers = [];
     const studentUserData = [
       { fullName: "Aarav Sharma", email: "aarav.sharma@mayo.edu" },
@@ -92,7 +92,7 @@ async function seed() {
       const student = await User.create({
         fullName: s.fullName,
         email: s.email,
-        password: "Mayo@123", // Plain password - will be hashed by pre-save hook
+        password: "Mayo@123",
         role: "student"
       });
       studentUsers.push(student);

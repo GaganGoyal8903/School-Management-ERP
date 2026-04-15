@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { getAuthUserById } = require('../services/authSqlService');
+const User = require('../models/User');
 
 // Validate JWT_SECRET in production
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -25,6 +26,10 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, secret);
 
       req.user = await getAuthUserById(decoded.id);
+
+      if (!req.user) {
+        req.user = await User.findById(decoded.id).select('-password');
+      }
 
       if (!req.user) {
         return res.status(401).json({ message: 'User not found' });

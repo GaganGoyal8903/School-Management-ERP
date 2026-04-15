@@ -1,7 +1,13 @@
 import axios from "axios";
+import { getStoredAuthToken } from "../utils/authStorage";
+
+const resolveApiBaseUrl = () => {
+  const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  return configuredBaseUrl || "/api";
+};
 
 const API = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: resolveApiBaseUrl(),
 });
 
 export const DASHBOARD_REFRESH_EVENT = "sms:dashboard-data-changed";
@@ -12,14 +18,6 @@ const DASHBOARD_MUTATION_PATHS = [
   "/fees",
   "/buses",
 ];
-
-const getStoredAuthToken = () => {
-  try {
-    return localStorage.getItem("sms_token") || sessionStorage.getItem("sms_token") || "";
-  } catch (error) {
-    return "";
-  }
-};
 
 // Attach token automatically
 API.interceptors.request.use((req) => {
@@ -107,6 +105,11 @@ export const getStudents = (pageOrParams = 1, limit = 10, search = '', classFilt
 export const getAllStudents = () => API.get("/students/all");
 export const getStudentById = (id) => API.get(`/students/${id}`);
 export const getStudentDetailsById = (id) => API.get(`/students/${id}/details`);
+export const getMyStudentDetails = () => API.get("/students/me/details");
+export const getStudentPortalProfiles = (params) => API.get("/students/portal-profiles", { params });
+export const getStudentPortalProfileById = (id) => API.get(`/students/portal-profiles/${id}`);
+export const updateStudentPortalProfile = (id, data) => API.put(`/students/portal-profiles/${id}`, data);
+export const promoteStudentPortalProfile = (id) => API.post(`/students/portal-profiles/${id}/promote`);
 export const createStudent = (data) => API.post("/students", data);
 export const updateStudent = (id, data) => API.put(`/students/${id}`, data);
 export const deleteStudent = (id) => API.delete(`/students/${id}`);
@@ -154,6 +157,10 @@ export const getExamById = (id) => API.get(`/exams/${id}`);
 export const createExam = (data) => API.post("/exams", data);
 export const updateExam = (id, data) => API.put(`/exams/${id}`, data);
 export const deleteExam = (id) => API.delete(`/exams/${id}`);
+export const getExamPaperById = (id) => API.get(`/exams/${id}/paper`);
+export const saveExamPaper = (id, data) => API.put(`/exams/${id}/paper`, data);
+export const startOnlineExamSession = (id) => API.post(`/exams/${id}/online-session/start`);
+export const submitOnlineExamSession = (id, data) => API.post(`/exams/${id}/online-session/submit`, data);
 
 // ================= GRADES =================
 export const getGrades = (params) => API.get("/grades", { params });
@@ -164,8 +171,11 @@ export const deleteGrade = (id) => API.delete(`/grades/${id}`);
 
 // ================= REPORTS =================
 export const getDashboardStats = () => API.get("/reports/dashboard");
+export const getAnalyticsReport = (params) => API.get("/reports/analytics", { params });
+export const getSummaryReport = () => API.get("/reports/summary");
 export const getAttendanceReport = (params) => API.get("/reports/attendance", { params });
 export const getExamReport = (params) => API.get("/reports/exams", { params });
+export const getFeeReport = (params) => API.get("/reports/fees", { params });
 export const getStudentReport = (studentId) => API.get(`/reports/student/${studentId}`);
 export const exportAttendance = (params) => API.get("/reports/attendance/export", { 
   params, 
@@ -188,6 +198,7 @@ export const createFee = (data) => API.post("/fees", data);
 export const updateFee = (id, data) => API.put(`/fees/${id}`, data);
 export const deleteFee = (id) => API.delete(`/fees/${id}`);
 export const collectPayment = (id, data) => API.post(`/fees/${id}/pay`, data);
+export const payStudentFee = (id, data) => API.post(`/fees/${id}/pay`, data);
 export const getFeeStats = (params) => API.get("/fees/stats", { params });
 export const bulkCreateFees = (data) => API.post("/fees/bulk", data);
 
@@ -214,6 +225,7 @@ export const getTeacherTimetable = (teacherId, params) => API.get(`/timetables/t
 export const copyTimetable = (data) => API.post("/timetables/copy", data);
 
 // ================= AI TOOLS =================
+export const askSchoolAssistant = (data) => API.post("/ai/assistant", data);
 export const generateLessonPlan = (data) => API.post("/ai/lesson-plan", data);
 export const generateQuiz = (data) => API.post("/ai/quiz", data);
 export const generateHomework = (data) => API.post("/ai/homework", data);
@@ -222,6 +234,7 @@ export const generateHomework = (data) => API.post("/ai/homework", data);
 export const getNotifications = (params) => API.get("/notifications", { params });
 export const sendNotification = (data) => API.post("/notifications", data);
 export const sendWhatsAppMessage = (data) => API.post("/notifications/whatsapp", data);
+export const getNotices = (params) => API.get("/parents/announcements", { params });
 
 export default API;
 

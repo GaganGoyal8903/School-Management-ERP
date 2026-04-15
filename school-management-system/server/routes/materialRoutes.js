@@ -11,31 +11,86 @@ const {
   deleteMaterialRecord,
   getMaterialsBySubject,
 } = require('../services/materialSqlService');
+const {
+  extractSubjectId,
+  getTeacherAssignmentScope,
+  paginateItems,
+  doesTeacherOwnSubject,
+} = require('../services/teacherAssignmentService');
+
+const getRequestRole = (req) => String(req.user?.role || '').trim().toLowerCase();
+const isTeacherRequest = (req) => getRequestRole(req) === 'teacher';
 
 router.use(protect);
 
 router.get('/', asyncHandler(async (req, res) => {
   const { subject, grade, search, page = 1, limit = 10 } = req.query;
+  const requestPage = parseInt(page, 10) || 1;
+  const requestLimit = parseInt(limit, 10) || 10;
+  const queryOptions = isTeacherRequest(req)
+    ? {
+        subject,
+        grade,
+        search,
+        page: 1,
+        limit: 5000,
+      }
+    : {
+        subject,
+        grade,
+        search,
+        page: requestPage,
+        limit: requestLimit,
+      };
   const { materials, total } = await getMaterialList({
-    subject,
-    grade,
-    search,
-    page: parseInt(page, 10) || 1,
-    limit: parseInt(limit, 10) || 10,
+    ...queryOptions,
   });
+
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({
+      teacherUserId: req.user?._id,
+      grade,
+      search,
+    });
+    const filteredMaterials = (materials || []).filter((material) => {
+      const uploadedByCurrentTeacher = String(material?.uploadedBy?._id || '') === String(req.user?._id || '');
+      return uploadedByCurrentTeacher || doesTeacherOwnSubject({
+        scope,
+        subjectId: material?.subject?._id || material?.subjectId || material?.subject,
+      });
+    });
+    const paginated = paginateItems(filteredMaterials, page, limit);
+
+    return res.json({
+      success: true,
+      materials: paginated.items,
+      pagination: {
+        total: paginated.total,
+        page: paginated.page,
+        pages: Math.ceil(paginated.total / paginated.limit),
+      },
+    });
+  }
 
   res.json({
     success: true,
     materials,
     pagination: {
       total,
-      page: parseInt(page, 10) || 1,
-      pages: Math.ceil(total / (parseInt(limit, 10) || 10)),
+      page: requestPage,
+      pages: Math.ceil(total / requestLimit),
     },
   });
 }));
 
 router.post('/', authorize('admin', 'teacher'), asyncHandler(async (req, res) => {
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: req.user?._id });
+    if (!doesTeacherOwnSubject({ scope, subjectId: req.body.subject })) {
+      return res.status(403).json({ message: 'Teachers can only upload materials for their assigned subjects' });
+    }
+  }
+
   const material = await createMaterialRecord({
     ...req.body,
     uploadedByUserId: req.user?._id,
@@ -48,6 +103,13 @@ router.post('/', authorize('admin', 'teacher'), asyncHandler(async (req, res) =>
 }));
 
 router.get('/subject/:subject', asyncHandler(async (req, res) => {
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: req.user?._id });
+    if (!doesTeacherOwnSubject({ scope, subjectId: req.params.subject })) {
+      return res.status(403).json({ message: 'Not authorized to access materials for this subject' });
+    }
+  }
+
   const materials = await getMaterialsBySubject(req.params.subject);
   res.json({
     success: true,
@@ -60,6 +122,19 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
   if (!material) {
     return res.status(404).json({ message: 'Material not found' });
+  }
+
+  if (isTeacherRequest(req)) {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: req.user?._id });
+    const uploadedByCurrentTeacher = String(material?.uploadedBy?._id || '') === String(req.user?._id || '');
+    const hasSubjectAccess = doesTeacherOwnSubject({
+      scope,
+      subjectId: material?.subject?._id || material?.subjectId || material?.subject,
+    });
+
+    if (!uploadedByCurrentTeacher && !hasSubjectAccess) {
+      return res.status(403).json({ message: 'Not authorized to access this material' });
+    }
   }
 
   res.json({

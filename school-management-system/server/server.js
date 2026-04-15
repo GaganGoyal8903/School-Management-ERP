@@ -1,8 +1,13 @@
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
+const helmet = require('helmet');
+const morgan = require('morgan');
 const cors = require("cors");
 const { initSqlServer } = require('./config/sqlServer');
+const User = require('./models/User');
+const { syncUserAuthRecord } = require('./services/authSqlService');
+const { migrateLegacyPasswordHashes } = require('./services/passwordHashMigrationService');
 
 const { errorMiddleware, notFound } = require('./middleware/errorMiddleware');
 
@@ -21,29 +26,159 @@ const feeRoutes = require('./routes/feeRoutes');
 const busRoutes = require('./routes/busRoutes');
 const timetableRoutes = require('./routes/timetableRoutes');
 const parentRoutes = require('./routes/parentRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 
 const app = express();
+const DEFAULT_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production'
+  ? []
+  : [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ];
 
-// ================= MIDDLEWARE =================
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const normalizeOrigin = (value = '') => String(value || '').trim().replace(/\/+$/, '');
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+  process.env.CORS_ORIGIN,
+  ...(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+  ...DEFAULT_ALLOWED_ORIGINS,
+]
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const isOriginAllowed = (origin) => {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedOrigins.includes(normalizeOrigin(origin));
+};
+
+let isMongoReady = false;
+let isSqlReady = false;
+let authSyncInFlight = null;
+let httpServer = null;
+
+const attemptInitialAuthSync = async () => {
+  if (!isMongoReady || !isSqlReady) {
+    return false;
+  }
+
+  if (authSyncInFlight) {
+    return authSyncInFlight;
+  }
+
+  authSyncInFlight = (async () => {
+    const users = await User.find({})
+      .select('fullName email password role phone isActive lastLogin')
+      .lean();
+
+    if (!users.length) {
+      console.log('[auth-sync] No Mongo users found to sync into SQL auth.');
+      return true;
+    }
+
+    let syncedCount = 0;
+
+    for (const user of users) {
+      if (!user?._id || !user?.email || !user?.password) {
+        continue;
+      }
+
+      try {
+        await syncUserAuthRecord(user);
+        syncedCount += 1;
+      } catch (error) {
+        console.warn(`[auth-sync] Failed to sync ${user.email}: ${error.message}`);
+      }
+    }
+
+    console.log(`[auth-sync] Synced ${syncedCount}/${users.length} Mongo users to SQL auth.`);
+
+    const passwordHashMigration = await migrateLegacyPasswordHashes();
+    if (
+      passwordHashMigration.mongo.updated ||
+      passwordHashMigration.sql.primary.updated ||
+      passwordHashMigration.sql.mirror.updated
+    ) {
+      console.warn('[auth-sync] Migrated legacy plain-text passwords to bcrypt hashes', {
+        mongoUpdated: passwordHashMigration.mongo.updated,
+        primarySqlUpdated: passwordHashMigration.sql.primary.updated,
+        mirrorSqlUpdated: passwordHashMigration.sql.mirror.updated,
+      });
+    }
+
+    return true;
+  })().catch((error) => {
+    authSyncInFlight = null;
+    throw error;
+  });
+
+  return authSyncInFlight;
+};
+
+// ================= ENHANCED SECURITY =================
+app.set('trust proxy', 1);
+app.use(helmet());
+app.use(morgan('combined'));
+app.use(cors({
+  origin(origin, callback) {
+    if (isOriginAllowed(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  },
+  credentials: true
+}));
+
+// ================= PARSER =================
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ================= DATABASE =================
-const MONGO_URI = process.env.MONGO_URI || "mongodb://gagangoyal878_db_user:wKlY3lEVmyKv2QLt@testcluster-shard-00-00.yshysvv.mongodb.net:27017,testcluster-shard-00-01.yshysvv.mongodb.net:27017,testcluster-shard-00-02.yshysvv.mongodb.net:27017/mayo_college_db?ssl=true&replicaSet=atlas-shard-0&authSource=admin&retryWrites=true&w=majority";
+const MONGO_URI = process.env.MONGO_URI || (process.env.NODE_ENV === 'production'
+  ? ''
+  : 'mongodb://127.0.0.1:27017/mayo_college_db');
+
+if (!MONGO_URI) {
+  console.error('❌ MONGO_URI is required in production.');
+  process.exit(1);
+}
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch((err) => console.log("MongoDB Error:", err.message));
+  .then(async () => {
+    isMongoReady = true;
+    console.log("✅ MongoDB Connected Successfully");
+    await attemptInitialAuthSync();
+  })
+  .catch((err) => console.error("❌ MongoDB Error:", err.message));
 
 initSqlServer()
-  .catch((err) => console.warn("SQL Server bootstrap skipped:", err.message));
+  .then(async () => {
+    isSqlReady = true;
+    console.log("✅ SQL Server Initialized");
+    await attemptInitialAuthSync();
+  })
+  .catch((err) => console.warn("⚠️ SQL Server bootstrap skipped:", err.message));
 
 // ================= API ROUTES =================
 
 // Health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "School Management API is running" });
+  res.json({ 
+    status: "ok", 
+    message: "School Management API Secure & Running",
+    timestamp: new Date().toISOString(),
+    security: "helmet/cors/logging ✅"
+  });
 });
 
 // Dashboard route - returns simplified stats for dashboard cards
@@ -59,7 +194,8 @@ app.get("/api/dashboard", async (req, res) => {
       totalMaterials: Number(dashboard?.stats?.materials || 0)
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[dashboard] Error:', error.message);
+    res.status(500).json({ message: 'Dashboard data unavailable' });
   }
 });
 
@@ -107,6 +243,9 @@ app.use("/api/timetables", timetableRoutes);
 // Parent routes
 app.use("/api/parent", parentRoutes);
 
+// AI routes
+app.use("/api/ai", aiRoutes);
+
 // ================= LEGACY / BACKWARD-COMPAT NOTES =================
 // - /api/student is mounted for backward compatibility with older clients.
 // - /api/login (duplicate of /api/auth/login) - REMOVED
@@ -117,17 +256,44 @@ app.use(notFound);
 app.use(errorMiddleware);
 
 // ================= START SERVER =================
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT) || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`School Management Server Running on http://localhost:${PORT}`);
+const startServer = async (port) => {
+  httpServer = app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 School Management Server Secure on http://localhost:${port}`);
+    console.log(`📊 Health: http://localhost:${port}/api/health`);
+    console.log(`🔧 Data Sync: cd server && npm run sync-sections`);
+    console.log(`📱 Frontend: cd client && npm run dev`);
+  });
+
+  httpServer.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(
+        `❌ Port ${port} is already in use. Stop the existing backend process or set PORT consistently for both client and server.`
+      );
+      process.exit(1);
+      return;
+    }
+    console.error('❌ Server error:', error.message);
+  });
+};
+
+startServer(PORT).catch((err) => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
 });
 
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Stop the existing process or change PORT in server/.env.`);
+process.on('SIGTERM', () => {
+  console.log('🔄 SIGTERM. Graceful shutdown...');
+
+  if (!httpServer) {
+    mongoose.connection.close(() => process.exit(0));
     return;
   }
 
-  console.error('Server startup error:', error.message);
+  httpServer.close(() => {
+    mongoose.connection.close();
+    console.log('✅ Connections closed');
+    process.exit(0);
+  });
 });

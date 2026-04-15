@@ -15,12 +15,12 @@ const {
 
 router.use(protect);
 
-router.get('/', getSubjects);
-router.get('/count', getSubjectCount);
-router.get('/grade/:grade', getSubjectsByGrade);
+router.get('/', authorize('admin', 'teacher'), getSubjects);
+router.get('/count', authorize('admin', 'teacher'), getSubjectCount);
+router.get('/grade/:grade', authorize('admin', 'teacher'), getSubjectsByGrade);
 router.post('/', authorize('admin'), createSubject);
 router.put('/:id/assign-teacher', authorize('admin'), assignTeacherToSubject);
-router.get('/:id', getSubject);
+router.get('/:id', authorize('admin', 'teacher'), getSubject);
 router.put('/:id', authorize('admin'), updateSubject);
 router.delete('/:id', authorize('admin'), deleteSubject);
 

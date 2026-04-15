@@ -3,9 +3,12 @@ import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
+import { getRoleHomePath } from "./utils/roleRoutes";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import StudentPortal from "./pages/StudentPortal";
+import Unauthorized from "./pages/Unauthorized";
 import Students from "./pages/Students";
 import StudentDetails from "./pages/StudentDetails";
 import Teachers from "./pages/Teachers";
@@ -20,32 +23,44 @@ import BusTracking from "./pages/BusTracking";
 import Timetable from "./pages/Timetable";
 import AITools from "./pages/AITools";
 
+const AuthLoadingScreen = () => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="h-10 w-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+  </div>
+);
+
 function LoginRoute() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />;
+  return isAuthenticated ? <Navigate to={getRoleHomePath(user)} replace /> : <Login />;
 }
 
 function RootRedirect() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+  return <Navigate to={isAuthenticated ? getRoleHomePath(user) : "/login"} replace />;
+}
+
+function DashboardRoute() {
+  const { loading, user } = useAuth();
+
+  if (loading) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (getRoleHomePath(user) !== "/dashboard") {
+    return <Navigate to={getRoleHomePath(user)} replace />;
+  }
+
+  return <Dashboard />;
 }
 
 function App() {
@@ -67,10 +82,28 @@ function App() {
           >
             {/* Dashboard */}
             <Route
+              path="/unauthorized"
+              element={
+                <ProtectedRoute>
+                  <Unauthorized />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/dashboard"
               element={
                 <ProtectedRoute allowedRoles={["admin", "teacher", "student", "parent", "accountant"]}>
-                  <Dashboard />
+                  <DashboardRoute />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/student/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["student"]}>
+                  <StudentPortal />
                 </ProtectedRoute>
               }
             />
@@ -187,7 +220,7 @@ function App() {
             <Route
               path="/timetable"
               element={
-                <ProtectedRoute allowedRoles={["admin", "teacher", "student", "parent"]}>
+                <ProtectedRoute allowedRoles={["admin", "teacher", "parent"]}>
                   <Timetable />
                 </ProtectedRoute>
               }

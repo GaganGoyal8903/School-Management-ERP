@@ -1,4 +1,3 @@
-const bcrypt = require('bcryptjs');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
 const { sendOtpEmail } = require('../services/mailService');
@@ -6,6 +5,8 @@ const {
   ensureAuthSqlReady,
   getAuthUserById,
   getAuthUserByEmail,
+  getAuthUserByEmailRole,
+  comparePasswordValue,
   createAuthUser,
   updateAuthUser,
   loginLookup,
@@ -34,6 +35,8 @@ const {
 } = require('../services/authSecurityService');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VALID_AUTH_ROLES = new Set(['admin', 'teacher', 'student']);
+const DUPLICATE_ROLE_EMAIL_MESSAGE = 'This email already exists for the selected role';
 
 const LOGIN_SESSION_TTL_MS = Number(process.env.LOGIN_SESSION_TTL_MS || 15 * 60 * 1000);
 const CAPTCHA_EXPIRY_MS = Number(process.env.CAPTCHA_EXPIRY_MS || 5 * 60 * 1000);
@@ -84,13 +87,21 @@ const getClientIp = (req) => {
 };
 
 const sanitizeDisplayText = (value = '') => String(value).trim().replace(/[<>]/g, '');
+const normalizeRequestedRole = (value = '') => String(value || '').trim().toLowerCase();
+const logAuthDebug = (event, payload = {}) => {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+
+  console.info('[auth]', { event, ...payload });
+};
 
 const getStudentProfileIfRequired = async (user) => {
-  if (user.role !== 'student') {
+  if (String(user?.role || '').trim().toLowerCase() !== 'student') {
     return null;
   }
 
-  return getStudentByUserId(user._id);
+  return getStudentByUserId(user);
 };
 
 const buildUserPayload = (user) => ({
@@ -102,26 +113,11 @@ const buildUserPayload = (user) => ({
   role: user.role ?? user.RoleName ?? null,
 });
 
-const buildCredentialRateKey = (email, ipAddress) => hashAuthValue(`credential:${email}:${ipAddress}`);
+const buildCredentialRateKey = (email, role, ipAddress) =>
+  hashAuthValue(`credential:${email}:${role}:${ipAddress}`);
 const isSqlInactiveFlag = (value) => value === false || value === 0 || String(value).toLowerCase() === 'false';
-const isBcryptHash = (value = '') => /^\$2[aby]\$\d{2}\$/.test(String(value || ''));
-const isStoredPasswordMatch = async (inputPassword, storedPassword) => {
-  const normalizedInput = String(inputPassword || '');
-  const normalizedStored = String(storedPassword || '');
-  if (!normalizedStored) {
-    return false;
-  }
-
-  if (isBcryptHash(normalizedStored)) {
-    try {
-      return await bcrypt.compare(normalizedInput, normalizedStored);
-    } catch (error) {
-      return false;
-    }
-  }
-
-  return normalizedInput === normalizedStored;
-};
+const isStoredPasswordMatch = async (inputPassword, storedPassword) =>
+  comparePasswordValue(inputPassword, storedPassword);
 
 const getSqlUserFromLookup = async (lookupRecord) => {
   if (!lookupRecord) {
@@ -136,7 +132,7 @@ const getSqlUserFromLookup = async (lookupRecord) => {
   }
 
   if (lookupRecord.Email) {
-    return getAuthUserByEmail(lookupRecord.Email);
+    return getAuthUserByEmailRole(lookupRecord.Email, lookupRecord.RoleName || lookupRecord.role);
   }
 
   return null;
@@ -154,8 +150,19 @@ const getSqlUserFromSession = async (session) => {
     }
   }
 
+  const sessionRole = normalizeRequestedRole(session.role);
+  if (session.email && sessionRole) {
+    const userByEmailRole = await getAuthUserByEmailRole(session.email, sessionRole);
+    if (userByEmailRole) {
+      return userByEmailRole;
+    }
+  }
+
   if (session.email) {
-    return getAuthUserByEmail(session.email);
+    const roleAgnosticUser = await getAuthUserByEmail(session.email);
+    if (roleAgnosticUser && normalizeRequestedRole(roleAgnosticUser.role) === sessionRole) {
+      return roleAgnosticUser;
+    }
   }
 
   return null;
@@ -204,17 +211,28 @@ const login = asyncHandler(async (req, res) => {
 
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
+  const role = normalizeRequestedRole(req.body.role);
 
-  if (!email || !password) {
-    return credentialsValidationError(res, 'Please provide email and password');
+  if (!email || !password || !role) {
+    return credentialsValidationError(res, 'Please provide email, password, and role');
   }
 
   if (!EMAIL_REGEX.test(email)) {
     return credentialsValidationError(res, 'Please provide a valid email address');
   }
 
+  if (!VALID_AUTH_ROLES.has(role)) {
+    return credentialsValidationError(res, 'Please select a valid role: admin, teacher, or student');
+  }
+
   const clientIp = getClientIp(req);
-  const credentialRateKey = buildCredentialRateKey(email, clientIp);
+  const credentialRateKey = buildCredentialRateKey(email, role, clientIp);
+  logAuthDebug('login.attempt', {
+    email,
+    role,
+    ipAddress: clientIp,
+    route: '/api/auth/login',
+  });
   const blockedStatus = await ensureNotBlocked({
     action: 'login_credentials',
     key: credentialRateKey,
@@ -228,10 +246,31 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 
-  const lookupRecord = await loginLookup(email);
-  const isPasswordCorrect = await isStoredPasswordMatch(password, lookupRecord?.PasswordHash);
+  const lookupRecord = await loginLookup(email, role);
+  logAuthDebug('login.lookup', {
+    email,
+    role,
+    entity: 'dbo.Users/dbo.SqlAuthUsers',
+    found: Boolean(lookupRecord),
+    matchedRole: lookupRecord?.RoleName || null,
+  });
 
-  if (!lookupRecord || !isPasswordCorrect) {
+  if (!lookupRecord) {
+    return res.status(404).json({
+      success: false,
+      message: 'No user found for the selected role.',
+    });
+  }
+
+  const isPasswordCorrect = await isStoredPasswordMatch(password, lookupRecord?.PasswordHash);
+  logAuthDebug('login.password-check', {
+    email,
+    role,
+    found: true,
+    passwordMatched: isPasswordCorrect,
+  });
+
+  if (!isPasswordCorrect) {
     const failureState = await registerFailure({
       action: 'login_credentials',
       key: credentialRateKey,
@@ -250,7 +289,7 @@ const login = asyncHandler(async (req, res) => {
 
     return res.status(401).json({
       success: false,
-      message: 'Invalid credentials',
+      message: 'Invalid password',
       attemptsLeft: failureState.attemptsLeft,
     });
   }
@@ -278,6 +317,7 @@ const login = asyncHandler(async (req, res) => {
     sessionToken: createSessionToken(),
     mongoUserId: user._id,
     email: user.email,
+    role: user.role || role,
     ipAddress: getClientIp(req),
     userAgent: sanitizeDisplayText(req.headers['user-agent'] || ''),
     status: 'credentials_verified',
@@ -291,6 +331,7 @@ const login = asyncHandler(async (req, res) => {
     nextStep: 'captcha',
     message: 'Credentials verified. Please complete CAPTCHA verification.',
     sessionToken: session.sessionToken,
+    user: buildUserPayload(user),
     captcha: {
       image: buildCaptchaImage(captchaCode),
       expiresAt: session.captchaExpiresAt || captchaExpiresAt,
@@ -302,18 +343,36 @@ const login = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/login/legacy
 // @access  Public
 const legacyLogin = asyncHandler(async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_LEGACY_AUTH !== 'true') {
+    return res.status(404).json({
+      success: false,
+      message: 'Legacy login is disabled in production.',
+    });
+  }
+
   await ensureAuthSqlReady();
 
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
+  const role = normalizeRequestedRole(req.body.role);
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, message: 'Please provide email and password' });
+  if (!email || !password || !role) {
+    return res.status(400).json({ success: false, message: 'Please provide email, password, and role' });
   }
 
-  const lookupRecord = await loginLookup(email);
+  if (!VALID_AUTH_ROLES.has(role)) {
+    return res.status(400).json({ success: false, message: 'Please select a valid role: admin, teacher, or student' });
+  }
+
+  logAuthDebug('legacy-login.attempt', {
+    email,
+    role,
+    route: '/api/auth/login/legacy',
+  });
+
+  const lookupRecord = await loginLookup(email, role);
   if (!lookupRecord) {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    return res.status(404).json({ success: false, message: 'No user found for the selected role.' });
   }
 
   if (isSqlInactiveFlag(lookupRecord.IsActive)) {
@@ -324,7 +383,7 @@ const legacyLogin = asyncHandler(async (req, res) => {
 
   const isMatch = await isStoredPasswordMatch(password, lookupRecord?.PasswordHash);
   if (!isMatch) {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    return res.status(401).json({ success: false, message: 'Invalid password' });
   }
 
   const user = await getSqlUserFromLookup(lookupRecord);
@@ -718,8 +777,14 @@ const register = asyncHandler(async (req, res) => {
 
   const { fullName, email, password, role, phone } = req.body;
 
-  if (!fullName || !email || !password) {
-    return res.status(400).json({ message: 'Please provide all required fields' });
+  if (!fullName || !email || !password || !role) {
+    return res.status(400).json({ message: 'Please provide fullName, email, password, and role' });
+  }
+
+  const normalizedRole = String(role).trim().toLowerCase();
+
+  if (!VALID_AUTH_ROLES.has(normalizedRole)) {
+    return res.status(400).json({ message: 'Valid roles: admin, teacher, student' });
   }
 
   if (!EMAIL_REGEX.test(email)) {
@@ -733,19 +798,30 @@ const register = asyncHandler(async (req, res) => {
   const sanitizedFullName = sanitizeDisplayText(fullName);
   const sanitizedEmail = normalizeEmail(email);
 
-  const existingUser = await getAuthUserByEmail(sanitizedEmail);
+  logAuthDebug('register.duplicate-check', {
+    email: sanitizedEmail,
+    role: normalizedRole,
+    query: 'getAuthUserByEmailRole',
+  });
+
+  const existingUser = await getAuthUserByEmailRole(sanitizedEmail, normalizedRole);
   if (existingUser) {
-    return res.status(400).json({ message: 'User already exists' });
+    return res.status(400).json({ message: DUPLICATE_ROLE_EMAIL_MESSAGE });
   }
 
-  const passwordHash = String(password);
   const user = await createAuthUser({
     fullName: sanitizedFullName,
     email: sanitizedEmail,
-    passwordHash,
-    role: role || 'student',
+    passwordHash: String(password),
+    role: normalizedRole,
     phone: sanitizeDisplayText(phone || ''),
     isActive: true,
+  });
+
+  logAuthDebug('register.created', {
+    email: sanitizedEmail,
+    role: normalizedRole,
+    userId: user?._id || null,
   });
 
   const token = generateToken(user._id);
@@ -838,8 +914,7 @@ const changePassword = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Current password is incorrect' });
   }
 
-  const passwordHash = String(newPassword);
-  await updateAuthUser(req.user._id, { password: passwordHash });
+  await updateAuthUser(req.user._id, { password: String(newPassword) });
 
   return res.json({
     success: true,

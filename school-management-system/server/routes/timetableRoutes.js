@@ -17,21 +17,21 @@ const { authorize } = require('../middleware/roleMiddleware');
 router.use(protect);
 
 // Get timetable by class
-router.get('/class/:class', getTimetableByClass);
+router.get('/class/:class', authorize('admin', 'teacher', 'parent'), getTimetableByClass);
 
 // Get teacher's timetable
-router.get('/teacher/:teacherId', getTeacherTimetable);
+router.get('/teacher/:teacherId', authorize('admin', 'teacher'), getTeacherTimetable);
 
 // Copy timetable
 router.post('/copy', authorize('admin'), copyTimetable);
 
 // CRUD operations
 router.route('/')
-  .get(getTimetables)
+  .get(authorize('admin'), getTimetables)
   .post(authorize('admin'), createTimetable);
 
 router.route('/:id')
-  .get(getTimetableById)
+  .get(authorize('admin', 'teacher'), getTimetableById)
   .put(authorize('admin'), updateTimetable)
   .delete(authorize('admin'), deleteTimetable);
 

@@ -358,24 +358,41 @@ const getTimetableByClassFromSql = async ({ className, section = null, academicY
 const getTeacherTimetableFromSql = async ({ teacherId, academicYear = null, day = null } = {}) =>
   getTimetableList({ teacherId, academicYear, day });
 
-const createTimetableRecord = async ({ class: className, section, academicYear, day, periods = [] } = {}) => {
+const createTimetableRecord = async ({
+  class: className,
+  className: classNameAlias,
+  section,
+  sectionName,
+  academicYear,
+  day,
+  periods = [],
+} = {}) => {
+  const resolvedClassName = className || classNameAlias || null;
+  const resolvedSectionName = section || sectionName || '';
   const normalizedPeriods = normalizeTimetablePeriods(periods);
   if (!normalizedPeriods.length) {
     return { resultCode: 'invalid_payload' };
   }
 
-  const existing = await getTimetableList({ className, section, academicYear, day });
+  const existing = await getTimetableList({
+    className: resolvedClassName,
+    section: resolvedSectionName,
+    academicYear,
+    day,
+  });
   if (existing.length) {
     return { resultCode: 'already_exists' };
   }
+  let invalidContext = false;
 
   await executeInTransaction(async (tx) => {
     const sql = getSqlClient();
-    const classId = await resolveClassIdByName(className, tx);
-    const sectionId = await resolveSectionIdByName(section, tx);
+    const classId = await resolveClassIdByName(resolvedClassName, tx);
+    const sectionId = await resolveSectionIdByName(resolvedSectionName, tx);
     const academicYearId = await resolveAcademicYearId(academicYear, tx);
     if (!classId || !sectionId || !academicYearId) {
-      throw new Error('Unable to resolve the SQL class, section, or academic year for this timetable.');
+      invalidContext = true;
+      return;
     }
 
     for (const period of normalizedPeriods) {
@@ -427,24 +444,40 @@ const createTimetableRecord = async ({ class: className, section, academicYear, 
     }
   });
 
+  if (invalidContext) {
+    return { resultCode: 'invalid_context' };
+  }
+
   return {
     resultCode: 'ok',
-    timetable: await getTimetableByIdFromSql(`${className}|${section || ''}|${day}`),
+    timetable: await getTimetableByIdFromSql(`${resolvedClassName}|${resolvedSectionName || ''}|${day}`),
   };
 };
 
-const updateTimetableRecord = async (timetableId, { class: className, section, academicYear, day, periods = [] } = {}) => {
+const updateTimetableRecord = async (timetableId, {
+  class: className,
+  className: classNameAlias,
+  section,
+  sectionName,
+  academicYear,
+  day,
+  periods = [],
+} = {}) => {
   const existing = await getTimetableByIdFromSql(timetableId);
   if (!existing) {
     return { resultCode: 'not_found' };
   }
 
+  const resolvedClassName = className || classNameAlias || existing.class || existing.className;
+  const resolvedSectionName = section || sectionName || existing.section || existing.sectionName || '';
+  const resolvedAcademicYear = academicYear || existing.academicYear || existing.academicYearName || null;
+  const resolvedDay = day || existing.day;
   const normalizedPeriods = normalizeTimetablePeriods(periods);
   if (!normalizedPeriods.length) {
     return { resultCode: 'invalid_payload' };
   }
 
-  const targetGroupId = `${className}|${section || ''}|${day}`;
+  const targetGroupId = `${resolvedClassName}|${resolvedSectionName || ''}|${resolvedDay}`;
   if (targetGroupId !== existing._id) {
     const conflicting = await getTimetableByIdFromSql(targetGroupId);
     if (conflicting) {
@@ -455,14 +488,16 @@ const updateTimetableRecord = async (timetableId, { class: className, section, a
   const existingRowIds = existing.periods
     .map((period) => parseNumericId(period.id || period._id))
     .filter(Boolean);
+  let invalidContext = false;
 
   await executeInTransaction(async (tx) => {
     const sql = getSqlClient();
-    const classId = await resolveClassIdByName(className, tx);
-    const sectionId = await resolveSectionIdByName(section, tx);
-    const academicYearId = await resolveAcademicYearId(academicYear, tx);
+    const classId = await resolveClassIdByName(resolvedClassName, tx);
+    const sectionId = await resolveSectionIdByName(resolvedSectionName, tx);
+    const academicYearId = await resolveAcademicYearId(resolvedAcademicYear, tx);
     if (!classId || !sectionId || !academicYearId) {
-      throw new Error('Unable to resolve the SQL class, section, or academic year for this timetable.');
+      invalidContext = true;
+      return;
     }
 
     if (existingRowIds.length) {
@@ -513,7 +548,7 @@ const updateTimetableRecord = async (timetableId, { class: className, section, a
           { name: 'SectionId', type: sql.Int, value: sectionId },
           { name: 'SubjectId', type: sql.Int, value: subjectId },
           { name: 'TeacherId', type: sql.Int, value: teacherId },
-          { name: 'DayOfWeek', type: sql.NVarChar(20), value: toNullableString(day) },
+          { name: 'DayOfWeek', type: sql.NVarChar(20), value: toNullableString(resolvedDay) },
           { name: 'StartTime', type: sql.NVarChar(10), value: period.startTime },
           { name: 'EndTime', type: sql.NVarChar(10), value: period.endTime },
           { name: 'RoomNumber', type: sql.NVarChar(100), value: period.roomNumber },
@@ -521,6 +556,10 @@ const updateTimetableRecord = async (timetableId, { class: className, section, a
       );
     }
   });
+
+  if (invalidContext) {
+    return { resultCode: 'invalid_context' };
+  }
 
   return {
     resultCode: 'ok',
@@ -570,6 +609,7 @@ const copyTimetableRecord = async ({ sourceClass, sourceSection, targetClass, ta
   if (existingTarget.length) {
     return { resultCode: 'already_exists' };
   }
+  let invalidContext = false;
 
   await executeInTransaction(async (tx) => {
     const sql = getSqlClient();
@@ -577,7 +617,8 @@ const copyTimetableRecord = async ({ sourceClass, sourceSection, targetClass, ta
     const sectionId = await resolveSectionIdByName(targetSection, tx);
     const academicYearId = await resolveAcademicYearId(academicYear, tx);
     if (!classId || !sectionId || !academicYearId) {
-      throw new Error('Unable to resolve the SQL class, section, or academic year for the target timetable.');
+      invalidContext = true;
+      return;
     }
 
     for (const timetable of sourceTimetables) {
@@ -630,6 +671,10 @@ const copyTimetableRecord = async ({ sourceClass, sourceSection, targetClass, ta
       }
     }
   });
+
+  if (invalidContext) {
+    return { resultCode: 'invalid_context' };
+  }
 
   return { resultCode: 'ok' };
 };

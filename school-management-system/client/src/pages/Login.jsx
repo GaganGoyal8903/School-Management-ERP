@@ -18,9 +18,11 @@ import {
 } from "lucide-react";
 import CrestLogo from "../components/CrestLogo";
 import { useAuth } from "../context/AuthContext";
+import { resolvePostLoginPath } from "../utils/roleRoutes";
 import "./Login.css";
 
 const REMEMBER_EMAIL_KEY = "sms_remembered_email";
+const REMEMBER_ROLE_KEY = "sms_remembered_role";
 
 const featureItems = [
   {
@@ -31,7 +33,7 @@ const featureItems = [
   {
     icon: Users,
     title: "Role-Based Workflows",
-    text: "Securely coordinate actions for admins, teachers, and staff across every module.",
+    text: "Securely route admins, teachers, and students into the right portal experience.",
   },
   {
     icon: BarChart3,
@@ -41,7 +43,7 @@ const featureItems = [
   {
     icon: ShieldCheck,
     title: "Trusted Access",
-    text: "Protected authentication and reliable data controls for school operations.",
+    text: "Protected authentication with role-aware access controls across school operations.",
   },
 ];
 
@@ -49,6 +51,11 @@ const authSteps = [
   { id: "credentials", label: "Credentials" },
   { id: "captcha", label: "CAPTCHA" },
   { id: "otp", label: "OTP" },
+];
+const loginRoleOptions = [
+  { value: "admin", label: "Admin" },
+  { value: "teacher", label: "Teacher" },
+  { value: "student", label: "Student" },
 ];
 
 const getRemainingSeconds = (targetTime, nowMs) => {
@@ -65,25 +72,10 @@ const formatCountdown = (totalSeconds) => {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 };
 
-const resolvePostLoginPath = (authenticatedUser, requestedPath) => {
-  const safeRequestedPath =
-    typeof requestedPath === "string" && requestedPath && requestedPath !== "/login"
-      ? requestedPath
-      : "/dashboard";
-
-  const roleKey = String(authenticatedUser?.role || "").trim().toLowerCase();
-  const roleId = Number(authenticatedUser?.roleId || 0);
-
-  if (roleId === 1 || roleKey === "admin") {
-    return "/dashboard";
-  }
-
-  return safeRequestedPath;
-};
-
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("");
   const [captchaValue, setCaptchaValue] = useState("");
   const [otpValue, setOtpValue] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -119,8 +111,13 @@ export default function Login() {
 
   useEffect(() => {
     const rememberedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    const rememberedRole = localStorage.getItem(REMEMBER_ROLE_KEY);
     if (rememberedEmail) {
       setEmail(rememberedEmail);
+      setRememberMe(true);
+    }
+    if (rememberedRole && loginRoleOptions.some((roleOption) => roleOption.value === rememberedRole)) {
+      setRole(rememberedRole);
       setRememberMe(true);
     }
   }, []);
@@ -163,11 +160,13 @@ export default function Login() {
     setError("");
   };
 
-  const syncRememberedEmail = () => {
+  const syncRememberedCredentials = () => {
     if (rememberMe) {
       localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+      localStorage.setItem(REMEMBER_ROLE_KEY, role.trim());
     } else {
       localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      localStorage.removeItem(REMEMBER_ROLE_KEY);
     }
   };
 
@@ -176,13 +175,13 @@ export default function Login() {
     setError("");
     setInfoMessage("");
 
-    if (!email || !password) {
-      setError("Please enter email and password.");
+    if (!email || !password || !role) {
+      setError("Please enter email, password, and role.");
       return;
     }
 
     setCredentialLoading(true);
-    const result = await startSecureLogin(email, password);
+    const result = await startSecureLogin(email, password, role);
     setCredentialLoading(false);
 
     if (!result.success) {
@@ -330,7 +329,7 @@ export default function Login() {
       return;
     }
 
-    syncRememberedEmail();
+    syncRememberedCredentials();
     navigate(resolvePostLoginPath(result.data?.user, from), { replace: true });
   };
 
@@ -384,7 +383,7 @@ export default function Login() {
             <header className="erp-login-card-header">
               <p className="erp-login-kicker">Welcome Back</p>
               <h2>Secure login verification</h2>
-              <p>Complete all steps to access your ERP dashboard securely.</p>
+              <p>Complete all steps to access the correct school portal securely.</p>
             </header>
 
             <div className="erp-stepper" aria-label="Authentication steps">
@@ -462,6 +461,28 @@ export default function Login() {
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
+                  </div>
+                </div>
+
+                <div className="erp-field-group">
+                  <label htmlFor="role" className="erp-field-label">
+                    Role
+                  </label>
+                  <div className="erp-input-shell">
+                    <Users className="erp-input-icon" size={18} aria-hidden="true" />
+                    <select
+                      id="role"
+                      value={role}
+                      onChange={(event) => setRole(event.target.value)}
+                      required
+                    >
+                      <option value="">Select your role</option>
+                      {loginRoleOptions.map((roleOption) => (
+                        <option key={roleOption.value} value={roleOption.value}>
+                          {roleOption.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -638,7 +659,7 @@ export default function Login() {
             )}
 
             <p className="erp-login-footer">
-              Secure access for Admin, Teacher, and Staff
+              Secure access for Admin, Teacher, and Student
             </p>
           </div>
         </section>

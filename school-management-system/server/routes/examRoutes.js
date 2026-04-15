@@ -8,7 +8,11 @@ const {
   deleteExam,
   enterMarks,
   getStudentResults,
-  getExamReport
+  getExamReport,
+  getExamPaper,
+  updateExamPaper,
+  startOnlineExamSession,
+  submitOnlineExamSession,
 } = require('../controllers/examController');
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
@@ -18,15 +22,21 @@ router.use(protect);
 
 // Exam routes
 router.route('/')
-  .get(getExams)
+  .get(authorize('admin', 'teacher'), getExams)
   .post(authorize('admin', 'teacher'), createExam);
 
-router.get('/results/:studentId', getStudentResults);
+router.get('/results/:studentId', authorize('admin', 'teacher', 'student'), getStudentResults);
 
-router.get('/report/:examId', getExamReport);
+router.get('/report/:examId', authorize('admin', 'teacher'), getExamReport);
+
+router.get('/:id/paper', authorize('admin', 'teacher'), getExamPaper);
+router.put('/:id/paper', authorize('admin', 'teacher'), updateExamPaper);
+
+router.post('/:id/online-session/start', authorize('student'), startOnlineExamSession);
+router.post('/:id/online-session/submit', authorize('student'), submitOnlineExamSession);
 
 router.route('/:id')
-  .get(getExam)
+  .get(authorize('admin', 'teacher'), getExam)
   .put(authorize('admin', 'teacher'), updateExam)
   .delete(authorize('admin'), deleteExam);
 

@@ -1,0 +1,52 @@
+Error: RequestError: [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Invalid column name 'UpdatedAt'.
+    at handleError (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\mssql\lib\msnodesqlv8\request.js:276:21)
+    at StreamEvents.emit (node:events:508:28)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\msnodesqlv8\lib\reader.js:83:20
+    at Array.forEach (<anonymous>)
+    at Query.routeStatementError (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\msnodesqlv8\lib\reader.js:73:19)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\msnodesqlv8\lib\reader.js:239:12
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\msnodesqlv8\lib\driver.js:191:13
+    at Immediate.<anonymous> (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\msnodesqlv8\lib\driver.js:167:9)
+    at process.processImmediate (node:internal/timers:504:21) {
+  code: 'EREQUEST',
+  originalError: [Error: [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Invalid column name 'UpdatedAt'.] {
+    sqlstate: '42S22',
+    code: 207,
+    severity: 16,
+    serverName: 'Autovyn-lap-073\\LOCALDB#1CBE08C1',
+    procName: '',
+    lineNumber: 4
+  },
+  number: 207,
+  lineNumber: 4,
+  state: '42S22',
+  class: 16,
+  serverName: 'Autovyn-lap-073\\LOCALDB#1CBE08C1',
+  procName: ''
+}
+Error: Error: Not Found - /api/parents/announcements?isActive=true
+    at notFound (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\middleware\errorMiddleware.js:56:17)
+    at Layer.handle [as handle_request] (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:328:13)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:280:10)
+    at urlencodedParser (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\body-parser\lib\types\urlencoded.js:91:7)
+    at Layer.handle [as handle_request] (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:328:13)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:286:9 {
+  statusCode: 404
+}
+Error: Error: Not Found - /api/parents/announcements?isActive=true
+    at notFound (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\middleware\errorMiddleware.js:56:17)
+    at Layer.handle [as handle_request] (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:328:13)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:286:9
+    at router.process_params (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:280:10)
+    at urlencodedParser (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\body-parser\lib\types\urlencoded.js:91:7)
+    at Layer.handle [as handle_request] (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:328:13)
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\node_modules\express\lib\router\index.js:286:9 {
+  statusCode: 404
+}

@@ -16,7 +16,6 @@
 
 require("dotenv").config();
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
 // MongoDB URI
 const MONGO_URI = process.env.MONGO_URI || "mongodb://gagangoyal878_db_user:wKlY3lEVmyKv2QLt@testcluster-shard-00-00.yshysvv.mongodb.net:27017,testcluster-shard-00-01.yshysvv.mongodb.net:27017,testcluster-shard-00-02.yshysvv.mongodb.net:27017/mayo_college_db?ssl=true&replicaSet=atlas-shard-0&authSource=admin&retryWrites=true&w=majority";
@@ -118,16 +117,15 @@ async function seed() {
     ]);
     console.log("✅ Existing data cleared!\n");
 
-    // Pre-hash passwords for bulk insert
-    console.log("🔐 Pre-hashing passwords...");
-    const hashedPassword = await bcrypt.hash("Mayo@123", 10);
-    console.log("✅ Passwords hashed!\n");
+    console.log("WARNING: Plain text password storage - for development only");
+    const plainTextPassword = "Mayo@123";
+    console.log("✅ Plain-text development passwords ready!\n");
 
     // ==================== CREATE USERS (BULK) ====================
     console.log("👤 Creating Users...");
     
     // Admin
-    const adminUser = new User({ fullName: "Gagan Goyal", email: "gagangoyal878@gmail.com", password: hashedPassword, role: "admin" });
+    const adminUser = new User({ fullName: "Gagan Goyal", email: "gagangoyal878@gmail.com", password: plainTextPassword, role: "admin" });
     
     // Teachers
     const teacherNames = ["Dr. Vikram Singh Rathore", "Prof. Priya Sharma", "Dr. Rahul Verma", 
@@ -138,7 +136,7 @@ async function seed() {
       "Prof. Lakshmi Narayan"];
     
     const teacherUsers = teacherNames.map((name, i) => ({
-      fullName: name, email: `teacher${i + 1}@mayo.edu`, password: hashedPassword, role: "teacher"
+      fullName: name, email: `teacher${i + 1}@mayo.edu`, password: plainTextPassword, role: "teacher"
     }));
     
     // Students - generate 200
@@ -148,7 +146,7 @@ async function seed() {
       studentUsers.push({
         fullName: generateStudentName(gender),
         email: `student${i + 1}@mayo.edu`,
-        password: hashedPassword,
+        password: plainTextPassword,
         role: "student"
       });
     }

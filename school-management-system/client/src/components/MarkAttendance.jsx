@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { Calendar, Users, CheckCircle, Clock, XCircle } from "lucide-react";
 import CrestLogo from "./CrestLogo";
 import { getAttendance, getStudents, submitAttendance } from "../services/api";
+import { getStoredAuthUser } from "../utils/authStorage";
 
 const sms_gradeOptions = [
   { id: "Class 6", label: "Class 6" },
@@ -119,7 +120,7 @@ export default function MarkAttendance() {
     sms_setLoading(true);
 
     try {
-      const sms_user = JSON.parse(localStorage.getItem("sms_user") || "{}");
+      const sms_user = getStoredAuthUser() || {};
       const sms_teacherId = sms_user?.id;
 
       if (!sms_teacherId) {
@@ -142,7 +143,7 @@ export default function MarkAttendance() {
         className: sms_selectedGrade,
         sectionName: sms_selectedSection,
         students: attendanceList,
-        markedByTeacherId: sms_teacherId,
+        markedByUserId: sms_teacherId,
       });
 
       toast.success(`Attendance submitted for ${sms_selectedGrade} - Section ${sms_selectedSection}`);

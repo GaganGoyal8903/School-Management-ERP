@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { FileText, Upload, Download, Trash2, X, File, Video, Image, Link as LinkIcon } from "lucide-react";
 import CrestLogo from "./CrestLogo";
 import { getMaterials, createMaterial, deleteMaterial } from "../services/api";
+import { getStoredAuthUser } from "../utils/authStorage";
 
 const subjects = ["Mathematics", "Science", "English", "History", "Geography"];
 const materialTypes = ["PDF", "Video", "Image", "Document", "Link"];
@@ -30,7 +31,7 @@ export default function SubjectMaterials() {
   const [sms_academicYear, setSms_academicYear] = useState("2024-2025");
   const [sms_uploading, setSms_uploading] = useState(false);
 
-  const userRole = JSON.parse(localStorage.getItem("sms_user") || "{}").role;
+  const userRole = getStoredAuthUser()?.role || "";
   const isTeacher = userRole === "admin" || userRole === "teacher";
 
   useEffect(() => {

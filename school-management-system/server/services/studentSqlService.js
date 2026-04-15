@@ -10,6 +10,7 @@ const User = require('../models/User');
 const { ensureAuthSqlReady, syncUserAuthRecord } = require('./authSqlService');
 
 const STUDENT_TABLE = 'dbo.SqlStudents';
+const STUDENT_PORTAL_PROFILE_TABLE = 'dbo.StudentPortalProfiles';
 const STUDENT_SYNC_TTL_MS = 30000;
 let studentBootstrapPromise = null;
 let studentSyncPromise = null;
@@ -146,6 +147,67 @@ const mapStudentRow = (row) => {
   };
 };
 
+const mapStudentPortalProfileRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  const portalProfileId = Number(row.StudentPortalProfileId);
+  const numericUserId = Number(row.UserId);
+  const portalRecordId = Number.isInteger(portalProfileId) && portalProfileId > 0
+    ? `portal-${portalProfileId}`
+    : `portal-${row.Email || 'student'}`;
+  const isActive = row.IsActive === true || row.IsActive === 1;
+
+  return {
+    _id: portalRecordId,
+    id: portalRecordId,
+    studentId: null,
+    portalProfileId: Number.isInteger(portalProfileId) && portalProfileId > 0 ? portalProfileId : null,
+    source: 'portal_profile',
+    userId: Number.isInteger(numericUserId) && numericUserId > 0
+      ? {
+          _id: String(numericUserId),
+          email: row.Email || null,
+          role: 'student',
+        }
+      : row.MongoUserId
+        ? {
+            _id: row.MongoUserId,
+            email: row.Email || null,
+            role: 'student',
+          }
+        : null,
+    admissionNumber: row.AdmissionNumber || null,
+    rollNumber: row.RollNumber || null,
+    fullName: row.FullName || null,
+    gender: row.Gender || null,
+    dateOfBirth: row.DateOfBirth ? new Date(row.DateOfBirth) : null,
+    admissionDate: row.AdmissionDate ? new Date(row.AdmissionDate) : null,
+    bloodGroup: row.BloodGroup || null,
+    phone: row.Phone || null,
+    email: row.Email || null,
+    class: row.ClassName || null,
+    className: row.ClassName || null,
+    classId: row.ClassName || null,
+    section: row.SectionName || null,
+    sectionName: row.SectionName || null,
+    sectionId: row.SectionName || null,
+    address: {},
+    parentName: row.GuardianName || null,
+    parentPhone: row.GuardianPhone || null,
+    guardianName: row.GuardianName || '',
+    guardianPhone: row.GuardianPhone || '',
+    guardianRelation: row.GuardianRelation || '',
+    isActive,
+    profileNote: row.Notes || null,
+    hasLinkedStudentRecord: row.HasLinkedStudentRecord === true || row.HasLinkedStudentRecord === 1,
+    linkedStudentId: normalizeStudentNumericId(row.LinkedStudentId),
+    createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
+    updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
+  };
+};
+
 const STUDENT_SCHEMA_BATCH = `
 IF OBJECT_ID(N'${STUDENT_TABLE}', N'U') IS NULL
 BEGIN
@@ -189,6 +251,52 @@ END;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SqlStudents_ClassSection' AND object_id = OBJECT_ID(N'${STUDENT_TABLE}'))
 BEGIN
   CREATE INDEX IX_SqlStudents_ClassSection ON ${STUDENT_TABLE}(ClassName, SectionName, IsActive);
+END;
+
+IF OBJECT_ID(N'${STUDENT_PORTAL_PROFILE_TABLE}', N'U') IS NULL
+BEGIN
+  CREATE TABLE ${STUDENT_PORTAL_PROFILE_TABLE} (
+    StudentPortalProfileId INT IDENTITY(1,1) PRIMARY KEY,
+    UserId INT NULL,
+    MongoUserId NVARCHAR(64) NULL,
+    Email NVARCHAR(320) NOT NULL,
+    FullName NVARCHAR(200) NOT NULL,
+    Phone NVARCHAR(40) NULL,
+    AdmissionNumber NVARCHAR(50) NULL,
+    RollNumber NVARCHAR(100) NULL,
+    ClassName NVARCHAR(100) NULL,
+    SectionName NVARCHAR(50) NULL,
+    DateOfBirth DATE NULL,
+    Gender NVARCHAR(20) NULL,
+    GuardianName NVARCHAR(200) NULL,
+    GuardianPhone NVARCHAR(40) NULL,
+    GuardianRelation NVARCHAR(50) NULL,
+    BloodGroup NVARCHAR(20) NULL,
+    AdmissionDate DATE NULL,
+    Notes NVARCHAR(500) NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_StudentPortalProfiles_IsActive DEFAULT (1),
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_StudentPortalProfiles_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_StudentPortalProfiles_UpdatedAt DEFAULT SYSUTCDATETIME()
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_StudentPortalProfiles_UserId' AND object_id = OBJECT_ID(N'${STUDENT_PORTAL_PROFILE_TABLE}'))
+BEGIN
+  CREATE UNIQUE INDEX UX_StudentPortalProfiles_UserId
+  ON ${STUDENT_PORTAL_PROFILE_TABLE}(UserId)
+  WHERE UserId IS NOT NULL;
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_StudentPortalProfiles_MongoUserId' AND object_id = OBJECT_ID(N'${STUDENT_PORTAL_PROFILE_TABLE}'))
+BEGIN
+  CREATE UNIQUE INDEX UX_StudentPortalProfiles_MongoUserId
+  ON ${STUDENT_PORTAL_PROFILE_TABLE}(MongoUserId)
+  WHERE MongoUserId IS NOT NULL;
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StudentPortalProfiles_Email' AND object_id = OBJECT_ID(N'${STUDENT_PORTAL_PROFILE_TABLE}'))
+BEGIN
+  CREATE INDEX IX_StudentPortalProfiles_Email ON ${STUDENT_PORTAL_PROFILE_TABLE}(Email, UpdatedAt DESC);
 END;
 `;
 
@@ -562,6 +670,145 @@ BEGIN
   WHERE ClassName = @ClassName
   ORDER BY FullName ASC;
 END;
+
+CREATE OR ALTER PROCEDURE dbo.spStudentPortalProfileUpsert
+  @UserId INT = NULL,
+  @MongoUserId NVARCHAR(64) = NULL,
+  @Email NVARCHAR(320),
+  @FullName NVARCHAR(200),
+  @Phone NVARCHAR(40) = NULL,
+  @AdmissionNumber NVARCHAR(50) = NULL,
+  @RollNumber NVARCHAR(100) = NULL,
+  @ClassName NVARCHAR(100) = NULL,
+  @SectionName NVARCHAR(50) = NULL,
+  @DateOfBirth DATE = NULL,
+  @Gender NVARCHAR(20) = NULL,
+  @GuardianName NVARCHAR(200) = NULL,
+  @GuardianPhone NVARCHAR(40) = NULL,
+  @GuardianRelation NVARCHAR(50) = NULL,
+  @BloodGroup NVARCHAR(20) = NULL,
+  @AdmissionDate DATE = NULL,
+  @Notes NVARCHAR(500) = NULL,
+  @IsActive BIT = 1
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  DECLARE @ExistingId INT = NULL;
+
+  IF @FullName IS NULL OR LEN(LTRIM(RTRIM(@FullName))) = 0
+  BEGIN
+    SET @FullName = @Email;
+  END;
+
+  SELECT TOP 1 @ExistingId = StudentPortalProfileId
+  FROM ${STUDENT_PORTAL_PROFILE_TABLE}
+  WHERE (@UserId IS NOT NULL AND UserId = @UserId)
+     OR (@MongoUserId IS NOT NULL AND MongoUserId = @MongoUserId)
+     OR LOWER(LTRIM(RTRIM(Email))) = LOWER(LTRIM(RTRIM(@Email)))
+  ORDER BY UpdatedAt DESC, StudentPortalProfileId DESC;
+
+  IF @ExistingId IS NULL
+  BEGIN
+    INSERT INTO ${STUDENT_PORTAL_PROFILE_TABLE} (
+      UserId,
+      MongoUserId,
+      Email,
+      FullName,
+      Phone,
+      AdmissionNumber,
+      RollNumber,
+      ClassName,
+      SectionName,
+      DateOfBirth,
+      Gender,
+      GuardianName,
+      GuardianPhone,
+      GuardianRelation,
+      BloodGroup,
+      AdmissionDate,
+      Notes,
+      IsActive,
+      CreatedAt,
+      UpdatedAt
+    )
+    VALUES (
+      @UserId,
+      @MongoUserId,
+      @Email,
+      @FullName,
+      @Phone,
+      @AdmissionNumber,
+      @RollNumber,
+      @ClassName,
+      @SectionName,
+      @DateOfBirth,
+      @Gender,
+      @GuardianName,
+      @GuardianPhone,
+      @GuardianRelation,
+      @BloodGroup,
+      @AdmissionDate,
+      COALESCE(NULLIF(LTRIM(RTRIM(@Notes)), N''), N'This portal profile was generated from the student login account because no linked student master record exists yet.'),
+      ISNULL(@IsActive, 1),
+      SYSUTCDATETIME(),
+      SYSUTCDATETIME()
+    );
+
+    SET @ExistingId = SCOPE_IDENTITY();
+  END
+  ELSE
+  BEGIN
+    UPDATE ${STUDENT_PORTAL_PROFILE_TABLE}
+    SET UserId = COALESCE(@UserId, UserId),
+        MongoUserId = COALESCE(@MongoUserId, MongoUserId),
+        Email = COALESCE(@Email, Email),
+        FullName = COALESCE(NULLIF(LTRIM(RTRIM(@FullName)), N''), FullName),
+        Phone = COALESCE(NULLIF(LTRIM(RTRIM(@Phone)), N''), Phone),
+        AdmissionNumber = COALESCE(NULLIF(LTRIM(RTRIM(@AdmissionNumber)), N''), AdmissionNumber),
+        RollNumber = COALESCE(NULLIF(LTRIM(RTRIM(@RollNumber)), N''), RollNumber),
+        ClassName = COALESCE(NULLIF(LTRIM(RTRIM(@ClassName)), N''), ClassName),
+        SectionName = COALESCE(NULLIF(LTRIM(RTRIM(@SectionName)), N''), SectionName),
+        DateOfBirth = COALESCE(@DateOfBirth, DateOfBirth),
+        Gender = COALESCE(NULLIF(LTRIM(RTRIM(@Gender)), N''), Gender),
+        GuardianName = COALESCE(NULLIF(LTRIM(RTRIM(@GuardianName)), N''), GuardianName),
+        GuardianPhone = COALESCE(NULLIF(LTRIM(RTRIM(@GuardianPhone)), N''), GuardianPhone),
+        GuardianRelation = COALESCE(NULLIF(LTRIM(RTRIM(@GuardianRelation)), N''), GuardianRelation),
+        BloodGroup = COALESCE(NULLIF(LTRIM(RTRIM(@BloodGroup)), N''), BloodGroup),
+        AdmissionDate = COALESCE(@AdmissionDate, AdmissionDate),
+        Notes = COALESCE(NULLIF(LTRIM(RTRIM(@Notes)), N''), Notes),
+        IsActive = COALESCE(@IsActive, IsActive),
+        UpdatedAt = SYSUTCDATETIME()
+    WHERE StudentPortalProfileId = @ExistingId;
+  END;
+
+  SELECT TOP 1 *
+  FROM ${STUDENT_PORTAL_PROFILE_TABLE}
+  WHERE StudentPortalProfileId = @ExistingId;
+END;
+
+CREATE OR ALTER PROCEDURE dbo.spStudentPortalProfileGetByAuthUser
+  @UserId INT = NULL,
+  @MongoUserId NVARCHAR(64) = NULL,
+  @Email NVARCHAR(320) = NULL
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  SELECT TOP 1 *
+  FROM ${STUDENT_PORTAL_PROFILE_TABLE}
+  WHERE (@UserId IS NOT NULL AND UserId = @UserId)
+     OR (@MongoUserId IS NOT NULL AND MongoUserId = @MongoUserId)
+     OR (@Email IS NOT NULL AND LOWER(LTRIM(RTRIM(Email))) = LOWER(LTRIM(RTRIM(@Email))))
+  ORDER BY
+    CASE
+      WHEN @UserId IS NOT NULL AND UserId = @UserId THEN 0
+      WHEN @MongoUserId IS NOT NULL AND MongoUserId = @MongoUserId THEN 1
+      ELSE 2
+    END,
+    UpdatedAt DESC,
+    StudentPortalProfileId DESC;
+END;
 `;
 
 const STUDENT_PROCEDURE_BATCHES = STUDENT_PROCEDURES_BATCH
@@ -595,6 +842,41 @@ const buildStudentSqlParams = (payload) => {
     { name: 'IsActive', type: sql.Bit, value: payload.isActive },
     { name: 'CreatedAt', type: sql.DateTime2(0), value: payload.createdAt || new Date() },
     { name: 'UpdatedAt', type: sql.DateTime2(0), value: payload.updatedAt || new Date() },
+  ];
+};
+
+const buildStudentPortalProfileSqlParams = (payload = {}) => {
+  const sql = getSqlClient();
+
+  return [
+    { name: 'UserId', type: sql.Int, value: payload.userId || null },
+    { name: 'MongoUserId', type: sql.NVarChar(64), value: payload.mongoUserId || null },
+    { name: 'Email', type: sql.NVarChar(320), value: payload.email || null },
+    { name: 'FullName', type: sql.NVarChar(200), value: payload.fullName || null },
+    { name: 'Phone', type: sql.NVarChar(40), value: payload.phone || null },
+    { name: 'AdmissionNumber', type: sql.NVarChar(50), value: payload.admissionNumber || null },
+    { name: 'RollNumber', type: sql.NVarChar(100), value: payload.rollNumber || null },
+    { name: 'ClassName', type: sql.NVarChar(100), value: payload.className || null },
+    { name: 'SectionName', type: sql.NVarChar(50), value: payload.sectionName || null },
+    { name: 'DateOfBirth', type: sql.Date, value: payload.dateOfBirth || null },
+    { name: 'Gender', type: sql.NVarChar(20), value: payload.gender || null },
+    { name: 'GuardianName', type: sql.NVarChar(200), value: payload.guardianName || null },
+    { name: 'GuardianPhone', type: sql.NVarChar(40), value: payload.guardianPhone || null },
+    { name: 'GuardianRelation', type: sql.NVarChar(50), value: payload.guardianRelation || null },
+    { name: 'BloodGroup', type: sql.NVarChar(20), value: payload.bloodGroup || null },
+    { name: 'AdmissionDate', type: sql.Date, value: payload.admissionDate || null },
+    { name: 'Notes', type: sql.NVarChar(500), value: payload.notes || null },
+    { name: 'IsActive', type: sql.Bit, value: payload.isActive !== false },
+  ];
+};
+
+const buildStudentPortalProfileLookupParams = (payload = {}) => {
+  const sql = getSqlClient();
+
+  return [
+    { name: 'UserId', type: sql.Int, value: payload.userId || null },
+    { name: 'MongoUserId', type: sql.NVarChar(64), value: payload.mongoUserId || null },
+    { name: 'Email', type: sql.NVarChar(320), value: payload.email || null },
   ];
 };
 
@@ -644,6 +926,73 @@ const normalizeStudentNumericId = (value) => {
 
   return numericValue;
 };
+
+const extractAuthUserKeys = (user = null) => {
+  const candidates = [
+    user?._id,
+    user?.id,
+    user?.userId,
+    user?.UserId,
+  ]
+    .map((value) => toNullableString(value))
+    .filter(Boolean);
+
+  return {
+    userId: candidates.map(normalizeStudentNumericId).find(Boolean) || null,
+    mongoUserId: toNullableString(user?.MongoUserId)
+      || candidates.find((value) => !normalizeStudentNumericId(value))
+      || null,
+  };
+};
+
+const buildStudentPortalProfilePayload = (user = {}, overrides = {}) => {
+  const authKeys = extractAuthUserKeys(user);
+  const email = toNullableString(overrides.email ?? user?.email ?? user?.Email);
+
+  if (!email && !authKeys.userId && !authKeys.mongoUserId) {
+    return null;
+  }
+
+  return {
+    userId: authKeys.userId,
+    mongoUserId: authKeys.mongoUserId,
+    email,
+    fullName: toNullableString(overrides.fullName ?? user?.fullName ?? user?.FullName) || email || 'Student',
+    phone: toNullableString(overrides.phone ?? user?.phone ?? user?.Phone),
+    admissionNumber: toNullableString(overrides.admissionNumber),
+    rollNumber: toNullableString(overrides.rollNumber),
+    className: toNullableString(overrides.className ?? overrides.class),
+    sectionName: toNullableString(overrides.sectionName ?? overrides.section),
+    dateOfBirth: toNullableDate(overrides.dateOfBirth),
+    gender: toNullableString(overrides.gender),
+    guardianName: toNullableString(overrides.guardianName),
+    guardianPhone: toNullableString(overrides.guardianPhone),
+    guardianRelation: toNullableString(overrides.guardianRelation),
+    bloodGroup: toNullableString(overrides.bloodGroup),
+    admissionDate: toNullableDate(overrides.admissionDate),
+    notes: toNullableString(overrides.notes),
+    isActive: overrides.isActive !== undefined ? Boolean(overrides.isActive) : user?.isActive !== false,
+  };
+};
+
+const normalizeStudentPortalProfileId = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isInteger(numericValue) || numericValue <= 0) {
+    return null;
+  }
+
+  return numericValue;
+};
+
+const STUDENT_PORTAL_PROFILE_SELECT = `
+  SELECT
+    p.*,
+    s.StudentId AS LinkedStudentId,
+    CAST(CASE WHEN s.StudentId IS NULL THEN 0 ELSE 1 END AS BIT) AS HasLinkedStudentRecord
+  FROM ${STUDENT_PORTAL_PROFILE_TABLE} p
+  LEFT JOIN dbo.Students s
+    ON s.UserId = p.UserId
+`;
 
 const isSqlStudentActive = (status) => {
   if (status === undefined || status === null) {
@@ -1100,23 +1449,240 @@ const getStudentFullProfileFromSqlRecord = async (studentId) => {
   };
 };
 
-const getStudentByUserIdFromSqlRecord = async (mongoUserId) => {
-  const normalizedUserId = normalizeStudentNumericId(mongoUserId);
-  if (!normalizedUserId) {
+const getStudentPortalProfileByAuthUser = async (user = {}) => {
+  await ensureStudentSqlReady();
+  const payload = buildStudentPortalProfilePayload(user, {
+    notes: null,
+  });
+
+  if (!payload) {
+    return null;
+  }
+
+  const result = await executeStoredProcedure(
+    'dbo.spStudentPortalProfileGetByAuthUser',
+    buildStudentPortalProfileLookupParams(payload)
+  );
+
+  return mapStudentPortalProfileRow(result?.recordset?.[0] || null);
+};
+
+const ensureStudentPortalProfileForAuthUser = async (user = {}) => {
+  await ensureStudentSqlReady();
+  const payload = buildStudentPortalProfilePayload(user);
+  if (!payload?.email) {
+    return getStudentPortalProfileByAuthUser(user);
+  }
+
+  const result = await executeStoredProcedure(
+    'dbo.spStudentPortalProfileUpsert',
+    buildStudentPortalProfileSqlParams(payload)
+  );
+
+  return mapStudentPortalProfileRow(result?.recordset?.[0] || null);
+};
+
+const getStudentPortalProfileById = async (profileId) => {
+  await ensureStudentSqlReady();
+  const normalizedProfileId = normalizeStudentPortalProfileId(profileId);
+  if (!normalizedProfileId) {
     return null;
   }
 
   const sql = getSqlClient();
-  logStudentSqlRead('query:StudentsByUserId', { UserId: normalizedUserId });
+  logStudentSqlRead('query:StudentPortalProfileById', { StudentPortalProfileId: normalizedProfileId });
   const result = await executeQuery(
-    `${REAL_STUDENT_BASE_SELECT}
-     WHERE S.UserId = @UserId`,
-    [{ name: 'UserId', type: sql.Int, value: normalizedUserId }]
+    `${STUDENT_PORTAL_PROFILE_SELECT}
+     WHERE p.StudentPortalProfileId = @StudentPortalProfileId`,
+    [{ name: 'StudentPortalProfileId', type: sql.Int, value: normalizedProfileId }]
   );
 
-  const row = result?.recordset?.[0] || null;
-  if (!row) {
+  return mapStudentPortalProfileRow(result?.recordset?.[0] || null);
+};
+
+const listStudentPortalProfiles = async ({ search = null, onlyPending = true } = {}) => {
+  await ensureStudentSqlReady();
+  const sql = getSqlClient();
+  const normalizedSearch = toNullableString(search);
+  const searchPattern = normalizedSearch ? `%${normalizedSearch.toLowerCase()}%` : null;
+
+  logStudentSqlRead('query:StudentPortalProfileList', {
+    search: normalizedSearch,
+    onlyPending: onlyPending !== false,
+  });
+
+  const result = await executeQuery(
+    `${STUDENT_PORTAL_PROFILE_SELECT}
+     WHERE (@OnlyPending = 0 OR s.StudentId IS NULL)
+       AND (
+         @SearchPattern IS NULL
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.FullName, N'')))) LIKE @SearchPattern
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.Email, N'')))) LIKE @SearchPattern
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.Phone, N'')))) LIKE @SearchPattern
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.ClassName, N'')))) LIKE @SearchPattern
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.SectionName, N'')))) LIKE @SearchPattern
+         OR LOWER(LTRIM(RTRIM(ISNULL(p.RollNumber, N'')))) LIKE @SearchPattern
+       )
+     ORDER BY p.UpdatedAt DESC, p.StudentPortalProfileId DESC`,
+    [
+      { name: 'OnlyPending', type: sql.Bit, value: onlyPending !== false },
+      { name: 'SearchPattern', type: sql.NVarChar(220), value: searchPattern },
+    ]
+  );
+
+  return (result?.recordset || []).map(mapStudentPortalProfileRow).filter(Boolean);
+};
+
+const updateStudentPortalProfileRecord = async (profileId, updates = {}) => {
+  await ensureStudentSqlReady();
+  const normalizedProfileId = normalizeStudentPortalProfileId(profileId);
+  if (!normalizedProfileId) {
     return null;
+  }
+
+  const existingProfile = await getStudentPortalProfileById(normalizedProfileId);
+  if (!existingProfile) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  const existingUserId = normalizeStudentNumericId(existingProfile.userId?._id || existingProfile.userId);
+  const existingMongoUserId = existingProfile.userId && !existingUserId
+    ? toNullableString(existingProfile.userId?._id || existingProfile.userId)
+    : null;
+
+  const mergedPayload = {
+    userId: existingUserId,
+    mongoUserId: existingMongoUserId,
+    email: toNullableString(updates.email) ?? existingProfile.email ?? null,
+    fullName: toNullableString(updates.fullName) ?? existingProfile.fullName ?? null,
+    phone: toNullableString(updates.phone) ?? existingProfile.phone ?? null,
+    admissionNumber: toNullableString(updates.admissionNumber) ?? existingProfile.admissionNumber ?? null,
+    rollNumber: toNullableString(updates.rollNumber) ?? existingProfile.rollNumber ?? null,
+    className: toNullableString(updates.className ?? updates.class) ?? existingProfile.className ?? null,
+    sectionName: toNullableString(updates.sectionName ?? updates.section) ?? existingProfile.sectionName ?? null,
+    dateOfBirth: updates.dateOfBirth !== undefined ? toNullableDate(updates.dateOfBirth) : (existingProfile.dateOfBirth || null),
+    gender: toNullableString(updates.gender) ?? existingProfile.gender ?? null,
+    guardianName: toNullableString(updates.guardianName) ?? existingProfile.guardianName ?? null,
+    guardianPhone: toNullableString(updates.guardianPhone) ?? existingProfile.guardianPhone ?? null,
+    guardianRelation: toNullableString(updates.guardianRelation) ?? existingProfile.guardianRelation ?? null,
+    bloodGroup: toNullableString(updates.bloodGroup) ?? existingProfile.bloodGroup ?? null,
+    admissionDate: updates.admissionDate !== undefined ? toNullableDate(updates.admissionDate) : (existingProfile.admissionDate || null),
+    notes: toNullableString(updates.notes ?? updates.profileNote) ?? existingProfile.profileNote ?? null,
+    isActive: updates.isActive !== undefined ? Boolean(updates.isActive) : existingProfile.isActive !== false,
+  };
+
+  if (!mergedPayload.email || !mergedPayload.fullName) {
+    throw new Error('Student portal profile requires email and full name.');
+  }
+
+  await executeQuery(
+    `UPDATE ${STUDENT_PORTAL_PROFILE_TABLE}
+     SET Email = @Email,
+         FullName = @FullName,
+         Phone = @Phone,
+         AdmissionNumber = @AdmissionNumber,
+         RollNumber = @RollNumber,
+         ClassName = @ClassName,
+         SectionName = @SectionName,
+         DateOfBirth = @DateOfBirth,
+         Gender = @Gender,
+         GuardianName = @GuardianName,
+         GuardianPhone = @GuardianPhone,
+         GuardianRelation = @GuardianRelation,
+         BloodGroup = @BloodGroup,
+         AdmissionDate = @AdmissionDate,
+         Notes = @Notes,
+         IsActive = @IsActive,
+         UpdatedAt = SYSUTCDATETIME()
+     WHERE StudentPortalProfileId = @StudentPortalProfileId`,
+    [
+      { name: 'StudentPortalProfileId', type: sql.Int, value: normalizedProfileId },
+      ...buildStudentPortalProfileSqlParams(mergedPayload),
+    ]
+  );
+
+  return getStudentPortalProfileById(normalizedProfileId);
+};
+
+const getStudentByUserIdFromSqlRecord = async (mongoUserId) => {
+  const normalizedUserId = normalizeStudentNumericId(
+    typeof mongoUserId === 'object'
+      ? mongoUserId?._id ?? mongoUserId?.id ?? mongoUserId?.userId ?? mongoUserId?.UserId
+      : mongoUserId
+  );
+  const normalizedEmail = toNullableString(
+    typeof mongoUserId === 'object'
+      ? mongoUserId?.email ?? mongoUserId?.Email
+      : null
+  );
+
+  if (!normalizedUserId && !normalizedEmail) {
+    return null;
+  }
+
+  if (normalizedUserId) {
+    const sql = getSqlClient();
+    logStudentSqlRead('query:StudentsByUserId', { UserId: normalizedUserId });
+    const result = await executeQuery(
+      `${REAL_STUDENT_BASE_SELECT}
+       WHERE S.UserId = @UserId`,
+      [{ name: 'UserId', type: sql.Int, value: normalizedUserId }]
+    );
+
+    const row = result?.recordset?.[0] || null;
+    if (row) {
+      const guardianMap = await getPrimaryGuardiansByStudentIds([row.StudentId]);
+      return mapRealStudentRow(row, guardianMap.get(Number(row.StudentId)) || null);
+    }
+  }
+
+  if (!normalizedEmail) {
+    return getStudentPortalProfileByAuthUser(
+      typeof mongoUserId === 'object'
+        ? mongoUserId
+        : {
+            id: normalizedUserId,
+            role: 'student',
+          }
+    );
+  }
+
+  const sql = getSqlClient();
+  logStudentSqlRead('query:StudentsByEmailFallback', {
+    Email: normalizedEmail,
+    UserId: normalizedUserId,
+  });
+  const emailResult = await executeQuery(
+    `${REAL_STUDENT_BASE_SELECT}
+     WHERE LOWER(LTRIM(RTRIM(S.Email))) = LOWER(LTRIM(RTRIM(@Email)))`,
+    [{ name: 'Email', type: sql.NVarChar(320), value: normalizedEmail }]
+  );
+
+  const row = emailResult?.recordset?.[0] || null;
+  if (!row) {
+    const mirrorResult = await executeQuery(
+      `SELECT TOP 1 *
+       FROM ${STUDENT_TABLE}
+       WHERE LOWER(LTRIM(RTRIM(Email))) = LOWER(LTRIM(RTRIM(@Email)))
+       ORDER BY UpdatedAt DESC`,
+      [{ name: 'Email', type: sql.NVarChar(320), value: normalizedEmail }]
+    );
+
+    const mirrorRow = mirrorResult?.recordset?.[0] || null;
+    if (mirrorRow) {
+      return mapStudentRow(mirrorRow);
+    }
+
+    return ensureStudentPortalProfileForAuthUser(
+      typeof mongoUserId === 'object'
+        ? mongoUserId
+        : {
+            id: normalizedUserId,
+            email: normalizedEmail,
+            role: 'student',
+          }
+    );
   }
 
   const guardianMap = await getPrimaryGuardiansByStudentIds([row.StudentId]);
@@ -1135,6 +1701,29 @@ const getStudentByRollNumberFromSqlRecord = async (rollNumber) => {
     `${REAL_STUDENT_BASE_SELECT}
      WHERE S.RollNumber = @RollNumber`,
     [{ name: 'RollNumber', type: sql.NVarChar(50), value: normalizedRollNumber }]
+  );
+
+  const row = result?.recordset?.[0] || null;
+  if (!row) {
+    return null;
+  }
+
+  const guardianMap = await getPrimaryGuardiansByStudentIds([row.StudentId]);
+  return mapRealStudentRow(row, guardianMap.get(Number(row.StudentId)) || null);
+};
+
+const getStudentByAdmissionNumberFromSqlRecord = async (admissionNumber) => {
+  const normalizedAdmissionNumber = toNullableString(admissionNumber);
+  if (!normalizedAdmissionNumber) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  logStudentSqlRead('query:StudentsByAdmissionNumber', { AdmissionNumber: normalizedAdmissionNumber });
+  const result = await executeQuery(
+    `${REAL_STUDENT_BASE_SELECT}
+     WHERE S.AdmissionNumber = @AdmissionNumber`,
+    [{ name: 'AdmissionNumber', type: sql.NVarChar(50), value: normalizedAdmissionNumber }]
   );
 
   const row = result?.recordset?.[0] || null;
@@ -1416,7 +2005,7 @@ const getStudentsByClass = async (className) => {
   const realRows = await getRealStudentRowsByIds((result?.recordset || []).map((row) => row.StudentId));
   const students = await hydrateRealStudentRows(realRows);
   return sortRealStudents(
-    students.filter((student) => student.className === normalizedClassName),
+    students.filter((student) => (student.className || student.class) === normalizedClassName),
     'fullName',
     'asc'
   );
@@ -1631,6 +2220,7 @@ const createStudentRecord = async ({
   fullName,
   email,
   phone,
+  admissionNumber = null,
   className,
   sectionName,
   rollNumber,
@@ -1657,7 +2247,7 @@ const createStudentRecord = async ({
     const context = await resolveClassSectionContext({ className, sectionName, academicYear }, tx);
     const nameParts = splitFullName(fullName);
     const normalizedAddress = normalizeAddress(address);
-    const admissionNumber = await generateAdmissionNumber(tx);
+    const resolvedAdmissionNumber = toNullableString(admissionNumber) || await generateAdmissionNumber(tx);
     const result = await tx.query(
       `INSERT INTO dbo.Students (
          UserId,
@@ -1712,7 +2302,7 @@ const createStudentRecord = async ({
        )`,
       [
         { name: 'UserId', type: sql.Int, value: normalizeStudentNumericId(userId) },
-        { name: 'AdmissionNumber', type: sql.NVarChar(50), value: admissionNumber },
+        { name: 'AdmissionNumber', type: sql.NVarChar(50), value: resolvedAdmissionNumber },
         { name: 'RollNumber', type: sql.NVarChar(50), value: normalizedRollNumber },
         { name: 'AcademicYearId', type: sql.Int, value: context.academicYearId },
         { name: 'ClassId', type: sql.Int, value: context.classId },
@@ -1752,6 +2342,95 @@ const createStudentRecord = async ({
   });
 
   return getStudentByIdFromSqlRecord(createdStudentId);
+};
+
+const promoteStudentPortalProfileToStudentRecord = async (profileId) => {
+  await ensureStudentSqlReady();
+
+  const portalProfile = await getStudentPortalProfileById(profileId);
+  if (!portalProfile) {
+    return { profile: null, student: null, resultCode: 'not_found' };
+  }
+
+  if (portalProfile.hasLinkedStudentRecord && portalProfile.linkedStudentId) {
+    return {
+      profile: portalProfile,
+      student: await getStudentByIdFromSqlRecord(portalProfile.linkedStudentId),
+      resultCode: 'already_linked',
+    };
+  }
+
+  const authUserId = normalizeStudentNumericId(portalProfile.userId?._id || portalProfile.userId);
+  if (!authUserId) {
+    throw new Error('This portal profile is not linked to a SQL student login user.');
+  }
+
+  const requiredFieldMap = {
+    fullName: 'full name',
+    email: 'email',
+    className: 'class',
+    sectionName: 'section',
+    rollNumber: 'roll number',
+  };
+  const missingFields = Object.entries(requiredFieldMap)
+    .filter(([key]) => !toNullableString(portalProfile[key]))
+    .map(([, label]) => label);
+
+  if (missingFields.length) {
+    throw new Error(`Complete the portal profile before promotion. Missing: ${missingFields.join(', ')}.`);
+  }
+
+  const existingByUserId = await executeQuery(
+    `SELECT TOP 1 StudentId
+     FROM dbo.Students
+     WHERE UserId = @UserId`,
+    [{ name: 'UserId', type: getSqlClient().Int, value: authUserId }]
+  );
+  if (normalizeStudentNumericId(existingByUserId?.recordset?.[0]?.StudentId)) {
+    return {
+      profile: await getStudentPortalProfileById(profileId),
+      student: await getStudentByIdFromSqlRecord(existingByUserId.recordset[0].StudentId),
+      resultCode: 'already_linked',
+    };
+  }
+
+  const existingRoll = await getStudentByRollNumberFromSqlRecord(portalProfile.rollNumber);
+  if (existingRoll) {
+    throw new Error('Roll number already exists in the master student records.');
+  }
+
+  if (portalProfile.admissionNumber) {
+    const existingAdmission = await getStudentByAdmissionNumberFromSqlRecord(portalProfile.admissionNumber);
+    if (existingAdmission) {
+      throw new Error('Admission number already exists in the master student records.');
+    }
+  }
+
+  const createdStudent = await createStudentRecord({
+    userId: authUserId,
+    fullName: portalProfile.fullName,
+    email: portalProfile.email,
+    phone: portalProfile.phone,
+    admissionNumber: portalProfile.admissionNumber || null,
+    className: portalProfile.className,
+    sectionName: portalProfile.sectionName,
+    rollNumber: portalProfile.rollNumber,
+    dateOfBirth: portalProfile.dateOfBirth,
+    gender: portalProfile.gender,
+    address: {},
+    guardianName: portalProfile.guardianName,
+    guardianPhone: portalProfile.guardianPhone,
+    guardianRelation: portalProfile.guardianRelation,
+    bloodGroup: portalProfile.bloodGroup,
+    admissionDate: portalProfile.admissionDate,
+    isActive: portalProfile.isActive !== false,
+  });
+
+  return {
+    profile: await getStudentPortalProfileById(profileId),
+    student: createdStudent,
+    resultCode: 'promoted',
+  };
 };
 
 const updateStudentRecord = async (studentId, updates = {}) => {
@@ -1936,6 +2615,7 @@ module.exports = {
   getAllStudents,
   getStudentById,
   createStudentRecord,
+  promoteStudentPortalProfileToStudentRecord,
   updateStudentRecord,
   deleteStudentRecord,
   createStudentMirror,
@@ -1946,4 +2626,7 @@ module.exports = {
   getStudentsByClass,
   getStudentByUserId,
   getStudentByRollNumber,
+  getStudentPortalProfileById,
+  listStudentPortalProfiles,
+  updateStudentPortalProfileRecord,
 };

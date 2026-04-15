@@ -1,11 +1,53 @@
 import { useState } from 'react';
-import { Sparkles, BookOpen, FileQuestion, ClipboardList, Loader2, Copy, Check } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  ClipboardList,
+  Copy,
+  FileQuestion,
+  Loader2,
+  MessageSquareText,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import {
+  askSchoolAssistant,
+  generateHomework,
+  generateLessonPlan,
+  generateQuiz,
+} from '../services/api';
+
+const SUBJECT_OPTIONS = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Physics', 'Chemistry', 'Biology'];
+const GRADE_OPTIONS = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
+const ASSISTANT_SUGGESTIONS = [
+  'Summarize the current student and attendance situation for the school.',
+  'Create a lesson plan for Class 10 Mathematics on Quadratic Equations.',
+  'Generate a quiz for Class 8 Science on Chemical Reactions.',
+  'Give me a short briefing on exams, fees, and pending action items.',
+];
+
+const getErrorMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.message || fallback;
+
+const tabConfig = [
+  { key: 'assistant', label: 'School Assistant', icon: MessageSquareText },
+  { key: 'lesson', label: 'Lesson Plan', icon: BookOpen },
+  { key: 'quiz', label: 'Quiz Generator', icon: FileQuestion },
+  { key: 'homework', label: 'Homework', icon: ClipboardList },
+];
+
+const buildGenerationBadgeText = (topics = []) =>
+  Array.isArray(topics) && topics.length ? `Grounded in: ${topics.join(', ')}` : 'General AI generation';
 
 const AITools = () => {
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('lesson');
+  const [activeTab, setActiveTab] = useState('assistant');
+  const [assistantPrompt, setAssistantPrompt] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState([]);
+  const [generationLoading, setGenerationLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
+  const [generatedTopics, setGeneratedTopics] = useState([]);
   const [copied, setCopied] = useState(false);
 
   const [lessonPlanData, setLessonPlanData] = useState({
@@ -13,456 +55,519 @@ const AITools = () => {
     topic: '',
     grade: 'Class 10',
     duration: '45',
-    objectives: ''
+    objectives: '',
   });
-
   const [quizData, setQuizData] = useState({
     subject: '',
     topic: '',
     grade: 'Class 10',
     numQuestions: '10',
-    difficulty: 'Medium'
+    difficulty: 'Medium',
   });
-
   const [homeworkData, setHomeworkData] = useState({
     subject: '',
     topic: '',
     grade: 'Class 10',
     numQuestions: '5',
-    type: 'Mixed'
+    type: 'Mixed',
   });
 
-  const handleGenerate = async (type) => {
-    setLoading(true);
-    setGeneratedContent('');
-
-    // Simulate AI generation (in production, this would call the actual API)
-    setTimeout(() => {
-      let content = '';
-      
-      if (type === 'lesson') {
-        content = generateSampleLessonPlan(lessonPlanData);
-      } else if (type === 'quiz') {
-        content = generateSampleQuiz(quizData);
-      } else if (type === 'homework') {
-        content = generateSampleHomework(homeworkData);
-      }
-
-      setGeneratedContent(content);
-      setLoading(false);
-    }, 2000);
-  };
-
-  const generateSampleLessonPlan = (data) => {
-    return `
-# Lesson Plan: ${data.topic}
-## Subject: ${data.subject} | Grade: ${data.grade} | Duration: ${data.duration} minutes
-
-### Learning Objectives
-By the end of this lesson, students will be able to:
-1. Understand the fundamental concepts of ${data.topic}
-2. Apply knowledge to solve practical problems
-3. Analyze and evaluate different scenarios related to ${data.topic}
-
-### Materials Required
-- ${data.subject} textbook
-- Whiteboard and markers
-- Visual aids and diagrams
-- Worksheet for practice
-
-### Lesson Structure
-
-#### Introduction (5 minutes)
-- Begin with a real-life example related to ${data.topic}
-- Ask students what they already know about the topic
-- Present learning objectives
-
-#### Direct Instruction (15 minutes)
-- Explain key concepts of ${data.topic}
-- Use visual aids to illustrate main points
-- Provide examples from everyday life
-
-#### Guided Practice (15 minutes)
-- Students work in pairs to solve problems
-- Teacher circulates and provides feedback
-- Discuss common mistakes and misconceptions
-
-#### Independent Practice (8 minutes)
-- Students complete worksheet individually
-- Apply learned concepts to new situations
-
-#### Closure (2 minutes)
-- Recap main points of the lesson
-- Preview next topic
-- Assign homework
-
-### Assessment
-- Observation during group work
-- Worksheet completion
-- Exit ticket: "One thing I learned today..."
-    `.trim();
-  };
-
-  const generateSampleQuiz = (data) => {
-    const questions = [];
-    for (let i = 1; i <= parseInt(data.numQuestions); i++) {
-      questions.push(`
-${i}. Question about ${data.topic} (Difficulty: ${data.difficulty})
-   a) Option A
-   b) Option B
-   c) Option C
-   d) Option D
-   Answer: c
-      `.trim());
+  const handleAssistantSubmit = async (promptOverride = null) => {
+    const nextPrompt = String(promptOverride ?? assistantPrompt).trim();
+    if (!nextPrompt) {
+      toast.error('Please enter a question for the AI assistant.');
+      return;
     }
 
-    return `
-# Quiz: ${data.topic}
-## Subject: ${data.subject} | Grade: ${data.grade} | Total Questions: ${data.numQuestions}
+    const nextUserMessage = { role: 'user', content: nextPrompt };
+    const nextHistory = [...assistantMessages, nextUserMessage];
 
-${questions.join('\n\n')}
+    setAssistantMessages(nextHistory);
+    setAssistantPrompt('');
+    setAssistantLoading(true);
 
-### Answer Key
-${questions.map((_, i) => `${i + 1}. c`).join('\n')}
-    `.trim();
+    try {
+      const response = await askSchoolAssistant({
+        prompt: nextPrompt,
+        messages: nextHistory.slice(-6).map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      });
+
+      setAssistantMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: response?.data?.answer || 'No answer was returned.',
+          topics: response?.data?.topics || [],
+          restrictedTopics: response?.data?.restrictedTopics || [],
+        },
+      ]);
+    } catch (error) {
+      const message = getErrorMessage(error, 'Failed to reach the AI assistant.');
+      setAssistantMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: message,
+          topics: [],
+          restrictedTopics: [],
+          isError: true,
+        },
+      ]);
+      toast.error(message);
+    } finally {
+      setAssistantLoading(false);
+    }
   };
 
-  const generateSampleHomework = (data) => {
-    return `
-# Homework Assignment: ${data.topic}
-## Subject: ${data.subject} | Grade: ${data.grade}
+  const handleGenerate = async (type) => {
+    setGenerationLoading(true);
+    setGeneratedContent('');
+    setGeneratedTopics([]);
 
-### Instructions
-Complete the following questions related to ${data.topic}. Show all your work.
+    try {
+      let response;
 
-### Questions
+      if (type === 'lesson') {
+        response = await generateLessonPlan(lessonPlanData);
+      } else if (type === 'quiz') {
+        response = await generateQuiz(quizData);
+      } else {
+        response = await generateHomework(homeworkData);
+      }
 
-1. Define and explain the main concept of ${data.topic}. (5 marks)
-
-2. Solve the following problem related to ${data.topic}:
-   [Practice problem here]
-
-3. Give examples of how ${data.topic} is used in real life. (3 marks)
-
-4. Explain the relationship between ${data.topic} and related concepts. (4 marks)
-
-5. A scenario-based question requiring application of ${data.topic} concepts. (8 marks)
-
-### Submission Guidelines
-- Submit by next class
-- Write neatly and show all work
-- For diagrams, use proper labeling
-    `.trim();
+      setGeneratedContent(response?.data?.content || 'No content was returned.');
+      setGeneratedTopics(response?.data?.topics || []);
+    } catch (error) {
+      const message = getErrorMessage(error, 'Failed to generate AI content.');
+      toast.error(message);
+      setGeneratedContent(message);
+      setGeneratedTopics([]);
+    } finally {
+      setGenerationLoading(false);
+    }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(generatedContent);
+  const handleCopy = async (contentOverride = null) => {
+    const textToCopy = String(contentOverride ?? generatedContent ?? '').trim();
+    if (!textToCopy) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     toast.success('Copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Physics', 'Chemistry', 'Biology'];
-  const grades = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
+  const renderFieldSelect = (label, value, onChange, options, placeholder = 'Select') => (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const renderGenerationForm = () => {
+    if (activeTab === 'lesson') {
+      return (
+        <div className="space-y-4">
+          {renderFieldSelect(
+            'Subject *',
+            lessonPlanData.subject,
+            (event) => setLessonPlanData((current) => ({ ...current, subject: event.target.value })),
+            SUBJECT_OPTIONS
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Topic *</label>
+            <input
+              type="text"
+              value={lessonPlanData.topic}
+              onChange={(event) => setLessonPlanData((current) => ({ ...current, topic: event.target.value }))}
+              placeholder="e.g., Quadratic Equations"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {renderFieldSelect(
+              'Grade',
+              lessonPlanData.grade,
+              (event) => setLessonPlanData((current) => ({ ...current, grade: event.target.value })),
+              GRADE_OPTIONS,
+              'Select Grade'
+            )}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Duration (min)</label>
+              <input
+                type="number"
+                value={lessonPlanData.duration}
+                onChange={(event) => setLessonPlanData((current) => ({ ...current, duration: event.target.value }))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Objectives</label>
+            <textarea
+              rows={4}
+              value={lessonPlanData.objectives}
+              onChange={(event) => setLessonPlanData((current) => ({ ...current, objectives: event.target.value }))}
+              placeholder="Optional learning goals or constraints"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerate('lesson')}
+            disabled={generationLoading || !lessonPlanData.subject || !lessonPlanData.topic}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#002366] px-4 py-2 text-white hover:bg-[#001a4d] disabled:opacity-50"
+          >
+            {generationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Generate Lesson Plan
+          </button>
+        </div>
+      );
+    }
+
+    if (activeTab === 'quiz') {
+      return (
+        <div className="space-y-4">
+          {renderFieldSelect(
+            'Subject *',
+            quizData.subject,
+            (event) => setQuizData((current) => ({ ...current, subject: event.target.value })),
+            SUBJECT_OPTIONS
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Topic *</label>
+            <input
+              type="text"
+              value={quizData.topic}
+              onChange={(event) => setQuizData((current) => ({ ...current, topic: event.target.value }))}
+              placeholder="e.g., Algebra"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {renderFieldSelect(
+              'Grade',
+              quizData.grade,
+              (event) => setQuizData((current) => ({ ...current, grade: event.target.value })),
+              GRADE_OPTIONS,
+              'Select Grade'
+            )}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Questions</label>
+              <input
+                type="number"
+                min="5"
+                max="25"
+                value={quizData.numQuestions}
+                onChange={(event) => setQuizData((current) => ({ ...current, numQuestions: event.target.value }))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Difficulty</label>
+            <select
+              value={quizData.difficulty}
+              onChange={(event) => setQuizData((current) => ({ ...current, difficulty: event.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            >
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerate('quiz')}
+            disabled={generationLoading || !quizData.subject || !quizData.topic}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#002366] px-4 py-2 text-white hover:bg-[#001a4d] disabled:opacity-50"
+          >
+            {generationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Generate Quiz
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {renderFieldSelect(
+          'Subject *',
+          homeworkData.subject,
+          (event) => setHomeworkData((current) => ({ ...current, subject: event.target.value })),
+          SUBJECT_OPTIONS
+        )}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Topic *</label>
+          <input
+            type="text"
+            value={homeworkData.topic}
+            onChange={(event) => setHomeworkData((current) => ({ ...current, topic: event.target.value }))}
+            placeholder="e.g., Chemical Reactions"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {renderFieldSelect(
+            'Grade',
+            homeworkData.grade,
+            (event) => setHomeworkData((current) => ({ ...current, grade: event.target.value })),
+            GRADE_OPTIONS,
+            'Select Grade'
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Questions</label>
+            <input
+              type="number"
+              min="3"
+              max="15"
+              value={homeworkData.numQuestions}
+              onChange={(event) => setHomeworkData((current) => ({ ...current, numQuestions: event.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Question Type</label>
+          <select
+            value={homeworkData.type}
+            onChange={(event) => setHomeworkData((current) => ({ ...current, type: event.target.value }))}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+          >
+            <option value="Mixed">Mixed</option>
+            <option value="Theory">Theory</option>
+            <option value="Numerical">Numerical</option>
+            <option value="Application">Application Based</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleGenerate('homework')}
+          disabled={generationLoading || !homeworkData.subject || !homeworkData.topic}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#002366] px-4 py-2 text-white hover:bg-[#001a4d] disabled:opacity-50"
+        >
+          {generationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Generate Homework
+        </button>
+      </div>
+    );
+  };
+
+  const renderAssistantForm = () => (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Ask the school assistant</label>
+        <textarea
+          rows={6}
+          value={assistantPrompt}
+          onChange={(event) => setAssistantPrompt(event.target.value)}
+          placeholder="Ask about students, attendance, exams, fees, timetable, materials, or ask it to generate school content using live context."
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {ASSISTANT_SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => handleAssistantSubmit(suggestion)}
+            disabled={assistantLoading}
+            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => handleAssistantSubmit()}
+        disabled={assistantLoading || !assistantPrompt.trim()}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#002366] px-4 py-2 text-white hover:bg-[#001a4d] disabled:opacity-50"
+      >
+        {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        Ask AI Assistant
+      </button>
+    </div>
+  );
+
+  const renderAssistantOutput = () => (
+    <div className="space-y-4">
+      {assistantMessages.length ? (
+        <div className="h-[32rem] space-y-3 overflow-y-auto pr-1">
+          {assistantMessages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`rounded-xl border p-4 ${
+                message.role === 'user'
+                  ? 'border-blue-100 bg-blue-50'
+                  : message.isError
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">
+                  {message.role === 'user' ? 'You' : 'School AI Assistant'}
+                </p>
+                {message.role === 'assistant' && message.content ? (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(message.content)}
+                    className="text-xs font-medium text-slate-500 hover:text-[#002366]"
+                  >
+                    Copy
+                  </button>
+                ) : null}
+              </div>
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
+                {message.content}
+              </pre>
+              {message.role === 'assistant' && Array.isArray(message.topics) && message.topics.length ? (
+                <p className="mt-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                  Grounded in: {message.topics.join(', ')}
+                </p>
+              ) : null}
+              {message.role === 'assistant' && Array.isArray(message.restrictedTopics) && message.restrictedTopics.length ? (
+                <p className="mt-2 text-xs text-amber-700">
+                  Restricted for your role: {message.restrictedTopics.join(', ')}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex h-[32rem] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center text-slate-500">
+          <MessageSquareText className="mb-3 h-12 w-12 text-slate-300" />
+          <p className="font-medium text-slate-700">Ask about anything in the school system</p>
+          <p className="mt-2 max-w-md text-sm">
+            The assistant will pull related live data from the school ERP where available and then generate an answer from that context.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderGenerationOutput = () => (
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Generated Content</h2>
+          {generatedContent ? (
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+              {buildGenerationBadgeText(generatedTopics)}
+            </p>
+          ) : null}
+        </div>
+        {generatedContent ? (
+          <button
+            type="button"
+            onClick={() => handleCopy()}
+            className="flex items-center gap-1 text-sm text-gray-600 hover:text-[#002366]"
+          >
+            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        ) : null}
+      </div>
+
+      {generationLoading ? (
+        <div className="flex h-96 flex-col items-center justify-center text-gray-500">
+          <Loader2 className="mb-2 h-8 w-8 animate-spin" />
+          <p>Generating with live AI...</p>
+        </div>
+      ) : generatedContent ? (
+        <div className="h-96 overflow-y-auto rounded-lg bg-gray-50 p-4">
+          <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">{generatedContent}</pre>
+        </div>
+      ) : (
+        <div className="flex h-96 flex-col items-center justify-center text-gray-400">
+          <Sparkles className="mb-2 h-12 w-12" />
+          <p>Your AI-generated content will appear here</p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI Tools for Teachers</h1>
-          <p className="text-gray-500 mt-1">Generate lesson plans, quizzes, and homework with AI assistance</p>
+          <h1 className="text-2xl font-bold text-gray-900">AI Tools</h1>
+          <p className="mt-1 text-gray-500">
+            Real OpenAI-powered assistance with live school data grounding for the relevant topic
+          </p>
         </div>
       </div>
 
-      {/* Features Banner */}
-      <div className="bg-gradient-to-r from-[#002366] to-[#001a4d] rounded-xl p-6 mb-6 text-white">
-        <div className="flex items-center gap-3 mb-2">
-          <Sparkles className="w-6 h-6 text-[#C5A059]" />
-          <h2 className="text-lg font-semibold">AI-Powered Content Generation</h2>
+      <div className="mb-6 rounded-xl bg-gradient-to-r from-[#002366] to-[#001a4d] p-6 text-white">
+        <div className="mb-2 flex items-center gap-3">
+          <Sparkles className="h-6 w-6 text-[#C5A059]" />
+          <h2 className="text-lg font-semibold">Live School AI Workspace</h2>
         </div>
-        <p className="text-blue-200">Create professional educational content in seconds using OpenAI integration</p>
+        <p className="text-blue-200">
+          Ask school questions, generate teaching content, and let the assistant use live ERP data from the related module when it is available for your role.
+        </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => { setActiveTab('lesson'); setGeneratedContent(''); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-            activeTab === 'lesson' 
-              ? 'bg-[#002366] text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          Lesson Plan
-        </button>
-        <button
-          onClick={() => { setActiveTab('quiz'); setGeneratedContent(''); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-            activeTab === 'quiz' 
-              ? 'bg-[#002366] text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <FileQuestion className="w-4 h-4" />
-          Quiz Generator
-        </button>
-        <button
-          onClick={() => { setActiveTab('homework'); setGeneratedContent(''); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-            activeTab === 'homework' 
-              ? 'bg-[#002366] text-white' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <ClipboardList className="w-4 h-4" />
-          Homework
-        </button>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {tabConfig.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => {
+              setActiveTab(tab.key);
+              setCopied(false);
+            }}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition ${
+              activeTab === tab.key
+                ? 'bg-[#002366] text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Input Form */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-lg font-semibold mb-4">Generate Content</h2>
-          
-          {activeTab === 'lesson' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                <select
-                  value={lessonPlanData.subject}
-                  onChange={(e) => setLessonPlanData({ ...lessonPlanData, subject: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Topic *</label>
-                <input
-                  type="text"
-                  value={lessonPlanData.topic}
-                  onChange={(e) => setLessonPlanData({ ...lessonPlanData, topic: e.target.value })}
-                  placeholder="e.g., Quadratic Equations"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                  <select
-                    value={lessonPlanData.grade}
-                    onChange={(e) => setLessonPlanData({ ...lessonPlanData, grade: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  >
-                    {grades.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
-                  <input
-                    type="number"
-                    value={lessonPlanData.duration}
-                    onChange={(e) => setLessonPlanData({ ...lessonPlanData, duration: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={() => handleGenerate('lesson')}
-                disabled={loading || !lessonPlanData.subject || !lessonPlanData.topic}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#002366] text-white rounded-lg hover:bg-[#001a4d] disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Generate Lesson Plan
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'quiz' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                <select
-                  value={quizData.subject}
-                  onChange={(e) => setQuizData({ ...quizData, subject: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Topic *</label>
-                <input
-                  type="text"
-                  value={quizData.topic}
-                  onChange={(e) => setQuizData({ ...quizData, topic: e.target.value })}
-                  placeholder="e.g., Algebra"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                  <select
-                    value={quizData.grade}
-                    onChange={(e) => setQuizData({ ...quizData, grade: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  >
-                    {grades.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Number of Questions</label>
-                  <input
-                    type="number"
-                    value={quizData.numQuestions}
-                    onChange={(e) => setQuizData({ ...quizData, numQuestions: e.target.value })}
-                    min="5"
-                    max="20"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-                <select
-                  value={quizData.difficulty}
-                  onChange={(e) => setQuizData({ ...quizData, difficulty: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                >
-                  <option value="Easy">Easy</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Hard">Hard</option>
-                </select>
-              </div>
-              <button
-                onClick={() => handleGenerate('quiz')}
-                disabled={loading || !quizData.subject || !quizData.topic}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#002366] text-white rounded-lg hover:bg-[#001a4d] disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Generate Quiz
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'homework' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                <select
-                  value={homeworkData.subject}
-                  onChange={(e) => setHomeworkData({ ...homeworkData, subject: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Topic *</label>
-                <input
-                  type="text"
-                  value={homeworkData.topic}
-                  onChange={(e) => setHomeworkData({ ...homeworkData, topic: e.target.value })}
-                  placeholder="e.g., Chemical Reactions"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                  <select
-                    value={homeworkData.grade}
-                    onChange={(e) => setHomeworkData({ ...homeworkData, grade: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  >
-                    {grades.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Number of Questions</label>
-                  <input
-                    type="number"
-                    value={homeworkData.numQuestions}
-                    onChange={(e) => setHomeworkData({ ...homeworkData, numQuestions: e.target.value })}
-                    min="3"
-                    max="10"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Question Type</label>
-                <select
-                  value={homeworkData.type}
-                  onChange={(e) => setHomeworkData({ ...homeworkData, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
-                >
-                  <option value="Mixed">Mixed</option>
-                  <option value="Theory">Theory</option>
-                  <option value="Numerical">Numerical</option>
-                  <option value="Application">Application Based</option>
-                </select>
-              </div>
-              <button
-                onClick={() => handleGenerate('homework')}
-                disabled={loading || !homeworkData.subject || !homeworkData.topic}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#002366] text-white rounded-lg hover:bg-[#001a4d] disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Generate Homework
-              </button>
-            </div>
-          )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">
+            {activeTab === 'assistant' ? 'Ask AI Assistant' : 'Generate Content'}
+          </h2>
+          {activeTab === 'assistant' ? renderAssistantForm() : renderGenerationForm()}
         </div>
 
-        {/* Output */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Generated Content</h2>
-            {generatedContent && (
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1 text-sm text-gray-600 hover:text-[#002366]"
-              >
-                {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <Loader2 className="w-8 h-8 animate-spin mb-2" />
-              <p>Generating content...</p>
-            </div>
-          ) : generatedContent ? (
-            <div className="prose prose-sm max-w-none h-96 overflow-y-auto">
-              <pre className="whitespace-pre-wrap font-sans text-sm bg-gray-50 p-4 rounded-lg">
-                {generatedContent}
-              </pre>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <Sparkles className="w-12 h-12 mb-2" />
-              <p>Your generated content will appear here</p>
-            </div>
-          )}
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          {activeTab === 'assistant' ? renderAssistantOutput() : renderGenerationOutput()}
         </div>
       </div>
 
-      {/* Info Box */}
-      <div className="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-100">
-        <h3 className="font-medium text-blue-900 mb-2">💡 Tips for Better Results</h3>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Be specific with your topic name for more accurate content</li>
-          <li>• Adjust difficulty level based on your students' understanding</li>
-          <li>• Review generated content before using in class</li>
-          <li>• You can copy and modify the content as needed</li>
+      <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+        <h3 className="mb-2 font-medium text-blue-900">Usage Notes</h3>
+        <ul className="space-y-1 text-sm text-blue-800">
+          <li>Use the assistant tab for free-form questions about students, attendance, exams, fees, materials, buses, or timetable.</li>
+          <li>The lesson plan, quiz, and homework tools now call the real AI backend instead of local sample text.</li>
+          <li>If live data is missing for a request, the assistant will say so and then make a clear assumption-based draft instead of inventing numbers.</li>
+          <li>If `OPENAI_API_KEY` is missing in the server environment, the page will show a clear backend error instead of silently faking output.</li>
         </ul>
       </div>
     </div>
@@ -470,4 +575,3 @@ Complete the following questions related to ${data.topic}. Show all your work.
 };
 
 export default AITools;
-

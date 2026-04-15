@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   getTimetables, 
   getTimetableByClass,
+  getTeacherTimetable,
   createTimetable, 
   updateTimetable, 
   deleteTimetable,
@@ -42,7 +43,7 @@ const getSubjectColor = (subjectName) => {
 };
 
 const Timetable = () => {
-  const { isAdmin, isTeacher } = useAuth();
+  const { isAdmin, user } = useAuth();
   const [timetables, setTimetables] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -84,13 +85,19 @@ const Timetable = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchTimetable();
-  }, [selectedClass, selectedSection]);
+  }, [isAdmin, selectedClass, selectedSection, user?._id]);
 
   const fetchData = async () => {
+    if (!isAdmin) {
+      setSubjects([]);
+      setTeachers([]);
+      return;
+    }
+
     try {
       setLoading(true);
       const [subjectsRes, teachersRes] = await Promise.all([
@@ -119,10 +126,16 @@ const Timetable = () => {
 
   const fetchTimetable = async () => {
     try {
+      if (!isAdmin && !user?._id) {
+        setTimetables([]);
+        setLoadError('Unable to resolve the logged-in teacher timetable.');
+        return;
+      }
+
       setLoading(true);
-      const response = await getTimetableByClass(selectedClass, { 
-        section: selectedSection 
-      });
+      const response = isAdmin
+        ? await getTimetableByClass(selectedClass, { section: selectedSection })
+        : await getTeacherTimetable(user?._id);
       const timetableData = response?.data?.timetables;
       if (!Array.isArray(timetableData)) {
         throw new Error('Invalid timetable response');
@@ -252,8 +265,10 @@ const Timetable = () => {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Timetable Management</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage class schedules and periods</p>
+          <h1 className="text-2xl font-bold text-gray-900">{isAdmin ? 'Timetable Management' : 'My Timetable'}</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {isAdmin ? 'Manage class schedules and periods' : 'View only the periods assigned to your teaching schedule'}
+          </p>
         </div>
         {isAdmin && (
           <div className="flex gap-2">
@@ -282,28 +297,34 @@ const Timetable = () => {
             {loadError}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366] min-w-[140px]"
-            >
-              {classes.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+        {isAdmin ? (
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366] min-w-[140px]"
+              >
+                {classes.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366] min-w-[140px]"
+              >
+                {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366] min-w-[140px]"
-            >
-              {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
-            </select>
+        ) : (
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-[#002366]">
+            Teacher workspace is now using your personal timetable feed instead of the full class timetable manager.
           </div>
-        </div>
+        )}
       </div>
 
       {loading ? (

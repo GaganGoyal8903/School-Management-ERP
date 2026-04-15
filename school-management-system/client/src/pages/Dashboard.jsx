@@ -155,6 +155,13 @@ const Dashboard = () => {
   const { user, isAdmin, isTeacher, isStudent, isParent, isAccountant } = useAuth();
   const navigate = useNavigate();
   const canViewStudentPreview = isAdmin || isTeacher;
+  const dashboardSubtitle = isStudent
+    ? "Welcome to your student portal."
+    : isParent
+      ? "Welcome to your parent portal."
+      : isAccountant
+        ? "Welcome back to the school finance workspace."
+        : "Welcome back to Mayo College Management System";
 
   const [stats, setStats] = useState(defaultStats);
   const [feeStats, setFeeStats] = useState(defaultFeeStats);
@@ -438,7 +445,7 @@ const Dashboard = () => {
           {getGreeting()}, {user?.fullName?.split(" ")[0] || "User"}!
         </h1>
         <p className="text-blue-200 mt-1">
-          Welcome back to Mayo College Management System
+          {dashboardSubtitle}
         </p>
         <div className="flex items-center gap-2 mt-4 text-sm text-blue-200">
           <TrendingUp className="w-4 h-4" />
@@ -753,6 +760,10 @@ const Dashboard = () => {
               <div className="rounded-lg bg-blue-50 p-4">
                 <p className="text-sm text-blue-600">Dashboard Access</p>
                 <p className="mt-1 text-base font-medium text-blue-900">Enabled</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-4">
+                <p className="text-sm text-amber-700">Admin Controls</p>
+                <p className="mt-1 text-base font-medium text-amber-900">Hidden for your role</p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-sm text-emerald-600">Primary Modules</p>

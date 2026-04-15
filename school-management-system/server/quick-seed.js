@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 const MONGO_URI = "mongodb://localhost:27017/school_management";
 
@@ -18,8 +17,8 @@ async function seed() {
     await mongoose.connect(MONGO_URI);
     console.log('Connected!');
 
-    // Create test users
-    const password = await bcrypt.hash('Mayo@123', 10);
+    // WARNING: Plain text password storage - for development only
+    const password = 'Mayo@123';
 
     const users = [
       { fullName: 'Gagan Goyal (Admin)', email: 'gagangoyal878@gmail.com', password, role: 'admin' },

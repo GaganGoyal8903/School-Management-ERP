@@ -17,10 +17,10 @@ router.use(protect);
 
 router.get('/dashboard', getDashboardStats);
 router.get('/analytics', authorize('admin', 'teacher'), getAnalytics);
-router.get('/summary', getSummaryReport);
+router.get('/summary', authorize('admin', 'accountant'), getSummaryReport);
 router.get('/attendance', authorize('admin'), getAttendanceReport);
 router.get('/attendance/export', authorize('admin'), exportAttendanceReport);
-router.get('/fees', authorize('admin'), getFeeReport);
+router.get('/fees', authorize('admin', 'accountant'), getFeeReport);
 router.get('/exams', authorize('admin'), getExamReport);
 router.get('/exams/export', authorize('admin'), exportExamReport);
 

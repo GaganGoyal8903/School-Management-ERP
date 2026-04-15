@@ -71,6 +71,13 @@ const createTimetable = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Please add at least one complete timetable period.' });
   }
 
+  if (result?.resultCode === 'invalid_context') {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a valid class, section, and academic year for this timetable.',
+    });
+  }
+
   res.status(201).json({ success: true, timetable: result.timetable, data: result.timetable });
 });
 
@@ -93,6 +100,13 @@ const updateTimetable = asyncHandler(async (req, res) => {
 
   if (result?.resultCode === 'invalid_payload') {
     return res.status(400).json({ success: false, message: 'Please add at least one complete timetable period.' });
+  }
+
+  if (result?.resultCode === 'invalid_context') {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a valid class, section, and academic year for this timetable.',
+    });
   }
 
   res.status(200).json({ success: true, timetable: result.timetable, data: result.timetable });
@@ -142,6 +156,13 @@ const copyTimetable = asyncHandler(async (req, res) => {
     return res.status(400).json({
       success: false,
       message: 'Target timetable already exists',
+    });
+  }
+
+  if (result?.resultCode === 'invalid_context') {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a valid target class, section, and academic year.',
     });
   }
 

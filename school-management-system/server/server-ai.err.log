@@ -1,0 +1,11 @@
+Error: Error: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.
+    at createOpenAITextResponse (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\services\openaiResponseService.js:47:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\controllers\aiController.js:207:20 {
+  statusCode: 429
+}
+Auth middleware error: jwt expired
+Auth middleware error: jwt expired
+Auth middleware error: jwt expired
+OTP email send error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 41be03b00d2f7-c79581a54fasm1243066a12.17 - gsmtp

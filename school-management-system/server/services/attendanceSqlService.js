@@ -129,12 +129,28 @@ BEGIN
 END;
 `,
   `
+IF COL_LENGTH(N'dbo.StudentAttendance', N'MarkedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.StudentAttendance
+  ADD MarkedByUserId INT NULL;
+END;
+`,
+  `
 UPDATE sad
 SET RollNumber = s.RollNumber
 FROM dbo.StudentAttendanceDetails sad
 INNER JOIN dbo.Students s
   ON s.StudentId = sad.StudentId
 WHERE ISNULL(LTRIM(RTRIM(sad.RollNumber)), N'') = N'';
+`,
+  `
+UPDATE sa
+SET MarkedByUserId = t.UserId
+FROM dbo.StudentAttendance sa
+INNER JOIN dbo.Teachers t
+  ON t.TeacherId = sa.MarkedByTeacherId
+WHERE sa.MarkedByUserId IS NULL
+  AND t.UserId IS NOT NULL;
 `,
   `
 IF NOT EXISTS (
@@ -169,7 +185,7 @@ const mapAttendanceRow = (row) => {
 
   const attendanceDetailId = row.AttendanceDetailId ?? row.MongoAttendanceId ?? null;
   const studentId = row.StudentId ?? row.MongoStudentId ?? null;
-  const teacherUserId = row.TeacherUserId ?? row.MarkedByUserId ?? row.MarkedByMongoUserId ?? null;
+  const markedByUserId = row.MarkedByUserId ?? row.TeacherUserId ?? row.MarkedByMongoUserId ?? null;
   const rollNumber = row.RollNumber || row.StudentRollNumber || null;
 
   return {
@@ -193,10 +209,12 @@ const mapAttendanceRow = (row) => {
     section: row.SectionName || '',
     markedBy: row.MarkedByFullName
       ? {
-          _id: teacherUserId !== null && teacherUserId !== undefined ? String(teacherUserId) : null,
+          _id: markedByUserId !== null && markedByUserId !== undefined ? String(markedByUserId) : null,
           fullName: row.MarkedByFullName,
+          role: row.MarkedByRoleName || null,
         }
-      : (teacherUserId !== null && teacherUserId !== undefined ? String(teacherUserId) : null),
+      : (markedByUserId !== null && markedByUserId !== undefined ? String(markedByUserId) : null),
+    markedByUserId: markedByUserId ?? null,
     markedByTeacherId: row.MarkedByTeacherId ?? null,
     remarks: row.Remarks || '',
     createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
@@ -290,9 +308,10 @@ const buildAttendanceBaseSelect = ({ includeTotalCount = false } = {}) => `
     sad.Status,
     c.ClassName,
     sec.SectionName,
-    u.UserId AS TeacherUserId,
+    markerUser.UserId AS MarkedByUserId,
     sa.MarkedByTeacherId,
-    u.FullName AS MarkedByFullName,
+    markerUser.FullName AS MarkedByFullName,
+    markerRole.RoleName AS MarkedByRoleName,
     COALESCE(NULLIF(sad.Remarks, N''), sa.Remarks, N'') AS Remarks,
     sad.CheckInTime,
     sad.CheckOutTime,
@@ -310,8 +329,10 @@ const buildAttendanceBaseSelect = ({ includeTotalCount = false } = {}) => `
     ON sec.SectionId = sa.SectionId
   LEFT JOIN dbo.Teachers t
     ON t.TeacherId = sa.MarkedByTeacherId
-  LEFT JOIN dbo.Users u
-    ON u.UserId = t.UserId
+  LEFT JOIN dbo.Users markerUser
+    ON markerUser.UserId = COALESCE(sa.MarkedByUserId, t.UserId)
+  LEFT JOIN dbo.Roles markerRole
+    ON markerRole.RoleId = markerUser.RoleId
 `;
 
 const buildAttendanceParams = ({
@@ -933,6 +954,7 @@ const resolveAttendanceContext = async ({ studentId, className, sectionName, mar
     student,
     classId,
     sectionId,
+    markedByUserId: markedBySqlUserId,
     markedByTeacherId,
   };
 };
@@ -960,6 +982,30 @@ const resolveTeacherDbId = async ({ markedByTeacherId = null, markedByUserId = n
   );
 
   return parseNumericId(teacherResult?.recordset?.[0]?.TeacherId);
+};
+
+const resolveMarkedByUserId = async ({ markedByTeacherId = null, markedByUserId = null }, tx = null) => {
+  const userLookupId = parseNumericId(markedByUserId);
+  if (userLookupId) {
+    return userLookupId;
+  }
+
+  const teacherLookupId = parseNumericId(markedByTeacherId);
+  if (!teacherLookupId) {
+    return null;
+  }
+
+  const sql = getSqlClient();
+  const runner = tx?.query || executeQuery;
+  const teacherResult = await runner(
+    `SELECT TOP 1 UserId
+     FROM dbo.Teachers
+     WHERE TeacherId = @TeacherId
+     ORDER BY TeacherId DESC;`,
+    [{ name: 'TeacherId', type: sql.Int, value: teacherLookupId }]
+  );
+
+  return parseNumericId(teacherResult?.recordset?.[0]?.UserId);
 };
 
 const resolveClassIdByName = async (className, tx = null) => {
@@ -1231,6 +1277,7 @@ const loadExistingAttendanceSession = async ({ attendanceDate, classId, sectionI
     return {
       attendanceId: null,
       academicYearId: null,
+      markedByUserId: null,
       markedByTeacherId: null,
       remarks: null,
       detailMap: new Map(),
@@ -1243,6 +1290,7 @@ const loadExistingAttendanceSession = async ({ attendanceDate, classId, sectionI
     `SELECT
        AttendanceId,
        AcademicYearId,
+       MarkedByUserId,
        MarkedByTeacherId,
        Remarks
      FROM dbo.StudentAttendance
@@ -1266,6 +1314,7 @@ const loadExistingAttendanceSession = async ({ attendanceDate, classId, sectionI
     return {
       attendanceId: null,
       academicYearId: null,
+      markedByUserId: null,
       markedByTeacherId: null,
       remarks: null,
       detailMap: new Map(),
@@ -1313,6 +1362,7 @@ const loadExistingAttendanceSession = async ({ attendanceDate, classId, sectionI
   return {
     attendanceId: parseNumericId(headerRows[0]?.AttendanceId),
     academicYearId: parseNumericId(headerRows[0]?.AcademicYearId),
+    markedByUserId: parseNumericId(headerRows[0]?.MarkedByUserId),
     markedByTeacherId: parseNumericId(headerRows[0]?.MarkedByTeacherId),
     remarks: toNullableString(headerRows[0]?.Remarks),
     detailMap,
@@ -1558,6 +1608,10 @@ const saveAttendanceSession = async ({
       { markedByTeacherId, markedByUserId },
       tx
     );
+    const resolvedMarkedByUserId = await resolveMarkedByUserId(
+      { markedByTeacherId, markedByUserId },
+      tx
+    );
 
     const existingHeaders = await tx.query(
       `SELECT AttendanceId
@@ -1585,6 +1639,7 @@ const saveAttendanceSession = async ({
            AcademicYearId,
            ClassId,
            SectionId,
+           MarkedByUserId,
            MarkedByTeacherId,
            Remarks,
            CreatedAt
@@ -1594,6 +1649,7 @@ const saveAttendanceSession = async ({
            @AcademicYearId,
            @ClassId,
            @SectionId,
+           @MarkedByUserId,
            @MarkedByTeacherId,
            @Remarks,
            SYSUTCDATETIME()
@@ -1605,6 +1661,7 @@ const saveAttendanceSession = async ({
           { name: 'AcademicYearId', type: sql.Int, value: resolvedAcademicYearId },
           { name: 'ClassId', type: sql.Int, value: resolvedClassId },
           { name: 'SectionId', type: sql.Int, value: resolvedSectionId },
+          { name: 'MarkedByUserId', type: sql.Int, value: resolvedMarkedByUserId },
           { name: 'MarkedByTeacherId', type: sql.Int, value: resolvedMarkedByTeacherId },
           { name: 'Remarks', type: sql.NVarChar(1000), value: toNullableString(remarks) },
         ]
@@ -1614,11 +1671,13 @@ const saveAttendanceSession = async ({
       await tx.query(
         `UPDATE dbo.StudentAttendance
          SET AcademicYearId = @AcademicYearId,
+             MarkedByUserId = @MarkedByUserId,
              MarkedByTeacherId = @MarkedByTeacherId,
              Remarks = @Remarks
          WHERE AttendanceId = @AttendanceId;`,
         [
           { name: 'AcademicYearId', type: sql.Int, value: resolvedAcademicYearId },
+          { name: 'MarkedByUserId', type: sql.Int, value: resolvedMarkedByUserId },
           { name: 'MarkedByTeacherId', type: sql.Int, value: resolvedMarkedByTeacherId },
           { name: 'Remarks', type: sql.NVarChar(1000), value: toNullableString(remarks) },
           { name: 'AttendanceId', type: sql.Int, value: attendanceId },
@@ -1831,6 +1890,7 @@ const upsertAttendanceRecord = async ({
           AcademicYearId,
           ClassId,
           SectionId,
+          MarkedByUserId,
           MarkedByTeacherId,
           Remarks,
           CreatedAt
@@ -1840,6 +1900,7 @@ const upsertAttendanceRecord = async ({
           @AcademicYearId,
           @ClassId,
           @SectionId,
+          @MarkedByUserId,
           @MarkedByTeacherId,
           @Remarks,
           @CreatedAt
@@ -1851,6 +1912,7 @@ const upsertAttendanceRecord = async ({
         { name: 'AcademicYearId', type: sql.Int, value: context.student.AcademicYearId },
         { name: 'ClassId', type: sql.Int, value: context.classId },
         { name: 'SectionId', type: sql.Int, value: context.sectionId },
+        { name: 'MarkedByUserId', type: sql.Int, value: context.markedByUserId },
         { name: 'MarkedByTeacherId', type: sql.Int, value: context.markedByTeacherId },
         { name: 'Remarks', type: sql.NVarChar(1000), value: toNullableString(remarks) },
         { name: 'CreatedAt', type: sql.DateTime2(0), value: now },
@@ -1859,11 +1921,13 @@ const upsertAttendanceRecord = async ({
     } else {
       await tx.query(`
         UPDATE dbo.StudentAttendance
-        SET MarkedByTeacherId = @MarkedByTeacherId,
+        SET MarkedByUserId = @MarkedByUserId,
+            MarkedByTeacherId = @MarkedByTeacherId,
             Remarks = @Remarks
         WHERE AttendanceId = @AttendanceId;
       `, [
         { name: 'AttendanceId', type: sql.Int, value: attendanceHeaderId },
+        { name: 'MarkedByUserId', type: sql.Int, value: context.markedByUserId },
         { name: 'MarkedByTeacherId', type: sql.Int, value: context.markedByTeacherId },
         { name: 'Remarks', type: sql.NVarChar(1000), value: toNullableString(remarks) },
       ]);

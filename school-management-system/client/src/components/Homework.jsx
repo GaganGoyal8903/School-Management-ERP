@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { BookOpen, Calendar, Plus, Clock, CheckCircle, AlertCircle, X } from "lucide-react";
 import CrestLogo from "./CrestLogo";
 import { getHomework, createHomework, deleteHomework, getStudents } from "../services/api";
+import { getStoredAuthUser } from "../utils/authStorage";
 
 const subjects = ["Mathematics", "Science", "English", "History", "Geography"];
 const grades = ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"];
@@ -28,7 +29,7 @@ export default function Homework() {
   const [sms_academicYear, setSms_academicYear] = useState("2024-2025");
   const [sms_creating, setSms_creating] = useState(false);
 
-  const userRole = JSON.parse(localStorage.getItem("sms_user") || "{}").role;
+  const userRole = getStoredAuthUser()?.role || "";
 
   useEffect(() => {
     fetchHomework();

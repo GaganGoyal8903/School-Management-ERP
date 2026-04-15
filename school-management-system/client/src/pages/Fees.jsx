@@ -16,7 +16,7 @@ import {
 } from '../services/api';
 
 const Fees = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAccountant } = useAuth();
   const [fees, setFees] = useState([]);
   const [stats, setStats] = useState({});
   const [students, setStudents] = useState([]);
@@ -247,7 +247,7 @@ const Fees = () => {
       width: '150px',
       render: (row) => (
         <div className="flex items-center gap-1">
-          {isAdmin && row.status !== 'Paid' && (
+          {(isAdmin || isAccountant) && row.status !== 'Paid' && (
             <button
               onClick={() => openPaymentModal(row)}
               className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"

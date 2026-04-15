@@ -14,6 +14,11 @@ const {
   getSubjectCount: getSubjectCountFromSql,
   assignTeacherToSubjectRecord,
 } = require('../services/academicSqlService');
+const {
+  extractSubjectId,
+  getTeacherAssignmentScope,
+  paginateItems,
+} = require('../services/teacherAssignmentService');
 
 const toNormalizedString = (value) => {
   if (value === undefined || value === null) {
@@ -63,6 +68,8 @@ const buildTeacherResponse = (teacher, { includePhone = false } = {}) => {
     ...(includePhone ? { phone: teacher.phone || null } : {}),
   };
 };
+
+const getRequestRole = (req) => String(req.user?.role || '').trim().toLowerCase();
 
 const attachTeacherInfo = async (subject, { includePhone = false } = {}) => {
   if (!subject) {
@@ -131,23 +138,40 @@ const validateTeacherAssignment = async (teacherId) => {
 const getSubjects = asyncHandler(async (req, res) => {
   await ensureAcademicSqlReady();
   const { grade, search, page = 1, limit = 10 } = req.query;
+  const requestRole = getRequestRole(req);
 
-  const result = await getSubjectList({
-    page,
-    limit,
-    grade,
-    search,
-  });
+  let subjects = [];
+  let total = 0;
 
-  const subjects = await attachTeacherInfoToList(result.subjects);
+  if (requestRole === 'teacher') {
+    const scope = await getTeacherAssignmentScope({
+      teacherUserId: req.user?._id,
+      grade,
+      search,
+    });
+    const paginated = paginateItems(scope.subjects, page, limit);
+    subjects = paginated.items;
+    total = paginated.total;
+  } else {
+    const result = await getSubjectList({
+      page,
+      limit,
+      grade,
+      search,
+    });
+    subjects = result.subjects;
+    total = result.total;
+  }
+
+  const hydratedSubjects = await attachTeacherInfoToList(subjects);
 
   res.json({
     success: true,
-    subjects,
+    subjects: hydratedSubjects,
     pagination: {
-      total: result.total,
+      total,
       page: Number(page) || 1,
-      pages: Math.ceil(result.total / (Number(limit) || 10)),
+      pages: Math.ceil(total / (Number(limit) || 10)),
     },
   });
 });
@@ -158,9 +182,17 @@ const getSubjects = asyncHandler(async (req, res) => {
 const getSubject = asyncHandler(async (req, res) => {
   await ensureAcademicSqlReady();
   const subject = await getSubjectByIdFromSql(req.params.id);
+  const requestRole = getRequestRole(req);
 
   if (!subject) {
     return res.status(404).json({ message: 'Subject not found' });
+  }
+
+  if (requestRole === 'teacher') {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: req.user?._id });
+    if (!scope.subjectIds.has(extractSubjectId(subject))) {
+      return res.status(403).json({ message: 'Not authorized to access this subject' });
+    }
   }
 
   res.json({
@@ -250,7 +282,17 @@ const deleteSubject = asyncHandler(async (req, res) => {
 // @access  Private
 const getSubjectsByGrade = asyncHandler(async (req, res) => {
   await ensureAcademicSqlReady();
-  const subjects = await getSubjectsByGradeFromSql(req.params.grade);
+  const requestRole = getRequestRole(req);
+
+  let subjects = await getSubjectsByGradeFromSql(req.params.grade);
+
+  if (requestRole === 'teacher') {
+    const scope = await getTeacherAssignmentScope({
+      teacherUserId: req.user?._id,
+      grade: req.params.grade,
+    });
+    subjects = subjects.filter((subject) => scope.subjectIds.has(extractSubjectId(subject)));
+  }
 
   res.json({
     success: true,
@@ -263,7 +305,15 @@ const getSubjectsByGrade = asyncHandler(async (req, res) => {
 // @access  Private
 const getSubjectCount = asyncHandler(async (req, res) => {
   await ensureAcademicSqlReady();
-  const count = await getSubjectCountFromSql();
+  const requestRole = getRequestRole(req);
+
+  let count = 0;
+  if (requestRole === 'teacher') {
+    const scope = await getTeacherAssignmentScope({ teacherUserId: req.user?._id });
+    count = scope.subjectIds.size;
+  } else {
+    count = await getSubjectCountFromSql();
+  }
 
   res.json({
     success: true,

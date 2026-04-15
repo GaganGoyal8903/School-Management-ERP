@@ -13,8 +13,13 @@ const { ensureAcademicSqlReady, getSubjectById, syncSubjectById } = require('./a
 const EXAM_TABLE = 'dbo.SqlExams';
 const EXAM_SUBJECT_TABLE = 'dbo.SqlExamSubjects';
 const EXAM_RESULT_TABLE = 'dbo.SqlExamResults';
+const ONLINE_EXAM_PAPER_TABLE = 'dbo.OnlineExamPapers';
+const ONLINE_EXAM_QUESTION_TABLE = 'dbo.OnlineExamQuestions';
+const ONLINE_EXAM_ATTEMPT_TABLE = 'dbo.OnlineExamAttempts';
+const ONLINE_EXAM_ATTEMPT_ANSWER_TABLE = 'dbo.OnlineExamAttemptAnswers';
 const DEFAULT_START_TIME = '09:00';
 const DEFAULT_DURATION_MINUTES = 60;
+const ONLINE_QUESTION_TYPES = new Set(['mcq', 'short_answer']);
 
 let examBootstrapPromise = null;
 let examSyncPromise = null;
@@ -89,18 +94,91 @@ const formatMinutesToTime = (minutes) => {
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 };
 
-const formatSqlTime = (value) => {
+const normalizeClockTime = (value) => {
   if (!value) {
     return null;
   }
 
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    // SQL `time` values are returned as UTC-based Date objects anchored to 1970-01-01.
+    return `${String(value.getUTCHours()).padStart(2, '0')}:${String(value.getUTCMinutes()).padStart(2, '0')}`;
+  }
+
+  const text = String(value || '').trim();
+  const timeMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (timeMatch) {
+    return `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+  }
+
+  const parsedDate = new Date(text);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    const useUtcClock = /(?:gmt|utc|z|[+-]\d{2}:?\d{2})/i.test(text);
+    const hours = useUtcClock ? parsedDate.getUTCHours() : parsedDate.getHours();
+    const minutes = useUtcClock ? parsedDate.getUTCMinutes() : parsedDate.getMinutes();
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  return null;
+};
+
+const formatSqlTime = (value) => {
+  return normalizeClockTime(value);
+};
+
+const buildExamDateTime = (dateValue, timeValue = DEFAULT_START_TIME) => {
+  const safeDate = normalizeDateOnly(dateValue);
+  const safeTime = normalizeClockTime(timeValue) || DEFAULT_START_TIME;
+  if (!safeDate) {
     return null;
   }
 
-  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+  const [hoursText, minutesText] = safeTime.split(':');
+  const date = new Date(safeDate);
+  date.setHours(Number(hoursText), Number(minutesText), 0, 0);
+  return date;
 };
+
+const getExamWindowStatus = ({ examDate, startTime, endTime, referenceDate = new Date() }) => {
+  const safeExamDate = normalizeDateOnly(examDate);
+  if (!safeExamDate) {
+    return 'upcoming';
+  }
+
+  const startDateTime = buildExamDateTime(safeExamDate, startTime || DEFAULT_START_TIME);
+  const endDateTime = buildExamDateTime(safeExamDate, endTime || startTime || DEFAULT_START_TIME);
+  const safeEndDateTime = endDateTime && startDateTime && endDateTime < startDateTime
+    ? new Date(endDateTime.getTime() + (24 * 60 * 60 * 1000))
+    : endDateTime;
+
+  if (startDateTime && referenceDate < startDateTime) {
+    return 'upcoming';
+  }
+
+  if (safeEndDateTime && referenceDate > safeEndDateTime) {
+    return 'closed';
+  }
+
+  return 'live';
+};
+
+const normalizeQuestionType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'short' || normalized === 'shortanswer' || normalized === 'short-answer') {
+    return 'short_answer';
+  }
+
+  return ONLINE_QUESTION_TYPES.has(normalized) ? normalized : 'mcq';
+};
+
+const normalizeOptionKey = (value) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  return ['A', 'B', 'C', 'D'].includes(normalized) ? normalized : null;
+};
+
+const normalizeAnswerText = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
 
 const deriveExamTimes = ({ startTime, endTime, duration }) => {
   const startMinutes = parseTimeToMinutes(startTime) ?? parseTimeToMinutes(DEFAULT_START_TIME);
@@ -177,6 +255,7 @@ const mapExamRow = (row) => {
 
   const examId = row.ExamId ?? row.MongoExamId ?? null;
   const subjectId = row.SubjectId ?? row.MongoSubjectId ?? null;
+  const createdByUserId = row.CreatedByUserId ?? row.CreatedByMongoUserId ?? null;
   const startTime = formatSqlTime(row.StartTime) || row.StartTime || null;
   const endTime = formatSqlTime(row.EndTime) || row.EndTime || null;
   const durationFromTimes =
@@ -210,10 +289,10 @@ const mapExamRow = (row) => {
     instructions: row.Instructions || row.Description || '',
     createdBy: row.CreatedByFullName
       ? {
-          _id: row.CreatedByMongoUserId,
+          _id: createdByUserId !== null && createdByUserId !== undefined ? String(createdByUserId) : null,
           fullName: row.CreatedByFullName,
         }
-      : row.CreatedByMongoUserId || null,
+      : (createdByUserId !== null && createdByUserId !== undefined ? String(createdByUserId) : null),
     isActive: row.IsActive === undefined ? true : (row.IsActive === true || row.IsActive === 1),
     createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
     updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
@@ -286,6 +365,134 @@ const mapResultRow = (row) => {
   };
 
   return mapped;
+};
+
+const mapOnlineExamPaperRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    paperId: row.OnlineExamPaperId ? String(row.OnlineExamPaperId) : null,
+    examId: row.ExamId ? String(row.ExamId) : null,
+    examSubjectId: row.ExamSubjectId ? String(row.ExamSubjectId) : null,
+    title: row.Title || null,
+    instructions: row.Instructions || '',
+    durationMinutes: Number(row.DurationMinutes || 0),
+    totalMarks: toNumber(row.TotalMarks, 0),
+    allowInstantResult: row.AllowInstantResult === true || row.AllowInstantResult === 1,
+    questionCount: Number(row.QuestionCount || 0),
+    isActive: row.IsActive === true || row.IsActive === 1,
+    createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
+    updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
+  };
+};
+
+const mapOnlineExamQuestionRow = (row, { includeAnswerKey = true } = {}) => {
+  if (!row) {
+    return null;
+  }
+
+  const questionType = normalizeQuestionType(row.QuestionType);
+  const mapped = {
+    questionId: row.QuestionId ? String(row.QuestionId) : null,
+    paperId: row.OnlineExamPaperId ? String(row.OnlineExamPaperId) : null,
+    questionText: row.QuestionText || '',
+    questionType,
+    marks: toNumber(row.Marks, 0),
+    sortOrder: Number(row.SortOrder || 0),
+    options: questionType === 'mcq'
+      ? ['A', 'B', 'C', 'D']
+          .map((key) => ({
+            key,
+            text: row[`Option${key}`] || '',
+          }))
+          .filter((option) => option.text)
+      : [],
+  };
+
+  if (includeAnswerKey) {
+    mapped.correctAnswer = row.CorrectAnswer || '';
+  }
+
+  return mapped;
+};
+
+const mapOnlineExamAttemptRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    attemptId: row.OnlineExamAttemptId ? String(row.OnlineExamAttemptId) : null,
+    paperId: row.OnlineExamPaperId ? String(row.OnlineExamPaperId) : null,
+    examId: row.ExamId ? String(row.ExamId) : null,
+    examSubjectId: row.ExamSubjectId ? String(row.ExamSubjectId) : null,
+    studentId: row.StudentId ? String(row.StudentId) : null,
+    status: row.Status || 'Started',
+    startedAt: row.StartedAt ? new Date(row.StartedAt) : null,
+    submittedAt: row.SubmittedAt ? new Date(row.SubmittedAt) : null,
+    marksObtained: toNumber(row.MarksObtained, 0),
+    totalMarks: toNumber(row.TotalMarks, 0),
+    percentage: toNumber(row.Percentage, 0),
+    grade: row.Grade || null,
+    correctAnswers: Number(row.CorrectAnswers || 0),
+    incorrectAnswers: Number(row.IncorrectAnswers || 0),
+  };
+};
+
+const normalizeOnlineExamQuestions = (questions = []) => {
+  const normalizedQuestions = (Array.isArray(questions) ? questions : [])
+    .map((question, index) => {
+      const questionType = normalizeQuestionType(question?.questionType);
+      const questionText = toNullableString(question?.questionText);
+      const marks = Number(toNumber(question?.marks, NaN));
+      const baseQuestion = {
+        questionText,
+        questionType,
+        marks,
+        sortOrder: Number(question?.sortOrder || index + 1),
+      };
+
+      if (!questionText || !Number.isFinite(marks) || marks <= 0) {
+        return null;
+      }
+
+      if (questionType === 'mcq') {
+        const options = ['A', 'B', 'C', 'D']
+          .map((key) => ({
+            key,
+            text: toNullableString(question?.options?.find((option) => option?.key === key)?.text || question?.[`option${key}`]),
+          }))
+          .filter((option) => option.text);
+        const correctAnswer = normalizeOptionKey(question?.correctAnswer);
+
+        if (options.length < 2 || !correctAnswer || !options.some((option) => option.key === correctAnswer)) {
+          return null;
+        }
+
+        return {
+          ...baseQuestion,
+          options,
+          correctAnswer,
+        };
+      }
+
+      const correctAnswer = toNullableString(question?.correctAnswer);
+      if (!correctAnswer) {
+        return null;
+      }
+
+      return {
+        ...baseQuestion,
+        options: [],
+        correctAnswer,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+
+  return normalizedQuestions;
 };
 
 const buildExamListFilters = ({ className = null, subjectId = null, date = null, examId = null } = {}) => {
@@ -475,6 +682,111 @@ END;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SqlExamResults_Student' AND object_id = OBJECT_ID(N'${EXAM_RESULT_TABLE}'))
 BEGIN
   CREATE INDEX IX_SqlExamResults_Student ON ${EXAM_RESULT_TABLE}(MongoStudentId, UpdatedAt);
+END;
+
+IF OBJECT_ID(N'${ONLINE_EXAM_PAPER_TABLE}', N'U') IS NULL
+BEGIN
+  CREATE TABLE ${ONLINE_EXAM_PAPER_TABLE} (
+    OnlineExamPaperId INT IDENTITY(1,1) PRIMARY KEY,
+    ExamId INT NOT NULL,
+    ExamSubjectId INT NOT NULL,
+    Title NVARCHAR(200) NULL,
+    Instructions NVARCHAR(2000) NULL,
+    DurationMinutes INT NOT NULL CONSTRAINT DF_OnlineExamPapers_Duration DEFAULT (60),
+    TotalMarks DECIMAL(10,2) NOT NULL CONSTRAINT DF_OnlineExamPapers_TotalMarks DEFAULT (0),
+    AllowInstantResult BIT NOT NULL CONSTRAINT DF_OnlineExamPapers_AllowInstantResult DEFAULT (1),
+    IsActive BIT NOT NULL CONSTRAINT DF_OnlineExamPapers_IsActive DEFAULT (1),
+    CreatedByUserId INT NULL,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamPapers_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamPapers_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_OnlineExamPapers_Exam FOREIGN KEY (ExamId) REFERENCES dbo.Exams(ExamId) ON DELETE CASCADE,
+    CONSTRAINT FK_OnlineExamPapers_ExamSubject FOREIGN KEY (ExamSubjectId) REFERENCES dbo.ExamSubjects(ExamSubjectId) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_OnlineExamPapers_ExamSubject' AND object_id = OBJECT_ID(N'${ONLINE_EXAM_PAPER_TABLE}'))
+BEGIN
+  CREATE UNIQUE INDEX UX_OnlineExamPapers_ExamSubject ON ${ONLINE_EXAM_PAPER_TABLE}(ExamSubjectId);
+END;
+
+IF OBJECT_ID(N'${ONLINE_EXAM_QUESTION_TABLE}', N'U') IS NULL
+BEGIN
+  CREATE TABLE ${ONLINE_EXAM_QUESTION_TABLE} (
+    QuestionId INT IDENTITY(1,1) PRIMARY KEY,
+    OnlineExamPaperId INT NOT NULL,
+    QuestionType NVARCHAR(20) NOT NULL CONSTRAINT DF_OnlineExamQuestions_Type DEFAULT (N'mcq'),
+    QuestionText NVARCHAR(MAX) NOT NULL,
+    OptionA NVARCHAR(1000) NULL,
+    OptionB NVARCHAR(1000) NULL,
+    OptionC NVARCHAR(1000) NULL,
+    OptionD NVARCHAR(1000) NULL,
+    CorrectAnswer NVARCHAR(1000) NOT NULL,
+    Marks DECIMAL(10,2) NOT NULL,
+    SortOrder INT NOT NULL CONSTRAINT DF_OnlineExamQuestions_SortOrder DEFAULT (1),
+    IsActive BIT NOT NULL CONSTRAINT DF_OnlineExamQuestions_IsActive DEFAULT (1),
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamQuestions_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamQuestions_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_OnlineExamQuestions_Paper FOREIGN KEY (OnlineExamPaperId) REFERENCES ${ONLINE_EXAM_PAPER_TABLE}(OnlineExamPaperId) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_OnlineExamQuestions_PaperSort' AND object_id = OBJECT_ID(N'${ONLINE_EXAM_QUESTION_TABLE}'))
+BEGIN
+  CREATE INDEX IX_OnlineExamQuestions_PaperSort ON ${ONLINE_EXAM_QUESTION_TABLE}(OnlineExamPaperId, SortOrder, QuestionId);
+END;
+
+IF OBJECT_ID(N'${ONLINE_EXAM_ATTEMPT_TABLE}', N'U') IS NULL
+BEGIN
+  CREATE TABLE ${ONLINE_EXAM_ATTEMPT_TABLE} (
+    OnlineExamAttemptId INT IDENTITY(1,1) PRIMARY KEY,
+    OnlineExamPaperId INT NOT NULL,
+    ExamId INT NOT NULL,
+    ExamSubjectId INT NOT NULL,
+    StudentId INT NOT NULL,
+    Status NVARCHAR(20) NOT NULL CONSTRAINT DF_OnlineExamAttempts_Status DEFAULT (N'Started'),
+    StartedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamAttempts_StartedAt DEFAULT SYSUTCDATETIME(),
+    SubmittedAt DATETIME2(0) NULL,
+    CorrectAnswers INT NOT NULL CONSTRAINT DF_OnlineExamAttempts_CorrectAnswers DEFAULT (0),
+    IncorrectAnswers INT NOT NULL CONSTRAINT DF_OnlineExamAttempts_IncorrectAnswers DEFAULT (0),
+    MarksObtained DECIMAL(10,2) NOT NULL CONSTRAINT DF_OnlineExamAttempts_MarksObtained DEFAULT (0),
+    TotalMarks DECIMAL(10,2) NOT NULL CONSTRAINT DF_OnlineExamAttempts_TotalMarks DEFAULT (0),
+    Percentage DECIMAL(10,2) NOT NULL CONSTRAINT DF_OnlineExamAttempts_Percentage DEFAULT (0),
+    Grade NVARCHAR(10) NULL,
+    ResultRemarks NVARCHAR(1000) NULL,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamAttempts_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamAttempts_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_OnlineExamAttempts_Paper FOREIGN KEY (OnlineExamPaperId) REFERENCES ${ONLINE_EXAM_PAPER_TABLE}(OnlineExamPaperId) ON DELETE CASCADE,
+    CONSTRAINT FK_OnlineExamAttempts_Exam FOREIGN KEY (ExamId) REFERENCES dbo.Exams(ExamId) ON DELETE NO ACTION,
+    CONSTRAINT FK_OnlineExamAttempts_ExamSubject FOREIGN KEY (ExamSubjectId) REFERENCES dbo.ExamSubjects(ExamSubjectId) ON DELETE NO ACTION,
+    CONSTRAINT FK_OnlineExamAttempts_Student FOREIGN KEY (StudentId) REFERENCES dbo.Students(StudentId) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_OnlineExamAttempts_PaperStudent' AND object_id = OBJECT_ID(N'${ONLINE_EXAM_ATTEMPT_TABLE}'))
+BEGIN
+  CREATE UNIQUE INDEX UX_OnlineExamAttempts_PaperStudent ON ${ONLINE_EXAM_ATTEMPT_TABLE}(OnlineExamPaperId, StudentId);
+END;
+
+IF OBJECT_ID(N'${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE}', N'U') IS NULL
+BEGIN
+  CREATE TABLE ${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE} (
+    OnlineExamAttemptAnswerId INT IDENTITY(1,1) PRIMARY KEY,
+    OnlineExamAttemptId INT NOT NULL,
+    QuestionId INT NOT NULL,
+    StudentAnswer NVARCHAR(MAX) NULL,
+    CorrectAnswerSnapshot NVARCHAR(1000) NULL,
+    IsCorrect BIT NOT NULL CONSTRAINT DF_OnlineExamAttemptAnswers_IsCorrect DEFAULT (0),
+    MarksAwarded DECIMAL(10,2) NOT NULL CONSTRAINT DF_OnlineExamAttemptAnswers_MarksAwarded DEFAULT (0),
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamAttemptAnswers_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_OnlineExamAttemptAnswers_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_OnlineExamAttemptAnswers_Attempt FOREIGN KEY (OnlineExamAttemptId) REFERENCES ${ONLINE_EXAM_ATTEMPT_TABLE}(OnlineExamAttemptId) ON DELETE CASCADE,
+    CONSTRAINT FK_OnlineExamAttemptAnswers_Question FOREIGN KEY (QuestionId) REFERENCES ${ONLINE_EXAM_QUESTION_TABLE}(QuestionId)
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_OnlineExamAttemptAnswers_AttemptQuestion' AND object_id = OBJECT_ID(N'${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE}'))
+BEGIN
+  CREATE UNIQUE INDEX UX_OnlineExamAttemptAnswers_AttemptQuestion ON ${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE}(OnlineExamAttemptId, QuestionId);
 END;
 `;
 
@@ -1334,6 +1646,773 @@ const getExamRecordById = async (examId) => {
   return { exam, grades, examSubjects };
 };
 
+const loadOnlineExamPaperContext = async ({ examId, studentId = null, includeAnswerKey = false } = {}) => {
+  await ensureExamSqlReady();
+  const examBundle = await getExamRecordById(examId);
+  if (!examBundle?.exam) {
+    return { errorCode: 'exam_not_found' };
+  }
+
+  const exam = examBundle.exam;
+  const examSubject = examBundle.examSubjects?.[0] || null;
+  const examSubjectId = parseNumericId(examSubject?.examSubjectId || examSubject?._id);
+
+  if (!examSubjectId) {
+    return { errorCode: 'exam_subject_not_found' };
+  }
+
+  const sql = getSqlClient();
+  const paperResult = await executeQuery(`
+    SELECT
+      p.OnlineExamPaperId,
+      p.ExamId,
+      p.ExamSubjectId,
+      p.Title,
+      p.Instructions,
+      p.DurationMinutes,
+      p.TotalMarks,
+      p.AllowInstantResult,
+      p.IsActive,
+      p.CreatedAt,
+      p.UpdatedAt,
+      COUNT(q.QuestionId) AS QuestionCount
+    FROM ${ONLINE_EXAM_PAPER_TABLE} p
+    LEFT JOIN ${ONLINE_EXAM_QUESTION_TABLE} q
+      ON q.OnlineExamPaperId = p.OnlineExamPaperId
+      AND q.IsActive = 1
+    WHERE p.ExamId = @ExamId
+      AND p.ExamSubjectId = @ExamSubjectId
+      AND p.IsActive = 1
+    GROUP BY
+      p.OnlineExamPaperId,
+      p.ExamId,
+      p.ExamSubjectId,
+      p.Title,
+      p.Instructions,
+      p.DurationMinutes,
+      p.TotalMarks,
+      p.AllowInstantResult,
+      p.IsActive,
+      p.CreatedAt,
+      p.UpdatedAt;
+  `, [
+    { name: 'ExamId', type: sql.Int, value: parseNumericId(exam.id || examId) },
+    { name: 'ExamSubjectId', type: sql.Int, value: examSubjectId },
+  ]);
+
+  const paper = mapOnlineExamPaperRow(paperResult?.recordset?.[0] || null);
+  if (!paper) {
+    return {
+      examBundle,
+      exam,
+      examSubject,
+      paper: null,
+      questions: [],
+      attempt: null,
+      attemptAnswers: [],
+    };
+  }
+
+  const questionResult = await executeQuery(`
+    SELECT
+      QuestionId,
+      OnlineExamPaperId,
+      QuestionType,
+      QuestionText,
+      OptionA,
+      OptionB,
+      OptionC,
+      OptionD,
+      CorrectAnswer,
+      Marks,
+      SortOrder
+    FROM ${ONLINE_EXAM_QUESTION_TABLE}
+    WHERE OnlineExamPaperId = @OnlineExamPaperId
+      AND IsActive = 1
+    ORDER BY SortOrder ASC, QuestionId ASC;
+  `, [
+    { name: 'OnlineExamPaperId', type: sql.Int, value: parseNumericId(paper.paperId) },
+  ]);
+
+  let attempt = null;
+  let attemptAnswers = [];
+
+  if (parseNumericId(studentId)) {
+    const attemptResult = await executeQuery(`
+      SELECT TOP 1
+        OnlineExamAttemptId,
+        OnlineExamPaperId,
+        ExamId,
+        ExamSubjectId,
+        StudentId,
+        Status,
+        StartedAt,
+        SubmittedAt,
+        CorrectAnswers,
+        IncorrectAnswers,
+        MarksObtained,
+        TotalMarks,
+        Percentage,
+        Grade
+      FROM ${ONLINE_EXAM_ATTEMPT_TABLE}
+      WHERE OnlineExamPaperId = @OnlineExamPaperId
+        AND StudentId = @StudentId
+      ORDER BY OnlineExamAttemptId DESC;
+    `, [
+      { name: 'OnlineExamPaperId', type: sql.Int, value: parseNumericId(paper.paperId) },
+      { name: 'StudentId', type: sql.Int, value: parseNumericId(studentId) },
+    ]);
+
+    attempt = mapOnlineExamAttemptRow(attemptResult?.recordset?.[0] || null);
+
+    if (attempt?.attemptId) {
+      const answerResult = await executeQuery(`
+        SELECT
+          OnlineExamAttemptAnswerId,
+          OnlineExamAttemptId,
+          QuestionId,
+          StudentAnswer,
+          CorrectAnswerSnapshot,
+          IsCorrect,
+          MarksAwarded
+        FROM ${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE}
+        WHERE OnlineExamAttemptId = @OnlineExamAttemptId
+        ORDER BY QuestionId ASC;
+      `, [
+        { name: 'OnlineExamAttemptId', type: sql.Int, value: parseNumericId(attempt.attemptId) },
+      ]);
+
+      attemptAnswers = answerResult?.recordset || [];
+    }
+  }
+
+  return {
+    examBundle,
+    exam,
+    examSubject,
+    paper,
+    questions: (questionResult?.recordset || []).map((row) => mapOnlineExamQuestionRow(row, { includeAnswerKey })),
+    attempt,
+    attemptAnswers,
+  };
+};
+
+const buildOnlineAttemptBreakdown = ({ questions = [], answerRows = [] } = {}) => {
+  const answerMap = new Map(
+    (answerRows || []).map((row) => [String(row.QuestionId), row])
+  );
+
+  return questions.map((question) => {
+    const answer = answerMap.get(String(question.questionId)) || null;
+    return {
+      questionId: question.questionId,
+      questionText: question.questionText,
+      questionType: question.questionType,
+      options: question.options || [],
+      studentAnswer: answer?.StudentAnswer || '',
+      correctAnswer: answer?.CorrectAnswerSnapshot || question.correctAnswer || '',
+      isCorrect: answer ? (answer.IsCorrect === true || answer.IsCorrect === 1) : false,
+      marks: toNumber(question.marks, 0),
+      marksAwarded: toNumber(answer?.MarksAwarded, 0),
+    };
+  });
+};
+
+const saveOnlineExamPaper = async ({ examId, title = null, instructions = null, durationMinutes = null, allowInstantResult = true, questions = [], updatedByUserId = null } = {}) => {
+  await ensureExamSqlReady();
+  const context = await loadOnlineExamPaperContext({ examId, includeAnswerKey: true });
+  if (context?.errorCode) {
+    return context;
+  }
+
+  const normalizedQuestions = normalizeOnlineExamQuestions(questions);
+  if (!normalizedQuestions.length) {
+    return { errorCode: 'invalid_questions' };
+  }
+
+  const paperTitle = toNullableString(title) || context.exam?.name || 'Online Test';
+  const paperInstructions = toNullableString(instructions ?? context.exam?.instructions);
+  const totalMarks = Number(
+    normalizedQuestions.reduce((sum, question) => sum + toNumber(question.marks, 0), 0).toFixed(2)
+  );
+  const resolvedDuration = Math.max(
+    1,
+    Math.round(toNumber(durationMinutes ?? context.examSubject?.duration ?? context.exam?.duration, DEFAULT_DURATION_MINUTES))
+  );
+  const resolvedPassingMarks = Number((Math.max(totalMarks, 0) * 0.4).toFixed(2));
+  const paperId = parseNumericId(context.paper?.paperId);
+  const examSqlId = parseNumericId(context.exam?.id || examId);
+  const examSubjectId = parseNumericId(context.examSubject?.examSubjectId || context.examSubject?._id);
+  const sql = getSqlClient();
+
+  try {
+    await executeInTransaction(async (tx) => {
+      let activePaperId = paperId;
+
+      if (activePaperId) {
+        const attemptCountResult = await tx.query(
+          `SELECT COUNT(1) AS AttemptCount
+           FROM ${ONLINE_EXAM_ATTEMPT_TABLE}
+           WHERE OnlineExamPaperId = @OnlineExamPaperId`,
+          [{ name: 'OnlineExamPaperId', type: sql.Int, value: activePaperId }]
+        );
+        const attemptCount = Number(attemptCountResult?.recordset?.[0]?.AttemptCount || 0);
+        if (attemptCount > 0) {
+          const lockedError = new Error('Online exam paper is already in use.');
+          lockedError.code = 'paper_locked';
+          throw lockedError;
+        }
+
+        await tx.query(
+          `UPDATE ${ONLINE_EXAM_PAPER_TABLE}
+           SET Title = @Title,
+               Instructions = @Instructions,
+               DurationMinutes = @DurationMinutes,
+               TotalMarks = @TotalMarks,
+               AllowInstantResult = @AllowInstantResult,
+               CreatedByUserId = @CreatedByUserId,
+               UpdatedAt = SYSUTCDATETIME()
+           WHERE OnlineExamPaperId = @OnlineExamPaperId`,
+          [
+            { name: 'OnlineExamPaperId', type: sql.Int, value: activePaperId },
+            { name: 'Title', type: sql.NVarChar(200), value: paperTitle },
+            { name: 'Instructions', type: sql.NVarChar(2000), value: paperInstructions },
+            { name: 'DurationMinutes', type: sql.Int, value: resolvedDuration },
+            { name: 'TotalMarks', type: sql.Decimal(10, 2), value: totalMarks },
+            { name: 'AllowInstantResult', type: sql.Bit, value: allowInstantResult !== false },
+            { name: 'CreatedByUserId', type: sql.Int, value: parseNumericId(updatedByUserId) },
+          ]
+        );
+
+        await tx.query(
+          `DELETE FROM ${ONLINE_EXAM_QUESTION_TABLE}
+           WHERE OnlineExamPaperId = @OnlineExamPaperId`,
+          [{ name: 'OnlineExamPaperId', type: sql.Int, value: activePaperId }]
+        );
+      } else {
+        const insertedPaper = await tx.query(
+          `INSERT INTO ${ONLINE_EXAM_PAPER_TABLE} (
+             ExamId,
+             ExamSubjectId,
+             Title,
+             Instructions,
+             DurationMinutes,
+             TotalMarks,
+             AllowInstantResult,
+             CreatedByUserId,
+             CreatedAt,
+             UpdatedAt
+           )
+           OUTPUT INSERTED.OnlineExamPaperId
+           VALUES (
+             @ExamId,
+             @ExamSubjectId,
+             @Title,
+             @Instructions,
+             @DurationMinutes,
+             @TotalMarks,
+             @AllowInstantResult,
+             @CreatedByUserId,
+             SYSUTCDATETIME(),
+             SYSUTCDATETIME()
+           )`,
+          [
+            { name: 'ExamId', type: sql.Int, value: examSqlId },
+            { name: 'ExamSubjectId', type: sql.Int, value: examSubjectId },
+            { name: 'Title', type: sql.NVarChar(200), value: paperTitle },
+            { name: 'Instructions', type: sql.NVarChar(2000), value: paperInstructions },
+            { name: 'DurationMinutes', type: sql.Int, value: resolvedDuration },
+            { name: 'TotalMarks', type: sql.Decimal(10, 2), value: totalMarks },
+            { name: 'AllowInstantResult', type: sql.Bit, value: allowInstantResult !== false },
+            { name: 'CreatedByUserId', type: sql.Int, value: parseNumericId(updatedByUserId) },
+          ]
+        );
+
+        activePaperId = parseNumericId(insertedPaper?.recordset?.[0]?.OnlineExamPaperId);
+      }
+
+      for (const question of normalizedQuestions) {
+        await tx.query(
+          `INSERT INTO ${ONLINE_EXAM_QUESTION_TABLE} (
+             OnlineExamPaperId,
+             QuestionType,
+             QuestionText,
+             OptionA,
+             OptionB,
+             OptionC,
+             OptionD,
+             CorrectAnswer,
+             Marks,
+             SortOrder,
+             CreatedAt,
+             UpdatedAt
+           )
+           VALUES (
+             @OnlineExamPaperId,
+             @QuestionType,
+             @QuestionText,
+             @OptionA,
+             @OptionB,
+             @OptionC,
+             @OptionD,
+             @CorrectAnswer,
+             @Marks,
+             @SortOrder,
+             SYSUTCDATETIME(),
+             SYSUTCDATETIME()
+           )`,
+          [
+            { name: 'OnlineExamPaperId', type: sql.Int, value: activePaperId },
+            { name: 'QuestionType', type: sql.NVarChar(20), value: question.questionType },
+            { name: 'QuestionText', type: sql.NVarChar(sql.MAX), value: question.questionText },
+            { name: 'OptionA', type: sql.NVarChar(1000), value: question.options.find((entry) => entry.key === 'A')?.text || null },
+            { name: 'OptionB', type: sql.NVarChar(1000), value: question.options.find((entry) => entry.key === 'B')?.text || null },
+            { name: 'OptionC', type: sql.NVarChar(1000), value: question.options.find((entry) => entry.key === 'C')?.text || null },
+            { name: 'OptionD', type: sql.NVarChar(1000), value: question.options.find((entry) => entry.key === 'D')?.text || null },
+            { name: 'CorrectAnswer', type: sql.NVarChar(1000), value: question.correctAnswer },
+            { name: 'Marks', type: sql.Decimal(10, 2), value: question.marks },
+            { name: 'SortOrder', type: sql.Int, value: question.sortOrder },
+          ]
+        );
+      }
+
+      await tx.query(
+        `UPDATE dbo.ExamSubjects
+         SET MaxMarks = @TotalMarks,
+             PassMarks = @PassingMarks
+         WHERE ExamSubjectId = @ExamSubjectId`,
+        [
+          { name: 'ExamSubjectId', type: sql.Int, value: examSubjectId },
+          { name: 'TotalMarks', type: sql.Decimal(10, 2), value: totalMarks },
+          { name: 'PassingMarks', type: sql.Decimal(10, 2), value: resolvedPassingMarks },
+        ]
+      );
+
+      await tx.query(
+        `UPDATE dbo.Exams
+         SET Description = @Description,
+             UpdatedAt = SYSUTCDATETIME()
+         WHERE ExamId = @ExamId`,
+        [
+          { name: 'ExamId', type: sql.Int, value: examSqlId },
+          { name: 'Description', type: sql.NVarChar(2000), value: paperInstructions },
+        ]
+      );
+    });
+  } catch (error) {
+    if (error?.code === 'paper_locked') {
+      return { errorCode: 'paper_locked' };
+    }
+    throw error;
+  }
+
+  return loadOnlineExamPaperContext({ examId, includeAnswerKey: true });
+};
+
+const evaluateOnlineExamQuestion = (question, submittedAnswer) => {
+  const safeAnswer = String(submittedAnswer || '').trim();
+  const questionType = normalizeQuestionType(question?.questionType);
+
+  if (questionType === 'mcq') {
+    const expectedOptionKey = normalizeOptionKey(question?.correctAnswer);
+    const submittedOptionKey = normalizeOptionKey(safeAnswer);
+    const expectedOptionText = question?.options?.find((option) => option.key === expectedOptionKey)?.text || '';
+    const matched = (submittedOptionKey && expectedOptionKey && submittedOptionKey === expectedOptionKey)
+      || (normalizeAnswerText(safeAnswer) && normalizeAnswerText(safeAnswer) === normalizeAnswerText(expectedOptionText));
+
+    return {
+      isCorrect: Boolean(matched),
+      normalizedAnswer: submittedOptionKey || normalizeAnswerText(safeAnswer),
+      correctAnswerSnapshot: expectedOptionKey || question?.correctAnswer || '',
+      displayCorrectAnswer: expectedOptionText || expectedOptionKey || question?.correctAnswer || '',
+    };
+  }
+
+  const matched = normalizeAnswerText(safeAnswer) === normalizeAnswerText(question?.correctAnswer);
+  return {
+    isCorrect: matched,
+    normalizedAnswer: normalizeAnswerText(safeAnswer),
+    correctAnswerSnapshot: question?.correctAnswer || '',
+    displayCorrectAnswer: question?.correctAnswer || '',
+  };
+};
+
+const startStudentOnlineExam = async ({ examId, studentId }) => {
+  await ensureExamSqlReady();
+  const context = await loadOnlineExamPaperContext({ examId, studentId, includeAnswerKey: true });
+  if (context?.errorCode) {
+    return context;
+  }
+
+  if (!context.paper || !context.questions.length) {
+    return { errorCode: 'paper_not_ready' };
+  }
+
+  const student = await getStudentById(studentId);
+  if (!student) {
+    return { errorCode: 'student_not_found' };
+  }
+
+  const examSection = String(context.exam?.section || '').trim();
+  if (String(student.class || '').trim() !== String(context.exam?.class || '').trim()
+      || (examSection && examSection !== String(student.section || '').trim())) {
+    return { errorCode: 'forbidden' };
+  }
+
+  const windowStatus = getExamWindowStatus({
+    examDate: context.examSubject?.date || context.exam?.date,
+    startTime: context.examSubject?.startTime || context.exam?.startTime,
+    endTime: context.examSubject?.endTime || context.exam?.endTime,
+  });
+
+  if (windowStatus === 'upcoming') {
+    return { errorCode: 'not_started' };
+  }
+
+  if (windowStatus === 'closed' && context.attempt?.status !== 'Submitted') {
+    return { errorCode: 'expired' };
+  }
+
+  if (context.attempt?.status === 'Submitted') {
+    return {
+      resultCode: 'already_submitted',
+      exam: context.exam,
+      paper: context.paper,
+      attempt: context.attempt,
+      breakdown: buildOnlineAttemptBreakdown({
+        questions: context.questions,
+        answerRows: context.attemptAnswers,
+      }),
+    };
+  }
+
+  const sql = getSqlClient();
+  let attemptId = parseNumericId(context.attempt?.attemptId);
+
+  if (!attemptId) {
+    const insertedAttempt = await executeQuery(
+      `INSERT INTO ${ONLINE_EXAM_ATTEMPT_TABLE} (
+         OnlineExamPaperId,
+         ExamId,
+         ExamSubjectId,
+         StudentId,
+         Status,
+         StartedAt,
+         TotalMarks,
+         CreatedAt,
+         UpdatedAt
+       )
+       OUTPUT INSERTED.OnlineExamAttemptId
+       VALUES (
+         @OnlineExamPaperId,
+         @ExamId,
+         @ExamSubjectId,
+         @StudentId,
+         N'Started',
+         SYSUTCDATETIME(),
+         @TotalMarks,
+         SYSUTCDATETIME(),
+         SYSUTCDATETIME()
+       )`,
+      [
+        { name: 'OnlineExamPaperId', type: sql.Int, value: parseNumericId(context.paper.paperId) },
+        { name: 'ExamId', type: sql.Int, value: parseNumericId(context.exam.id || examId) },
+        { name: 'ExamSubjectId', type: sql.Int, value: parseNumericId(context.examSubject?.examSubjectId || context.examSubject?._id) },
+        { name: 'StudentId', type: sql.Int, value: parseNumericId(studentId) },
+        { name: 'TotalMarks', type: sql.Decimal(10, 2), value: toNumber(context.paper.totalMarks, 0) },
+      ]
+    );
+
+    attemptId = parseNumericId(insertedAttempt?.recordset?.[0]?.OnlineExamAttemptId);
+  }
+
+  return {
+    resultCode: 'ok',
+    exam: context.exam,
+    paper: context.paper,
+    attempt: {
+      ...context.attempt,
+      attemptId: attemptId ? String(attemptId) : null,
+      status: context.attempt?.status || 'Started',
+    },
+    questions: context.questions.map((question) => ({
+      ...question,
+      correctAnswer: undefined,
+    })),
+  };
+};
+
+const submitStudentOnlineExam = async ({ examId, studentId, answers = [] }) => {
+  await ensureExamSqlReady();
+  const context = await loadOnlineExamPaperContext({ examId, studentId, includeAnswerKey: true });
+  if (context?.errorCode) {
+    return context;
+  }
+
+  if (!context.paper || !context.questions.length) {
+    return { errorCode: 'paper_not_ready' };
+  }
+
+  const student = await getStudentById(studentId);
+  if (!student) {
+    return { errorCode: 'student_not_found' };
+  }
+
+  if (context.attempt?.status === 'Submitted') {
+    return {
+      resultCode: 'already_submitted',
+      exam: context.exam,
+      paper: context.paper,
+      attempt: context.attempt,
+      breakdown: buildOnlineAttemptBreakdown({
+        questions: context.questions,
+        answerRows: context.attemptAnswers,
+      }),
+    };
+  }
+
+  const answerMap = new Map(
+    (Array.isArray(answers) ? answers : [])
+      .map((answer) => [String(answer?.questionId || ''), answer?.answer ?? answer?.studentAnswer ?? ''])
+  );
+
+  const evaluatedAnswers = context.questions.map((question) => {
+    const studentAnswer = String(answerMap.get(String(question.questionId)) || '').trim();
+    const evaluation = evaluateOnlineExamQuestion(question, studentAnswer);
+    return {
+      question,
+      studentAnswer,
+      ...evaluation,
+      marksAwarded: evaluation.isCorrect ? toNumber(question.marks, 0) : 0,
+    };
+  });
+
+  const totalMarks = Number(
+    evaluatedAnswers.reduce((sum, entry) => sum + toNumber(entry.question.marks, 0), 0).toFixed(2)
+  );
+  const marksObtained = Number(
+    evaluatedAnswers.reduce((sum, entry) => sum + toNumber(entry.marksAwarded, 0), 0).toFixed(2)
+  );
+  const correctAnswers = evaluatedAnswers.filter((entry) => entry.isCorrect).length;
+  const incorrectAnswers = evaluatedAnswers.length - correctAnswers;
+  const percentage = totalMarks > 0 ? Number(((marksObtained / totalMarks) * 100).toFixed(2)) : 0;
+  const gradeLetter = calculateGradeLetter(marksObtained, totalMarks);
+  const sql = getSqlClient();
+
+  const savedAttemptId = await executeInTransaction(async (tx) => {
+    let attemptId = parseNumericId(context.attempt?.attemptId);
+
+    if (attemptId) {
+      await tx.query(
+        `UPDATE ${ONLINE_EXAM_ATTEMPT_TABLE}
+         SET Status = N'Submitted',
+             SubmittedAt = SYSUTCDATETIME(),
+             CorrectAnswers = @CorrectAnswers,
+             IncorrectAnswers = @IncorrectAnswers,
+             MarksObtained = @MarksObtained,
+             TotalMarks = @TotalMarks,
+             Percentage = @Percentage,
+             Grade = @Grade,
+             ResultRemarks = @ResultRemarks,
+             UpdatedAt = SYSUTCDATETIME()
+         WHERE OnlineExamAttemptId = @OnlineExamAttemptId`,
+        [
+          { name: 'OnlineExamAttemptId', type: sql.Int, value: attemptId },
+          { name: 'CorrectAnswers', type: sql.Int, value: correctAnswers },
+          { name: 'IncorrectAnswers', type: sql.Int, value: incorrectAnswers },
+          { name: 'MarksObtained', type: sql.Decimal(10, 2), value: marksObtained },
+          { name: 'TotalMarks', type: sql.Decimal(10, 2), value: totalMarks },
+          { name: 'Percentage', type: sql.Decimal(10, 2), value: percentage },
+          { name: 'Grade', type: sql.NVarChar(10), value: gradeLetter },
+          { name: 'ResultRemarks', type: sql.NVarChar(1000), value: 'Auto-evaluated from online exam paper.' },
+        ]
+      );
+
+      await tx.query(
+        `DELETE FROM ${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE}
+         WHERE OnlineExamAttemptId = @OnlineExamAttemptId`,
+        [{ name: 'OnlineExamAttemptId', type: sql.Int, value: attemptId }]
+      );
+    } else {
+      const insertedAttempt = await tx.query(
+        `INSERT INTO ${ONLINE_EXAM_ATTEMPT_TABLE} (
+           OnlineExamPaperId,
+           ExamId,
+           ExamSubjectId,
+           StudentId,
+           Status,
+           StartedAt,
+           SubmittedAt,
+           CorrectAnswers,
+           IncorrectAnswers,
+           MarksObtained,
+           TotalMarks,
+           Percentage,
+           Grade,
+           ResultRemarks,
+           CreatedAt,
+           UpdatedAt
+         )
+         OUTPUT INSERTED.OnlineExamAttemptId
+         VALUES (
+           @OnlineExamPaperId,
+           @ExamId,
+           @ExamSubjectId,
+           @StudentId,
+           N'Submitted',
+           SYSUTCDATETIME(),
+           SYSUTCDATETIME(),
+           @CorrectAnswers,
+           @IncorrectAnswers,
+           @MarksObtained,
+           @TotalMarks,
+           @Percentage,
+           @Grade,
+           @ResultRemarks,
+           SYSUTCDATETIME(),
+           SYSUTCDATETIME()
+         )`,
+        [
+          { name: 'OnlineExamPaperId', type: sql.Int, value: parseNumericId(context.paper.paperId) },
+          { name: 'ExamId', type: sql.Int, value: parseNumericId(context.exam.id || examId) },
+          { name: 'ExamSubjectId', type: sql.Int, value: parseNumericId(context.examSubject?.examSubjectId || context.examSubject?._id) },
+          { name: 'StudentId', type: sql.Int, value: parseNumericId(studentId) },
+          { name: 'CorrectAnswers', type: sql.Int, value: correctAnswers },
+          { name: 'IncorrectAnswers', type: sql.Int, value: incorrectAnswers },
+          { name: 'MarksObtained', type: sql.Decimal(10, 2), value: marksObtained },
+          { name: 'TotalMarks', type: sql.Decimal(10, 2), value: totalMarks },
+          { name: 'Percentage', type: sql.Decimal(10, 2), value: percentage },
+          { name: 'Grade', type: sql.NVarChar(10), value: gradeLetter },
+          { name: 'ResultRemarks', type: sql.NVarChar(1000), value: 'Auto-evaluated from online exam paper.' },
+        ]
+      );
+
+      attemptId = parseNumericId(insertedAttempt?.recordset?.[0]?.OnlineExamAttemptId);
+    }
+
+    for (const answer of evaluatedAnswers) {
+      await tx.query(
+        `INSERT INTO ${ONLINE_EXAM_ATTEMPT_ANSWER_TABLE} (
+           OnlineExamAttemptId,
+           QuestionId,
+           StudentAnswer,
+           CorrectAnswerSnapshot,
+           IsCorrect,
+           MarksAwarded,
+           CreatedAt,
+           UpdatedAt
+         )
+         VALUES (
+           @OnlineExamAttemptId,
+           @QuestionId,
+           @StudentAnswer,
+           @CorrectAnswerSnapshot,
+           @IsCorrect,
+           @MarksAwarded,
+           SYSUTCDATETIME(),
+           SYSUTCDATETIME()
+         )`,
+        [
+          { name: 'OnlineExamAttemptId', type: sql.Int, value: attemptId },
+          { name: 'QuestionId', type: sql.Int, value: parseNumericId(answer.question.questionId) },
+          { name: 'StudentAnswer', type: sql.NVarChar(sql.MAX), value: answer.studentAnswer || null },
+          { name: 'CorrectAnswerSnapshot', type: sql.NVarChar(1000), value: answer.displayCorrectAnswer || answer.correctAnswerSnapshot || null },
+          { name: 'IsCorrect', type: sql.Bit, value: answer.isCorrect },
+          { name: 'MarksAwarded', type: sql.Decimal(10, 2), value: answer.marksAwarded },
+        ]
+      );
+    }
+
+    const existingResult = await tx.query(
+      `SELECT TOP 1 ExamResultId
+       FROM dbo.ExamResults
+       WHERE ExamSubjectId = @ExamSubjectId
+         AND StudentId = @StudentId`,
+      [
+        { name: 'ExamSubjectId', type: sql.Int, value: parseNumericId(context.examSubject?.examSubjectId || context.examSubject?._id) },
+        { name: 'StudentId', type: sql.Int, value: parseNumericId(studentId) },
+      ]
+    );
+
+    const existingResultId = parseNumericId(existingResult?.recordset?.[0]?.ExamResultId);
+    if (existingResultId) {
+      await tx.query(
+        `UPDATE dbo.ExamResults
+         SET MarksObtained = @MarksObtained,
+             Grade = @Grade,
+             Remarks = @Remarks,
+             IsAbsent = 0,
+             EvaluatedByTeacherId = NULL,
+             UpdatedAt = SYSUTCDATETIME()
+         WHERE ExamResultId = @ExamResultId`,
+        [
+          { name: 'ExamResultId', type: sql.Int, value: existingResultId },
+          { name: 'MarksObtained', type: sql.Decimal(10, 2), value: marksObtained },
+          { name: 'Grade', type: sql.NVarChar(10), value: gradeLetter },
+          { name: 'Remarks', type: sql.NVarChar(1000), value: 'Auto-evaluated from online exam paper.' },
+        ]
+      );
+    } else {
+      await tx.query(
+        `INSERT INTO dbo.ExamResults (
+           ExamSubjectId,
+           StudentId,
+           MarksObtained,
+           Grade,
+           Remarks,
+           IsAbsent,
+           EvaluatedByTeacherId,
+           CreatedAt,
+           UpdatedAt
+         )
+         VALUES (
+           @ExamSubjectId,
+           @StudentId,
+           @MarksObtained,
+           @Grade,
+           @Remarks,
+           0,
+           NULL,
+           SYSUTCDATETIME(),
+           SYSUTCDATETIME()
+         )`,
+        [
+          { name: 'ExamSubjectId', type: sql.Int, value: parseNumericId(context.examSubject?.examSubjectId || context.examSubject?._id) },
+          { name: 'StudentId', type: sql.Int, value: parseNumericId(studentId) },
+          { name: 'MarksObtained', type: sql.Decimal(10, 2), value: marksObtained },
+          { name: 'Grade', type: sql.NVarChar(10), value: gradeLetter },
+          { name: 'Remarks', type: sql.NVarChar(1000), value: 'Auto-evaluated from online exam paper.' },
+        ]
+      );
+    }
+
+    return attemptId;
+  });
+
+  const refreshed = await loadOnlineExamPaperContext({ examId, studentId, includeAnswerKey: true });
+  const attempt = refreshed.attempt || {
+    attemptId: savedAttemptId ? String(savedAttemptId) : null,
+    status: 'Submitted',
+    marksObtained,
+    totalMarks,
+    percentage,
+    grade: gradeLetter,
+    correctAnswers,
+    incorrectAnswers,
+  };
+
+  return {
+    resultCode: 'ok',
+    exam: refreshed.exam,
+    paper: refreshed.paper,
+    attempt,
+    breakdown: buildOnlineAttemptBreakdown({
+      questions: refreshed.questions,
+      answerRows: refreshed.attemptAnswers,
+    }),
+  };
+};
+
 const resolveAcademicYearId = async (academicYear = null, tx = null) => {
   const sql = getSqlClient();
   const runner = tx?.query || executeQuery;
@@ -1979,9 +3058,13 @@ module.exports = {
   syncAllExamsToSql,
   getExamList,
   getExamRecordById,
+  loadOnlineExamPaperContext,
   createExamRecord,
   updateExamRecord,
   deleteExamRecord,
+  saveOnlineExamPaper,
+  startStudentOnlineExam,
+  submitStudentOnlineExam,
   enterExamMarks,
   getStudentExamResults,
   getExamReportData,

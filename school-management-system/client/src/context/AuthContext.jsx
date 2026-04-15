@@ -10,10 +10,15 @@ import {
   register as apiRegister,
   getMe,
 } from '../services/api';
+import {
+  AUTH_USER_KEY,
+  clearStoredAuth,
+  persistStoredAuth,
+  readStoredAuthSnapshot,
+  safeStorageRemove,
+} from '../utils/authStorage';
 
 const AuthContext = createContext(null);
-const AUTH_TOKEN_KEY = 'sms_token';
-const AUTH_USER_KEY = 'sms_user';
 const ROLE_ID_TO_KEY = {
   1: 'admin',
   2: 'teacher',
@@ -86,39 +91,6 @@ const normalizeUser = (userData) => {
   };
 };
 
-const safeStorageGet = (storage, key) => {
-  try {
-    return storage?.getItem(key) ?? null;
-  } catch (error) {
-    return null;
-  }
-};
-
-const safeStorageSet = (storage, key, value) => {
-  try {
-    storage?.setItem(key, value);
-  } catch (error) {
-    // Ignore storage write failures and keep runtime auth state usable.
-  }
-};
-
-const safeStorageRemove = (storage, key) => {
-  try {
-    storage?.removeItem(key);
-  } catch (error) {
-    // Ignore storage cleanup failures.
-  }
-};
-
-const getAuthStorages = () => [localStorage, sessionStorage];
-
-const clearStoredAuth = () => {
-  getAuthStorages().forEach((storage) => {
-    safeStorageRemove(storage, AUTH_TOKEN_KEY);
-    safeStorageRemove(storage, AUTH_USER_KEY);
-  });
-};
-
 const parseStoredUser = (serializedUser) => {
   if (!serializedUser) {
     return null;
@@ -134,39 +106,6 @@ const parseStoredUser = (serializedUser) => {
   }
 };
 
-const readStoredAuthSnapshot = () => {
-  for (const storage of getAuthStorages()) {
-    const token = safeStorageGet(storage, AUTH_TOKEN_KEY);
-    const serializedUser = safeStorageGet(storage, AUTH_USER_KEY);
-    const user = parseStoredUser(serializedUser);
-
-    if (!token && !serializedUser) {
-      continue;
-    }
-
-    if (!token) {
-      safeStorageRemove(storage, AUTH_USER_KEY);
-      continue;
-    }
-
-    if (serializedUser && !user) {
-      safeStorageRemove(storage, AUTH_USER_KEY);
-    }
-
-    return {
-      token,
-      user,
-      storage,
-    };
-  }
-
-  return {
-    token: null,
-    user: null,
-    storage: null,
-  };
-};
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -177,12 +116,13 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const initialAuthSnapshot = readStoredAuthSnapshot();
-  const [user, setUser] = useState(() => initialAuthSnapshot.user);
+  const initialStoredUser = parseStoredUser(initialAuthSnapshot.serializedUser);
+  const [user, setUser] = useState(() => initialStoredUser);
   const [authToken, setAuthToken] = useState(() => initialAuthSnapshot.token);
   const [loading, setLoading] = useState(() => Boolean(initialAuthSnapshot.token));
   const [error, setError] = useState(null);
 
-  const persistAuthState = (token, userData, storage = localStorage) => {
+  const persistAuthState = (token, userData) => {
     const normalizedUser = normalizeUser(userData);
 
     if (!token || !normalizedUser) {
@@ -192,9 +132,7 @@ export const AuthProvider = ({ children }) => {
       return null;
     }
 
-    clearStoredAuth();
-    safeStorageSet(storage, AUTH_TOKEN_KEY, token);
-    safeStorageSet(storage, AUTH_USER_KEY, JSON.stringify(normalizedUser));
+    persistStoredAuth(token, normalizedUser);
     setAuthToken(token);
     setUser(normalizedUser);
     return normalizedUser;
@@ -205,13 +143,21 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
-    const { token, user: storedUser, storage } = readStoredAuthSnapshot();
+    const { token, serializedUser, storage } = readStoredAuthSnapshot();
+    const storedUser = parseStoredUser(serializedUser);
 
     if (!token) {
+      if (serializedUser) {
+        safeStorageRemove(storage, AUTH_USER_KEY);
+      }
       setAuthToken(null);
       setUser(null);
       setLoading(false);
       return;
+    }
+
+    if (serializedUser && !storedUser) {
+      safeStorageRemove(storage, AUTH_USER_KEY);
     }
 
     try {
@@ -223,7 +169,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       const response = await getMe();
-      const persistedUser = persistAuthState(token, response.data?.user, storage || localStorage);
+      const persistedUser = persistAuthState(token, response.data?.user);
       if (!persistedUser) {
         clearStoredAuth();
         setAuthToken(null);
@@ -238,10 +184,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const login = async (email, password, role) => {
     setError(null);
     try {
-      const response = await apiLogin({ email, password });
+      const response = await apiLogin({ email, password, role });
       const { token, user: userData } = response.data;
 
       const persistedUser = persistAuthState(token, userData);
@@ -257,10 +203,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const startSecureLogin = async (email, password) => {
+  const startSecureLogin = async (email, password, role) => {
     setError(null);
     try {
-      const response = await loginWithCredentials({ email, password });
+      const response = await loginWithCredentials({ email, password, role });
       return { success: true, data: response.data };
     } catch (err) {
       const message = err.response?.data?.message || 'Unable to verify credentials';

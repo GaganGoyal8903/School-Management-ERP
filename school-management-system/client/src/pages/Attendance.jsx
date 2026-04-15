@@ -32,6 +32,28 @@ const GRADES = [
   'Class 12',
 ];
 
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+const buildTeacherGradeOptions = (subjects = []) =>
+  Array.from(
+    new Set(
+      subjects
+        .map((subject) => String(subject?.className || subject?.grade || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+const buildTeacherSectionScope = (subjects = [], grade) =>
+  Array.from(
+    new Set(
+      subjects
+        .filter((subject) => normalizeText(subject?.className || subject?.grade) === normalizeText(grade))
+        .map((subject) => String(subject?.sectionName || subject?.section || '').trim())
+        .filter(Boolean)
+        .map(normalizeText)
+    )
+  );
+
 const getStudentKey = (student) =>
   String(student?._id || student?.id || student?.studentId || '');
 
@@ -153,6 +175,7 @@ const Attendance = () => {
   const { isAdmin, isTeacher, user } = useAuth();
   const [students, setStudents] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [gradeOptions, setGradeOptions] = useState(GRADES);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -178,6 +201,47 @@ const Attendance = () => {
   useEffect(() => {
     let active = true;
 
+    const loadTeacherScope = async () => {
+      if (!isTeacher) {
+        setGradeOptions(GRADES);
+        return;
+      }
+
+      try {
+        const response = await getSubjects({ page: 1, limit: 1000 });
+        const scopedSubjects = Array.isArray(response?.data?.subjects) ? response.data.subjects : [];
+        const nextGradeOptions = buildTeacherGradeOptions(scopedSubjects);
+
+        if (!active) {
+          return;
+        }
+
+        setGradeOptions(nextGradeOptions);
+        if (nextGradeOptions.length && !nextGradeOptions.includes(selectedGrade)) {
+          clearVisibleAttendance({ keepSections: false });
+          setSelectedGrade(nextGradeOptions[0]);
+          setSelectedSection('');
+          setSelectedSubject('');
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setGradeOptions([]);
+      }
+    };
+
+    loadTeacherScope();
+
+    return () => {
+      active = false;
+    };
+  }, [isTeacher]);
+
+  useEffect(() => {
+    let active = true;
+
     const fetchAttendanceData = async () => {
       setLoading(true);
       setLoadError('');
@@ -186,6 +250,13 @@ const Attendance = () => {
       setSessionMeta(DEFAULT_SESSION_META);
 
       try {
+        if (isTeacher && !gradeOptions.length) {
+          setSubjects([]);
+          setSections([]);
+          setLoadError('No assigned classes are available for this teacher yet.');
+          return;
+        }
+
         const [classStudentsResponse, subjectsResponse] = await Promise.all([
           getStudents({
             page: 1,
@@ -212,7 +283,22 @@ const Attendance = () => {
           throw new Error('Invalid class roster response');
         }
 
-        const nextSections = buildSectionOptions(classStudents);
+        if (isTeacher && !subjectsData.length) {
+          setSubjects([]);
+          setSections([]);
+          setSelectedSection('');
+          setLoadError('No assigned subjects are available for the selected class.');
+          return;
+        }
+
+        const teacherSections = isTeacher ? buildTeacherSectionScope(subjectsData, selectedGrade) : [];
+        const nextSections = buildSectionOptions(classStudents).filter((section) => {
+          if (!teacherSections.length) {
+            return true;
+          }
+
+          return teacherSections.includes(normalizeText(section.sectionName));
+        });
         setSubjects(subjectsData);
         setSections(nextSections);
 
@@ -220,6 +306,7 @@ const Attendance = () => {
           if (selectedSection) {
             setSelectedSection('');
           }
+          setLoadError(isTeacher ? 'No assigned sections are available for the selected class.' : '');
           return;
         }
 
@@ -254,6 +341,8 @@ const Attendance = () => {
           getAttendance({
             classId: resolvedClassId,
             sectionId: nextSection,
+            class: selectedGrade,
+            section: selectedSectionOption?.sectionName || null,
             date: selectedDate,
             limit: 1000,
           }),
@@ -324,7 +413,7 @@ const Attendance = () => {
     return () => {
       active = false;
     };
-  }, [refreshKey, selectedDate, selectedGrade, selectedSection]);
+  }, [gradeOptions, isTeacher, refreshKey, selectedDate, selectedGrade, selectedSection]);
 
   const selectedSectionOption =
     sections.find((section) => section.sectionId === selectedSection) || null;
@@ -399,7 +488,7 @@ const Attendance = () => {
       return;
     }
 
-    const markedByTeacherId = user?._id || user?.id || null;
+    const markedByUserId = user?._id || user?.id || null;
 
     setSaving(true);
     try {
@@ -408,8 +497,10 @@ const Attendance = () => {
         academicYearId: sessionMeta.academicYearId || students[0]?.academicYearId || null,
         classId: sessionMeta.classId,
         sectionId: sessionMeta.sectionId,
+        className: selectedGrade,
+        sectionName: selectedSectionName || null,
         subjectId: selectedSubject || null,
-        markedByTeacherId,
+        markedByUserId,
         students: students.map((student) => {
           const studentKey = getStudentKey(student);
           const currentAttendance = attendance[studentKey] || {};
@@ -464,6 +555,11 @@ const Attendance = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+        {isTeacher ? (
+          <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-[#002366]">
+            Teacher workspace is now scoped to your assigned subjects and sections only.
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -487,9 +583,11 @@ const Attendance = () => {
                 setSelectedSection('');
                 setSelectedSubject('');
               }}
+              disabled={!gradeOptions.length}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002366]"
             >
-              {GRADES.map((grade) => (
+              {!gradeOptions.length ? <option value="">No Classes</option> : null}
+              {gradeOptions.map((grade) => (
                 <option key={grade} value={grade}>
                   {grade}
                 </option>

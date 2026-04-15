@@ -398,7 +398,8 @@
   background: #ffffff;
 }
 
-.erp-input-shell input {
+.erp-input-shell input,
+.erp-input-shell select {
   width: 100%;
   border: 0;
   background: transparent;
@@ -412,8 +413,14 @@
   color: #7c90b4;
 }
 
-.erp-input-shell input:focus {
+.erp-input-shell input:focus,
+.erp-input-shell select:focus {
   outline: none;
+}
+
+.erp-input-shell select {
+  appearance: none;
+  cursor: pointer;
 }
 
 .erp-input-icon {

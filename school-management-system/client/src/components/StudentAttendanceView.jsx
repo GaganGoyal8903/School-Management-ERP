@@ -27,8 +27,7 @@ export default function StudentAttendanceView() {
     const fetchAttendance = async () => {
       setSms_loading(true);
       try {
-        const user = JSON.parse(localStorage.getItem("sms_user") || "{}");
-        // In production: const response = await getAttendanceByStudent(user.id);
+        // In production: const response = await getAttendanceByStudent(currentUser.id);
         setTimeout(() => {
           setSms_attendance(mockAttendance);
           setSms_loading(false);

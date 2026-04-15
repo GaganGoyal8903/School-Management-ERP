@@ -20,24 +20,24 @@ const { authorize } = require('../middleware/roleMiddleware');
 router.use(protect);
 
 // Get fees by student
-router.get('/student/:studentId', getFeesByStudent);
+router.get('/student/:studentId', authorize('admin', 'teacher', 'accountant', 'student'), getFeesByStudent);
 
 // Get fee statistics
-router.get('/stats', authorize('admin'), getFeeStats);
+router.get('/stats', authorize('admin', 'accountant'), getFeeStats);
 
 // Bulk create fees
 router.post('/bulk', authorize('admin'), bulkCreateFees);
 
 // Collect payment
-router.post('/:id/pay', authorize('admin'), collectPayment);
+router.post('/:id/pay', authorize('admin', 'accountant', 'student'), collectPayment);
 
 // CRUD operations
 router.route('/')
-  .get(getFees)
+  .get(authorize('admin', 'teacher', 'accountant'), getFees)
   .post(authorize('admin'), createFee);
 
 router.route('/:id')
-  .get(getFeeById)
+  .get(authorize('admin', 'teacher', 'accountant'), getFeeById)
   .put(authorize('admin'), updateFee)
   .delete(authorize('admin'), deleteFee);
 

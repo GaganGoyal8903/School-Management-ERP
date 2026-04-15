@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { 
   parentLogin,
@@ -18,13 +19,37 @@ const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 
+const parentLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many login attempts. Please use the supported login flow or try again later.',
+  },
+});
+
+const blockLegacyParentLoginInProduction = (req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_LEGACY_PARENT_LOGIN !== 'true') {
+    return res.status(404).json({
+      success: false,
+      message: 'Parent legacy login is not available in production.',
+    });
+  }
+
+  return next();
+};
+
 // ==================== PUBLIC ROUTES ====================
 // Parent Login - Public endpoint
-router.post('/login', asyncHandler(parentLogin));
+router.post('/login', parentLoginLimiter, blockLegacyParentLoginInProduction, asyncHandler(parentLogin));
+router.post('/', protect, authorize('admin'), asyncHandler(createParent));
 
 // ==================== PROTECTED ROUTES ====================
-// All other routes require authentication
+// All parent self-service routes require parent authentication
 router.use(protect);
+router.use(authorize('parent'));
 
 // Get linked students for parent
 router.get('/students', asyncHandler(getLinkedStudents));
@@ -55,10 +80,6 @@ router.get('/dashboard', asyncHandler(getParentDashboard));
 
 // Update parent profile
 router.put('/profile', asyncHandler(updateParentProfile));
-
-// ==================== ADMIN ROUTES ====================
-// Create parent (Admin only)
-router.post('/', authorize('admin'), asyncHandler(createParent));
 
 module.exports = router;
 

@@ -7,7 +7,7 @@ const {
   getPool,
 } = require('../config/sqlServer');
 const { ensureAuthSqlReady } = require('./authSqlService');
-const { ensureStudentSqlReady, getStudentById, getStudentsByClass } = require('./studentSqlService');
+const { ensureStudentSqlReady, getStudentById, getStudentsByClass, getStudentList } = require('./studentSqlService');
 
 const FEE_STRUCTURE_TABLE = 'dbo.SqlFeeStructures';
 const STUDENT_FEE_TABLE = 'dbo.SqlStudentFees';
@@ -17,6 +17,12 @@ let feeBootstrapPromise = null;
 const parseNumericId = (value) => {
   const numericValue = Number(value);
   return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null;
+};
+
+const createFeeValidationError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
 };
 
 const VALID_FEE_STATUSES = new Set(['Pending', 'Partial', 'Paid', 'Overdue', 'Exempted']);
@@ -253,6 +259,15 @@ const mapFeeStructureRow = (row) => {
   };
 };
 
+const resolveFeeLinkKey = (row) => {
+  const feeId = row?.StudentFeeId
+    ?? row?.SqlStudentFeeId
+    ?? row?.MongoFeeId
+    ?? null;
+
+  return feeId === null || feeId === undefined ? null : String(feeId);
+};
+
 const buildFeeReadFilters = ({
   search = null,
   className = null,
@@ -361,19 +376,22 @@ const hydrateFeeRowsWithPayments = (feeRows = [], paymentRows = []) => {
   const paymentMap = new Map();
 
   paymentRows.forEach((row) => {
-    const mongoFeeId = row?.MongoFeeId;
-    if (!mongoFeeId) {
+    const feeLinkKey = resolveFeeLinkKey(row);
+    if (!feeLinkKey) {
       return;
     }
 
-    if (!paymentMap.has(mongoFeeId)) {
-      paymentMap.set(mongoFeeId, []);
+    if (!paymentMap.has(feeLinkKey)) {
+      paymentMap.set(feeLinkKey, []);
     }
 
-    paymentMap.get(mongoFeeId).push(mapPaymentRow(row));
+    paymentMap.get(feeLinkKey).push(mapPaymentRow(row));
   });
 
-  return feeRows.map((row) => mapFeeRow(row, paymentMap.get(row.MongoFeeId) || []));
+  return feeRows.map((row) => {
+    const feeLinkKey = resolveFeeLinkKey(row);
+    return mapFeeRow(row, paymentMap.get(feeLinkKey) || []);
+  });
 };
 
 const buildFeeStructureParams = ({ className, feeType, academicYear, amount, createdByMongoUserId, updatedAt }) => {
@@ -1575,15 +1593,28 @@ const resolveClassIdByName = async (className, tx = null) => {
 
   const sql = getSqlClient();
   const runner = tx?.query || executeQuery;
-  const result = await runner(
-    `SELECT TOP 1 ClassId
-     FROM dbo.Classes
-     WHERE ClassName = @ClassName
-       AND ISNULL(IsActive, 1) = 1`,
-    [{ name: 'ClassName', type: sql.NVarChar(100), value: normalizedClassName }]
-  );
+  const classCandidates = [...new Set([
+    normalizedClassName,
+    normalizedClassName.replace(/^class\s+/i, '').trim(),
+    /^\d+$/.test(normalizedClassName) ? `Class ${normalizedClassName}` : null,
+  ].filter(Boolean))];
 
-  return parseNumericId(result?.recordset?.[0]?.ClassId);
+  for (const candidate of classCandidates) {
+    const result = await runner(
+      `SELECT TOP 1 ClassId
+       FROM dbo.Classes
+       WHERE ClassName = @ClassName
+         AND ISNULL(IsActive, 1) = 1`,
+      [{ name: 'ClassName', type: sql.NVarChar(100), value: candidate }]
+    );
+
+    const classId = parseNumericId(result?.recordset?.[0]?.ClassId);
+    if (classId) {
+      return classId;
+    }
+  }
+
+  return null;
 };
 
 const ensurePrimaryFeeStructure = async ({ className, feeType, academicYear, amount, dueDate }, tx = null) => {
@@ -1593,7 +1624,7 @@ const ensurePrimaryFeeStructure = async ({ className, feeType, academicYear, amo
   const academicYearId = await resolveAcademicYearId(academicYear, tx);
 
   if (!classId || !academicYearId) {
-    throw new Error('Unable to resolve the SQL class or academic year for this fee record.');
+    throw createFeeValidationError('Unable to resolve the SQL class or academic year for this fee record.');
   }
 
   const normalizedDueDate = normalizeDateOnly(dueDate);
@@ -1843,6 +1874,8 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
   const receivedByUserId = parseNumericId(paymentInput.receivedByUserId);
   const paymentMode = VALID_PAYMENT_MODES.has(paymentInput.mode) ? paymentInput.mode : 'Cash';
   let createdPaymentId = null;
+  let paymentResultCode = 'ok';
+  let remainingPendingAmount = null;
 
   await executeInTransaction(async (tx) => {
     const currentFee = await tx.query(
@@ -1861,6 +1894,25 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
     const discountAmount = toDecimal(feeRow.DiscountAmount);
     const fineAmount = toDecimal(feeRow.FineAmount);
     const currentPaidAmount = toDecimal(feeRow.PaidAmount);
+    const pendingAmount = computePendingAmount({
+      amount: totalAmount,
+      lateFee: fineAmount,
+      discount: discountAmount,
+      paidAmount: currentPaidAmount,
+    });
+
+    if (pendingAmount <= 0) {
+      paymentResultCode = 'already_paid';
+      remainingPendingAmount = 0;
+      return;
+    }
+
+    if (paymentAmount > pendingAmount) {
+      paymentResultCode = 'exceeds_pending';
+      remainingPendingAmount = pendingAmount;
+      return;
+    }
+
     const nextPaidAmount = toDecimal(currentPaidAmount + paymentAmount);
     const nextStatus = resolveFeeStatus({
       amount: totalAmount,
@@ -1919,6 +1971,13 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
       ]
     );
   });
+
+  if (paymentResultCode !== 'ok') {
+    return {
+      resultCode: paymentResultCode,
+      pendingAmount: remainingPendingAmount,
+    };
+  }
 
   const refreshedFee = await getFeeRecordById(feeSqlId);
   const payment = refreshedFee?.payments?.find((entry) => entry.id === String(createdPaymentId)) || null;
@@ -2093,10 +2152,18 @@ const getFeeStatistics = async ({ academicYear = null } = {}) => {
 const bulkCreateFeeRecords = async ({ className, academicYear, feeType, amount, dueDate, createdByUserId }) => {
   await ensureFeeSqlReady();
 
-  const students = (await getStudentsByClass(className)).filter((student) => student.isActive !== false);
+  const scopedStudents = await getStudentsByClass(className);
+  const fallbackStudentList = !scopedStudents.length
+    ? (await getStudentList({ page: 1, limit: 5000, className }))?.students || []
+    : [];
+  const students = (scopedStudents.length ? scopedStudents : fallbackStudentList)
+    .filter((student) => student.isActive !== false);
   if (!students.length) {
     return [];
   }
+  const resolvedClassName = toNullableString(
+    students[0]?.class || students[0]?.className || className
+  );
 
   const normalizedAmount = toDecimal(amount, NaN);
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
@@ -2109,7 +2176,7 @@ const bulkCreateFeeRecords = async ({ className, academicYear, feeType, amount, 
     const sql = getSqlClient();
     const { feeStructureId } = await ensurePrimaryFeeStructure(
       {
-        className,
+        className: resolvedClassName,
         feeType,
         academicYear,
         amount: normalizedAmount,

@@ -23,8 +23,7 @@ const parentSchema = new mongoose.Schema({
     trim: true
   },
   childId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student',
+    type: mongoose.Schema.Types.Mixed,
     required: true
   },
   relation: {

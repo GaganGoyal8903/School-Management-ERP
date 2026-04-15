@@ -1,0 +1,7 @@
+Error: Error: Unable to resolve the SQL class, section, or academic year for this timetable.
+    at C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\services\timetableSqlService.js:378:13
+    at runNextTicks (node:internal/process/task_queues:64:5)
+    at process.processImmediate (node:internal/timers:472:9)
+    at async executeInTransaction (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\config\sqlServer.js:181:20)
+    at async createTimetableRecord (C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\services\timetableSqlService.js:372:3)
+    at async C:\Users\Gagan Goyal\Desktop\Autovyn\school-management-system\server\controllers\timetableController.js:61:18

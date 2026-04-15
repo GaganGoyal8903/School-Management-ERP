@@ -30,7 +30,7 @@ router.get('/session', authorize('admin', 'teacher'), getAttendanceSessionDetail
 
 router.get('/report', authorize('admin', 'teacher'), getAttendanceReport);
 
-router.get('/student/:studentId', getStudentAttendance);
+router.get('/student/:studentId', authorize('admin', 'teacher', 'student'), getStudentAttendance);
 
 router.route('/:id')
   .put(authorize('admin', 'teacher'), updateAttendance)

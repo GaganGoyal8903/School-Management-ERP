@@ -39,7 +39,7 @@ export default function LiveNotices({ maxNotices = 3 }) {
   const fetchNotices = async () => {
     try {
       const response = await getNotices({ isActive: true });
-      setSms_notices(response.data.notices || []);
+      setSms_notices(response.data.notices || response.data.announcements || []);
     } catch (error) {
       console.error("Fetch notices error:", error);
     } finally {

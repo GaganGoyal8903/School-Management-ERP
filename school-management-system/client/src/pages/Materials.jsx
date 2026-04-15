@@ -164,7 +164,14 @@ const Materials = () => {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Study Materials</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{isTeacher ? 'My Study Materials' : 'Study Materials'}</h1>
+          {isTeacher ? (
+            <p className="mt-1 text-sm text-gray-500">
+              Material lists and uploads are now limited to your assigned subjects.
+            </p>
+          ) : null}
+        </div>
         {(isAdmin || isTeacher) && (
           <button
             onClick={() => { resetForm(); setShowModal(true); }}

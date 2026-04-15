@@ -15,19 +15,19 @@ const { authorize } = require('../middleware/roleMiddleware');
 // All routes require authentication
 router.use(protect);
 
-// Teacher CRUD routes - GET accessible to all authenticated users, POST/PUT/DELETE for admin only
+// Teacher records are managed centrally by admins.
 router.route('/')
-  .get(getTeachers)  // Allow all authenticated users to view teachers
-  .post(authorize('admin'), createTeacher);  // Only admin can create
+  .get(authorize('admin'), getTeachers)
+  .post(authorize('admin'), createTeacher);
 
 router.route('/count')
-  .get(getTeacherCount);
+  .get(authorize('admin'), getTeacherCount);
 
 router.route('/available')
-  .get(getAvailableTeachers);
+  .get(authorize('admin'), getAvailableTeachers);
 
 router.route('/:id')
-  .get(getTeacher)
+  .get(authorize('admin'), getTeacher)
   .put(authorize('admin'), updateTeacher)
   .delete(authorize('admin'), deleteTeacher);
 

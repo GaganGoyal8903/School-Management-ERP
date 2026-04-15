@@ -4,8 +4,9 @@ import toast from "react-hot-toast";
 import { LogIn } from "lucide-react";
 import CrestLogo from "./CrestLogo";
 import { login } from "../services/api";
+import { persistStoredAuth } from "../utils/authStorage";
 
-const sms_roleOptions = ["Admin", "Teacher", "Student", "Parent"];
+const sms_roleOptions = ["Admin", "Teacher", "Student"];
 const sms_bgImageUrl = "https://www.mayocollege.com/wp-content/uploads/2021/04/Mayo_Main_Building_Ajmer.jpg";
 
 export default function MultiRoleLoginPage({ initialMode = "login" }) {
@@ -64,20 +65,11 @@ export default function MultiRoleLoginPage({ initialMode = "login" }) {
 
       const { token, user } = loginResponse.data;
       
-      // Store with sms_ prefix
-      localStorage.setItem("sms_token", token);
-      localStorage.setItem("sms_user", JSON.stringify(user));
+      persistStoredAuth(token, user);
 
       toast.success(`Welcome back, ${user.fullName}!`);
 
-      const roleToPath = {
-        admin: "/dashboard/admin/user-management",
-        teacher: "/dashboard/teacher/my-classes",
-        student: "/dashboard/student/my-profile",
-        parent: "/dashboard/parent/ward-progress",
-      };
-
-      navigate(roleToPath[(user?.role || "").toLowerCase()] || "/dashboard/admin/user-management");
+      navigate("/dashboard");
     } catch (error) {
       const serverMessage =
         error?.response?.data?.message ||
@@ -185,4 +177,3 @@ export default function MultiRoleLoginPage({ initialMode = "login" }) {
     </section>
   );
 }
-
