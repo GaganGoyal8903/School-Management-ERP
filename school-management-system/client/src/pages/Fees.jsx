@@ -11,9 +11,20 @@ import {
   updateFee, 
   deleteFee,
   collectPayment,
+  downloadFeePaymentReceipt,
   getStudents,
   bulkCreateFees
 } from '../services/api';
+import { downloadBlobResponse } from '../utils/fileDownload';
+
+const currencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+});
+
+const formatCurrency = (value = 0) => currencyFormatter.format(Number(value) || 0);
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '-');
 
 const Fees = () => {
   const { isAdmin, isAccountant } = useAuth();
@@ -25,11 +36,14 @@ const Fees = () => {
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [editingFee, setEditingFee] = useState(null);
   const [selectedFee, setSelectedFee] = useState(null);
+  const [selectedReceiptFee, setSelectedReceiptFee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [receiptDownloadingId, setReceiptDownloadingId] = useState('');
 
   const [formData, setFormData] = useState({
     studentId: '',
@@ -116,8 +130,9 @@ const Fees = () => {
   const handlePayment = async (e) => {
     e.preventDefault();
     try {
-      await collectPayment(selectedFee._id, paymentData);
-      toast.success('Payment collected successfully');
+      const response = await collectPayment(selectedFee._id, paymentData);
+      const receiptNumber = response?.data?.receipt?.receiptNumber || response?.data?.payment?.receiptNumber;
+      toast.success(receiptNumber ? `Payment collected. Receipt ${receiptNumber} is ready.` : 'Payment collected successfully');
       setShowPaymentModal(false);
       setSelectedFee(null);
       setPaymentData({ amount: '', mode: 'Cash', transactionId: '', notes: '' });
@@ -193,6 +208,34 @@ const Fees = () => {
     setShowPaymentModal(true);
   };
 
+  const openReceiptModal = (fee) => {
+    setSelectedReceiptFee(fee);
+    setShowReceiptModal(true);
+  };
+
+  const closeReceiptModal = () => {
+    setShowReceiptModal(false);
+    setSelectedReceiptFee(null);
+  };
+
+  const handleReceiptDownload = async (payment) => {
+    if (!payment?.id) {
+      toast.error('Receipt download is unavailable for this payment.');
+      return;
+    }
+
+    try {
+      setReceiptDownloadingId(payment.id);
+      const response = await downloadFeePaymentReceipt(payment.id);
+      downloadBlobResponse(response, `${payment.receiptNumber || `fee-receipt-${payment.id}`}.pdf`);
+      toast.success(`Receipt ${payment.receiptNumber || payment.id} downloaded`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to download receipt');
+    } finally {
+      setReceiptDownloadingId('');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       Paid: 'bg-green-100 text-green-800',
@@ -208,7 +251,16 @@ const Fees = () => {
     { 
       key: 'receiptNumber', 
       header: 'Receipt No',
-      width: '140px'
+      width: '170px',
+      render: (row) => {
+        const latestPayment = Array.isArray(row.payments) ? row.payments[0] : null;
+        return (
+          <div>
+            <p className="font-medium text-gray-900">{latestPayment?.receiptNumber || row.receiptNumber || '-'}</p>
+            <p className="text-xs text-gray-500">{row.payments?.length || 0} payment{(row.payments?.length || 0) === 1 ? '' : 's'}</p>
+          </div>
+        );
+      }
     },
     { 
       key: 'student', 
@@ -230,7 +282,7 @@ const Fees = () => {
     { 
       key: 'dueDate', 
       header: 'Due Date',
-      render: (row) => row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '-'
+      render: (row) => formatDate(row.dueDate)
     },
     { 
       key: 'status', 
@@ -253,6 +305,15 @@ const Fees = () => {
               className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
             >
               Pay
+            </button>
+          )}
+          {(isAdmin || isAccountant) && Array.isArray(row.payments) && row.payments.length > 0 && (
+            <button
+              onClick={() => openReceiptModal(row)}
+              className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
+            >
+              <Download className="h-3 w-3" />
+              Receipts
             </button>
           )}
           {isAdmin && (
@@ -561,6 +622,77 @@ const Fees = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={showReceiptModal}
+        onClose={closeReceiptModal}
+        title="Fee Receipts"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg bg-gray-50 p-4">
+            <p className="text-sm text-gray-600">Student: <span className="font-medium text-gray-900">{selectedReceiptFee?.studentId?.fullName || '-'}</span></p>
+            <p className="text-sm text-gray-600">Fee Type: <span className="font-medium text-gray-900">{selectedReceiptFee?.feeType || '-'}</span></p>
+            <p className="text-sm text-gray-600">Total Paid: <span className="font-medium text-gray-900">{formatCurrency(selectedReceiptFee?.paidAmount || 0)}</span></p>
+            <p className="text-sm text-gray-600">Pending: <span className="font-medium text-red-600">{formatCurrency(selectedReceiptFee?.pendingAmount || 0)}</span></p>
+          </div>
+
+          {Array.isArray(selectedReceiptFee?.payments) && selectedReceiptFee.payments.length > 0 ? (
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                      <th className="px-4 py-3 font-semibold">Receipt</th>
+                      <th className="px-4 py-3 font-semibold">Date</th>
+                      <th className="px-4 py-3 font-semibold">Amount</th>
+                      <th className="px-4 py-3 font-semibold">Mode</th>
+                      <th className="px-4 py-3 font-semibold">Transaction</th>
+                      <th className="px-4 py-3 font-semibold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {selectedReceiptFee.payments.map((payment) => (
+                      <tr key={payment.id || `${payment.date}-${payment.amount}`}>
+                        <td className="px-4 py-3 font-medium text-gray-900">{payment.receiptNumber || `PAY-${payment.id}`}</td>
+                        <td className="px-4 py-3 text-gray-600">{formatDate(payment.date)}</td>
+                        <td className="px-4 py-3 text-gray-600">{formatCurrency(payment.amount || 0)}</td>
+                        <td className="px-4 py-3 text-gray-600">{payment.mode || '-'}</td>
+                        <td className="px-4 py-3 text-gray-600">{payment.transactionId || '-'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleReceiptDownload(payment)}
+                            disabled={receiptDownloadingId === payment.id}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[#002366] px-3 py-2 text-xs font-semibold text-white hover:bg-[#001a4d] disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {receiptDownloadingId === payment.id ? 'Downloading...' : 'Download'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+              No payment receipts are available for this fee record yet.
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={closeReceiptModal}
+              className="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Bulk Create Modal */}
