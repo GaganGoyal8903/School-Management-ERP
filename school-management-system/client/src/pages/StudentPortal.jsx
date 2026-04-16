@@ -7,6 +7,7 @@ import {
   Bus,
   CalendarDays,
   Clock3,
+  Download,
   GraduationCap,
   Mail,
   Phone,
@@ -20,11 +21,13 @@ import LiveNotices from "../components/LiveNotices";
 import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
 import {
+  downloadFeePaymentReceipt,
   getMyStudentDetails,
   payStudentFee,
   startOnlineExamSession,
   submitOnlineExamSession,
 } from "../services/api";
+import { downloadBlobResponse } from "../utils/fileDownload";
 
 const currencyFormatter = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -201,6 +204,7 @@ export default function StudentPortal() {
   const [selectedFee, setSelectedFee] = useState(null);
   const [paymentForm, setPaymentForm] = useState(defaultPaymentFormState);
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [receiptDownloadingId, setReceiptDownloadingId] = useState("");
   const [showExamModal, setShowExamModal] = useState(false);
   const [examSessionLoading, setExamSessionLoading] = useState(false);
   const [examSubmitting, setExamSubmitting] = useState(false);
@@ -350,6 +354,24 @@ export default function StudentPortal() {
       toast.error(paymentError?.response?.data?.message || "Unable to record the fee payment right now.");
     } finally {
       setPaymentSubmitting(false);
+    }
+  };
+
+  const handleReceiptDownload = async (payment) => {
+    if (!payment?.id) {
+      toast.error("Receipt download is unavailable for this payment.");
+      return;
+    }
+
+    try {
+      setReceiptDownloadingId(payment.id);
+      const response = await downloadFeePaymentReceipt(payment.id);
+      downloadBlobResponse(response, `${payment.receiptNumber || `fee-receipt-${payment.id}`}.pdf`);
+      toast.success(`Receipt ${payment.receiptNumber || payment.id} downloaded.`);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Unable to download the receipt right now.");
+    } finally {
+      setReceiptDownloadingId("");
     }
   };
 
@@ -926,6 +948,15 @@ export default function StudentPortal() {
                       <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
                         {payment.mode || "Payment recorded"}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => handleReceiptDownload(payment)}
+                        disabled={!payment.id || receiptDownloadingId === payment.id}
+                        className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#002366] transition hover:border-[#002366]/20 hover:bg-[#002366]/5 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {receiptDownloadingId === payment.id ? "Downloading..." : (payment.receiptNumber || "Download receipt")}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1221,7 +1252,17 @@ export default function StudentPortal() {
             <td className="px-4 py-3 font-medium text-slate-900">{payment.feeType || "-"}</td>
             <td className="px-4 py-3 text-slate-600">{formatCurrency(payment.amount || 0)}</td>
             <td className="px-4 py-3 text-slate-600">{payment.mode || "-"}</td>
-            <td className="px-4 py-3 text-slate-600">{payment.receiptNumber || "-"}</td>
+            <td className="px-4 py-3 text-slate-600">
+              <button
+                type="button"
+                onClick={() => handleReceiptDownload(payment)}
+                disabled={!payment.id || receiptDownloadingId === payment.id}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#002366] transition hover:border-[#002366]/20 hover:bg-[#002366]/5 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {receiptDownloadingId === payment.id ? "Downloading..." : (payment.receiptNumber || "Download")}
+              </button>
+            </td>
           </tr>
         ))}
       />
