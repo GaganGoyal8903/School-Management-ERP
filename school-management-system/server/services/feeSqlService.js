@@ -8,6 +8,7 @@ const {
 } = require('../config/sqlServer');
 const { ensureAuthSqlReady } = require('./authSqlService');
 const { ensureStudentSqlReady, getStudentById, getStudentsByClass, getStudentList } = require('./studentSqlService');
+const { hasFeeReceiptStore, ensureFeeReceiptByPaymentId } = require('./feeReceiptSqlService');
 
 const FEE_STRUCTURE_TABLE = 'dbo.SqlFeeStructures';
 const STUDENT_FEE_TABLE = 'dbo.SqlStudentFees';
@@ -168,7 +169,9 @@ const mapPaymentRow = (row) => {
     date: row.PaymentDate ? new Date(row.PaymentDate) : null,
     mode: row.PaymentMode || null,
     transactionId: row.TransactionReference || row.TransactionId || null,
+    receiptId: row.FeeReceiptId !== null && row.FeeReceiptId !== undefined ? String(row.FeeReceiptId) : null,
     receiptNumber: row.ReceiptNumber || (paymentId !== null && paymentId !== undefined ? `PAY-${paymentId}` : null),
+    receiptDate: row.ReceiptDate ? new Date(row.ReceiptDate) : null,
     notes: row.Remarks || row.Notes || null,
   };
 };
@@ -196,6 +199,7 @@ const mapFeeRow = (row, payments = []) => {
         })
   );
   const receiptNumber = row.ReceiptNumber
+    || mappedPayments[0]?.receiptNumber
     || (feeId !== null && feeId !== undefined ? `FEE-${feeId}` : null);
 
   return {
@@ -392,6 +396,64 @@ const hydrateFeeRowsWithPayments = (feeRows = [], paymentRows = []) => {
     const feeLinkKey = resolveFeeLinkKey(row);
     return mapFeeRow(row, paymentMap.get(feeLinkKey) || []);
   });
+};
+
+const buildRealPaymentSelect = ({ includeReceipts = false, filterColumn = 'StudentFeeId' } = {}) => `
+  SELECT
+    p.FeePaymentId,
+    p.StudentFeeId,
+    p.PaymentDate,
+    p.AmountPaid,
+    p.PaymentMode,
+    p.TransactionReference,
+    p.Remarks,
+    p.CreatedAt
+    ${includeReceipts ? `,
+    fr.FeeReceiptId,
+    fr.ReceiptNumber,
+    fr.ReceiptDate` : ''}
+  FROM dbo.FeePayments p
+  ${includeReceipts ? `
+  LEFT JOIN dbo.FeeReceipts fr
+    ON fr.FeePaymentId = p.FeePaymentId` : ''}
+  WHERE p.${filterColumn} = @${filterColumn}
+  ORDER BY p.PaymentDate DESC, p.FeePaymentId DESC;
+`;
+
+const getPaymentRowsForFeeIds = async (feeIds = [], { includeReceipts = false } = {}) => {
+  const normalizedIds = [...new Set(
+    feeIds
+      .map((value) => parseNumericId(value))
+      .filter(Boolean)
+  )];
+
+  if (!normalizedIds.length) {
+    return [];
+  }
+
+  return executeQuery(
+    `
+      SELECT
+        p.FeePaymentId,
+        p.StudentFeeId,
+        p.PaymentDate,
+        p.AmountPaid,
+        p.PaymentMode,
+        p.TransactionReference,
+        p.Remarks,
+        p.CreatedAt
+        ${includeReceipts ? `,
+        fr.FeeReceiptId,
+        fr.ReceiptNumber,
+        fr.ReceiptDate` : ''}
+      FROM dbo.FeePayments p
+      ${includeReceipts ? `
+      LEFT JOIN dbo.FeeReceipts fr
+        ON fr.FeePaymentId = p.FeePaymentId` : ''}
+      WHERE p.StudentFeeId IN (${normalizedIds.join(', ')})
+      ORDER BY p.PaymentDate DESC, p.FeePaymentId DESC;
+    `
+  ).then((result) => result?.recordset || []);
 };
 
 const buildFeeStructureParams = ({ className, feeType, academicYear, amount, createdByMongoUserId, updatedAt }) => {
@@ -1456,6 +1518,7 @@ const getFeeList = async ({
   await syncAllFeesToSql();
 
   const sql = getSqlClient();
+  const includeReceipts = await hasFeeReceiptStore();
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 10;
   const offset = Math.max(safePage - 1, 0) * safeLimit;
@@ -1479,9 +1542,13 @@ const getFeeList = async ({
 
   const rows = result?.recordset || [];
   const total = rows.length ? Number(rows[0].TotalCount || 0) : 0;
+  const paymentRows = await getPaymentRowsForFeeIds(
+    rows.map((row) => row.StudentFeeId),
+    { includeReceipts }
+  );
 
   return {
-    fees: rows.map((row) => mapFeeRow(row)),
+    fees: hydrateFeeRowsWithPayments(rows, paymentRows),
     total,
     page: Number(page) || 1,
     limit: Number(limit) || 10,
@@ -1495,25 +1562,16 @@ const getFeeRecordById = async (feeId) => {
   if (!feeSqlId) {
     return null;
   }
+  const includeReceipts = await hasFeeReceiptStore();
   const filter = buildFeeReadFilters({ feeId: feeSqlId });
   const feeResult = await executeQuery(`
     ${buildFeeBaseSelect()}
     ${filter.whereClause};
   `, filter.params);
-  const paymentResult = await executeQuery(`
-    SELECT
-      FeePaymentId,
-      StudentFeeId,
-      PaymentDate,
-      AmountPaid,
-      PaymentMode,
-      TransactionReference,
-      Remarks,
-      CreatedAt
-    FROM dbo.FeePayments
-    WHERE StudentFeeId = @StudentFeeId
-    ORDER BY PaymentDate DESC, FeePaymentId DESC;
-  `, [
+  const paymentResult = await executeQuery(buildRealPaymentSelect({
+    includeReceipts,
+    filterColumn: 'StudentFeeId',
+  }), [
     { name: 'StudentFeeId', type: sql.Int, value: feeSqlId },
   ]);
 
@@ -1528,26 +1586,17 @@ const getFeesForStudent = async (studentId) => {
   if (!studentSqlId) {
     return [];
   }
+  const includeReceipts = await hasFeeReceiptStore();
   const filter = buildFeeReadFilters({ studentId: studentSqlId });
   const feeResult = await executeQuery(`
     ${buildFeeBaseSelect()}
     ${filter.whereClause}
     ORDER BY sf.DueDate DESC, sf.StudentFeeId DESC;
   `, filter.params);
-  const paymentResult = await executeQuery(`
-    SELECT
-      FeePaymentId,
-      StudentFeeId,
-      PaymentDate,
-      AmountPaid,
-      PaymentMode,
-      TransactionReference,
-      Remarks,
-      CreatedAt
-    FROM dbo.FeePayments
-    WHERE StudentId = @StudentId
-    ORDER BY PaymentDate DESC, FeePaymentId DESC;
-  `, [
+  const paymentResult = await executeQuery(buildRealPaymentSelect({
+    includeReceipts,
+    filterColumn: 'StudentId',
+  }), [
     { name: 'StudentId', type: sql.Int, value: studentSqlId },
   ]);
 
@@ -1873,7 +1922,9 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
   const studentSqlId = parseNumericId(fullFee.studentId?._id || fullFee.studentId);
   const receivedByUserId = parseNumericId(paymentInput.receivedByUserId);
   const paymentMode = VALID_PAYMENT_MODES.has(paymentInput.mode) ? paymentInput.mode : 'Cash';
+  const receiptStoreEnabled = await hasFeeReceiptStore();
   let createdPaymentId = null;
+  let createdReceipt = null;
   let paymentResultCode = 'ok';
   let remainingPendingAmount = null;
 
@@ -1970,6 +2021,12 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
         { name: 'Status', type: sql.NVarChar(50), value: nextStatus },
       ]
     );
+
+    if (receiptStoreEnabled && createdPaymentId) {
+      createdReceipt = await ensureFeeReceiptByPaymentId(createdPaymentId, {
+        fallbackGeneratedByUserId: receivedByUserId,
+      }, tx);
+    }
   });
 
   if (paymentResultCode !== 'ok') {
@@ -1981,11 +2038,18 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
 
   const refreshedFee = await getFeeRecordById(feeSqlId);
   const payment = refreshedFee?.payments?.find((entry) => entry.id === String(createdPaymentId)) || null;
+  const receipt = createdReceipt
+    || (receiptStoreEnabled && createdPaymentId
+      ? await ensureFeeReceiptByPaymentId(createdPaymentId, {
+          fallbackGeneratedByUserId: receivedByUserId,
+        })
+      : null);
 
   return {
     resultCode: 'ok',
     fee: refreshedFee,
     payment,
+    receipt,
   };
 };
 

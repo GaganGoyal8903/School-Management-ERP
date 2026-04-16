@@ -1,5 +1,6 @@
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const {
+  ensureFeeSqlReady,
   getFeeList,
   getFeeRecordById,
   getFeesForStudent,
@@ -10,6 +11,8 @@ const {
   getFeeStatistics,
   bulkCreateFeeRecords,
 } = require('../services/feeSqlService');
+const { ensureFeeReceiptByPaymentId } = require('../services/feeReceiptSqlService');
+const { buildFeeReceiptPdf } = require('../services/feeReceiptPdfService');
 const { getStudentByUserId } = require('../services/studentSqlService');
 
 const parseStudentId = (value) => {
@@ -29,6 +32,39 @@ const STUDENT_PAYMENT_PORTAL_ENABLED = String(
 const createMockStudentPaymentReference = (feeId, userId) => {
   const uniqueSegment = `${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
   return `MOCK-FEE-${feeId}-${userId || 'student'}-${uniqueSegment}`;
+};
+
+const buildDownloadFilename = (receipt = {}) => {
+  const rawValue = receipt.receiptNumber || `fee-receipt-${receipt.paymentId || 'download'}`;
+  const safeValue = String(rawValue).replace(/[^a-zA-Z0-9._-]+/g, '-');
+  return `${safeValue || 'fee-receipt'}.pdf`;
+};
+
+const getAuthorizedReceipt = async (req, paymentId) => {
+  await ensureFeeSqlReady();
+  const receipt = await ensureFeeReceiptByPaymentId(paymentId, {
+    fallbackGeneratedByUserId: req.user?._id ?? req.user?.id ?? null,
+  });
+
+  if (!receipt) {
+    return { error: { status: 404, message: 'Fee receipt not found for this payment.' } };
+  }
+
+  if (getRequestRole(req) === 'student') {
+    const studentProfile = await getStudentByUserId(req.user);
+    const ownStudentId = parseStudentId(studentProfile?._id ?? studentProfile?.id ?? studentProfile?.studentId);
+    const receiptStudentId = parseStudentId(receipt.studentId);
+
+    if (!ownStudentId) {
+      return { error: { status: 404, message: 'Student profile not found' } };
+    }
+
+    if (!receiptStudentId || ownStudentId !== receiptStudentId) {
+      return { error: { status: 403, message: 'Not authorized to access another student receipt' } };
+    }
+  }
+
+  return { receipt };
 };
 
 // @desc    Get all fees with pagination
@@ -187,7 +223,7 @@ const collectPayment = asyncHandler(async (req, res) => {
     };
   }
 
-  const { fee, payment, resultCode, pendingAmount } = await collectFeePaymentRecord(req.params.id, paymentPayload);
+  const { fee, payment, receipt, resultCode, pendingAmount } = await collectFeePaymentRecord(req.params.id, paymentPayload);
 
   if (resultCode === 'invalid_amount') {
     return res.status(400).json({ success: false, message: 'Invalid payment amount' });
@@ -209,9 +245,46 @@ const collectPayment = asyncHandler(async (req, res) => {
     success: true,
     fee,
     data: fee,
-    receipt: payment,
+    payment,
+    receipt,
     paymentContext,
   });
+});
+
+// @desc    Get payment receipt details
+// @route   GET /api/fees/payments/:paymentId/receipt
+// @access  Private
+const getPaymentReceipt = asyncHandler(async (req, res) => {
+  const { receipt, error } = await getAuthorizedReceipt(req, req.params.paymentId);
+
+  if (error) {
+    return res.status(error.status).json({ success: false, message: error.message });
+  }
+
+  return res.status(200).json({
+    success: true,
+    receipt,
+    data: receipt,
+  });
+});
+
+// @desc    Download payment receipt
+// @route   GET /api/fees/payments/:paymentId/receipt/download
+// @access  Private
+const downloadPaymentReceipt = asyncHandler(async (req, res) => {
+  const { receipt, error } = await getAuthorizedReceipt(req, req.params.paymentId);
+
+  if (error) {
+    return res.status(error.status).json({ success: false, message: error.message });
+  }
+
+  const pdfBuffer = buildFeeReceiptPdf(receipt);
+  const filename = buildDownloadFilename(receipt);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+  return res.status(200).send(pdfBuffer);
 });
 
 // @desc    Delete fee
@@ -282,6 +355,8 @@ module.exports = {
   createFee,
   updateFee,
   collectPayment,
+  getPaymentReceipt,
+  downloadPaymentReceipt,
   deleteFee,
   getFeeStats,
   bulkCreateFees,

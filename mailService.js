@@ -1,37 +1,11 @@
 const nodemailer = require('nodemailer');
 
-const DEFAULT_FROM_NAME = 'School ERP Security';
-const PLACEHOLDER_FROM_REGEX = /your-email@gmail\.com/i;
-
-const normalizeMailPassword = (value = '') => String(value || '').replace(/\s+/g, '').trim();
-
-const resolveMailFrom = (fromValue, userValue) => {
-  const normalizedUser = String(userValue || '').trim();
-  const rawFrom = String(fromValue || '').trim().replace(/^"(.*)"$/, '$1');
-
-  if (!normalizedUser) {
-    return rawFrom || null;
-  }
-
-  if (!rawFrom || PLACEHOLDER_FROM_REGEX.test(rawFrom)) {
-    return `${DEFAULT_FROM_NAME} <${normalizedUser}>`;
-  }
-
-  const fromMatch = rawFrom.match(/^(.*)<.*>$/);
-  if (fromMatch && PLACEHOLDER_FROM_REGEX.test(rawFrom)) {
-    const fromName = String(fromMatch[1] || '').replace(/["<>]/g, '').trim() || DEFAULT_FROM_NAME;
-    return `${fromName} <${normalizedUser}>`;
-  }
-
-  return rawFrom;
-};
-
 const getMailConfig = () => {
   const host = process.env.MAIL_HOST;
   const port = Number(process.env.MAIL_PORT || 587);
   const user = process.env.MAIL_USER;
-  const pass = normalizeMailPassword(process.env.MAIL_PASS);
-  const from = resolveMailFrom(process.env.MAIL_FROM, user);
+  const pass = process.env.MAIL_PASS;
+  const from = process.env.MAIL_FROM || user;
   const secure = String(process.env.MAIL_SECURE || '').toLowerCase() === 'true' || port === 465;
 
   if (!host || !port || !user || !pass || !from) {
@@ -99,3 +73,4 @@ module.exports = {
   getMailConfig,
   sendOtpEmail,
 };
+

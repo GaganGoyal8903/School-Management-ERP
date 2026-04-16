@@ -11811,3 +11811,109 @@
   table: 'dbo.Users'
 }
 127.0.0.1 - - [15/Apr/2026:09:37:47 +0000] "POST /api/auth/login/captcha/verify HTTP/1.1" 500 121 "http://localhost:5173/login" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+[auth] {
+  event: 'login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  ipAddress: '127.0.0.1',
+  route: '/api/auth/login'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth] {
+  event: 'login.lookup',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  entity: 'dbo.Users/dbo.SqlAuthUsers',
+  found: true,
+  matchedRole: 'admin'
+}
+[auth] {
+  event: 'login.password-check',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  found: true,
+  passwordMatched: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [16/Apr/2026:05:45:52 +0000] "POST /api/auth/login HTTP/1.1" 200 3937 "http://localhost:5173/login" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [16/Apr/2026:05:46:01 +0000] "POST /api/auth/login/captcha/verify HTTP/1.1" 500 121 "http://localhost:5173/login" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+[auth] {
+  event: 'login.attempt',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  ipAddress: '127.0.0.1',
+  route: '/api/auth/login'
+}
+[auth-sql] {
+  event: 'login.lookup.start',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  proceduresToTry: [ 'dbo.spAuthLoginLookup' ]
+}
+[auth-sql] {
+  event: 'login.lookup.result',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  source: 'dbo.spAuthLoginLookup',
+  found: true
+}
+[auth] {
+  event: 'login.lookup',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  entity: 'dbo.Users/dbo.SqlAuthUsers',
+  found: true,
+  matchedRole: 'admin'
+}
+[auth] {
+  event: 'login.password-check',
+  email: 'gagangoyal878@gmail.com',
+  role: 'admin',
+  found: true,
+  passwordMatched: true
+}
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [16/Apr/2026:05:52:48 +0000] "POST /api/auth/login HTTP/1.1" 200 3929 "http://localhost:5173/login" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+[auth-sql] {
+  event: 'primary.lookup',
+  userId: '69c0e147efb2b97b58fe7a16',
+  email: null,
+  role: null,
+  found: false,
+  table: 'dbo.Users'
+}
+127.0.0.1 - - [16/Apr/2026:05:53:03 +0000] "POST /api/auth/login/captcha/verify HTTP/1.1" 500 121 "http://localhost:5173/login" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"

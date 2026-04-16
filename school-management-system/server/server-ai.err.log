@@ -9,3 +9,7 @@ Auth middleware error: jwt expired
 Auth middleware error: jwt expired
 OTP email send error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 41be03b00d2f7-c79581a54fasm1243066a12.17 - gsmtp
+OTP email send error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-82f673e0ca3sm4210017b3a.30 - gsmtp
+OTP email send error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-2b4780ef673sm44074965ad.17 - gsmtp

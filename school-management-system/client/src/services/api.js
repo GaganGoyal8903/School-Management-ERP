@@ -199,6 +199,10 @@ export const updateFee = (id, data) => API.put(`/fees/${id}`, data);
 export const deleteFee = (id) => API.delete(`/fees/${id}`);
 export const collectPayment = (id, data) => API.post(`/fees/${id}/pay`, data);
 export const payStudentFee = (id, data) => API.post(`/fees/${id}/pay`, data);
+export const getFeePaymentReceipt = (paymentId) => API.get(`/fees/payments/${paymentId}/receipt`);
+export const downloadFeePaymentReceipt = (paymentId) => API.get(`/fees/payments/${paymentId}/receipt/download`, {
+  responseType: 'blob',
+});
 export const getFeeStats = (params) => API.get("/fees/stats", { params });
 export const bulkCreateFees = (data) => API.post("/fees/bulk", data);
 

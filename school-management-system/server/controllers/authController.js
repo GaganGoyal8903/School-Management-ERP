@@ -51,6 +51,10 @@ const CREDENTIAL_MAX_FAILURES = Number(process.env.CREDENTIAL_MAX_FAILURES || 8)
 const CREDENTIAL_WINDOW_MS = Number(process.env.CREDENTIAL_WINDOW_MS || 15 * 60 * 1000);
 const CREDENTIAL_BLOCK_MS = Number(process.env.CREDENTIAL_BLOCK_MS || 15 * 60 * 1000);
 
+const isDevelopmentOtpFallbackEnabled = () =>
+  process.env.NODE_ENV !== 'production' &&
+  String(process.env.ALLOW_DEV_OTP_FALLBACK || 'false').trim().toLowerCase() === 'true';
+
 const resolveOtpEmailErrorMessage = (error) => {
   const rawMessage = String(error?.message || '').toLowerCase();
 
@@ -76,6 +80,19 @@ const resolveOtpEmailErrorMessage = (error) => {
   }
 
   return 'Unable to send OTP email right now. Please try again in a moment.';
+};
+
+const buildOtpDeliveryMessage = (otpState, { isResend = false } = {}) => {
+  if (otpState?.delivery === 'debug' && otpState?.debugOtp) {
+    const prefix = isResend
+      ? 'OTP email delivery is unavailable in local mode. A new debug OTP is ready.'
+      : 'OTP email delivery is unavailable in local mode. Use the debug OTP below to continue.';
+    return `${prefix} OTP: ${otpState.debugOtp}`;
+  }
+
+  return isResend
+    ? 'A new OTP has been sent to your email.'
+    : 'OTP sent to your registered email address.';
 };
 
 const getClientIp = (req) => {
@@ -173,13 +190,28 @@ const issueOtpForSession = async ({ sessionToken, user }) => {
   const otpHash = hashAuthValue(normalizeOtp(otpCode));
   const otpExpiresAt = ttlDate(OTP_EXPIRY_MS);
   const sentAt = new Date();
+  let delivery = 'email';
+  let debugOtp = null;
 
-  await sendOtpEmail({
-    to: user.email,
-    fullName: user.fullName,
-    otp: otpCode,
-    expiresInMinutes: Math.max(1, Math.ceil(OTP_EXPIRY_MS / 60000)),
-  });
+  try {
+    await sendOtpEmail({
+      to: user.email,
+      fullName: user.fullName,
+      otp: otpCode,
+      expiresInMinutes: Math.max(1, Math.ceil(OTP_EXPIRY_MS / 60000)),
+    });
+  } catch (error) {
+    if (!isDevelopmentOtpFallbackEnabled()) {
+      throw error;
+    }
+
+    delivery = 'debug';
+    debugOtp = otpCode;
+    console.warn('[auth] OTP email delivery failed. Falling back to debug OTP outside production.', {
+      email: user?.email || null,
+      reason: error?.message || 'unknown_error',
+    });
+  }
 
   const otpResult = await createOtpForSession({
     sessionToken,
@@ -197,6 +229,8 @@ const issueOtpForSession = async ({ sessionToken, user }) => {
     expiresAt: otpResult.OtpExpiresAt ? new Date(otpResult.OtpExpiresAt) : otpExpiresAt,
     resendAvailableAt: ttlDate(OTP_RESEND_COOLDOWN_MS),
     remainingSends: Math.max(0, Number(otpResult.RemainingSends || 0)),
+    delivery,
+    debugOtp,
   };
 };
 
@@ -583,12 +617,14 @@ const verifyCaptchaAndSendOtp = asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     nextStep: 'otp',
-    message: 'OTP sent to your registered email address.',
+    message: buildOtpDeliveryMessage(otpState),
     otp: {
       expiresAt: otpState.expiresAt,
       resendAvailableAt: otpState.resendAvailableAt,
       maxAttempts: OTP_MAX_ATTEMPTS,
       remainingSends: otpState.remainingSends,
+      delivery: otpState.delivery,
+      debugOtp: otpState.debugOtp,
     },
   });
 });
@@ -653,12 +689,14 @@ const resendOtp = asyncHandler(async (req, res) => {
 
   return res.json({
     success: true,
-    message: 'A new OTP has been sent to your email.',
+    message: buildOtpDeliveryMessage(otpState, { isResend: true }),
     otp: {
       expiresAt: otpState.expiresAt,
       resendAvailableAt: otpState.resendAvailableAt,
       maxAttempts: OTP_MAX_ATTEMPTS,
       remainingSends: otpState.remainingSends,
+      delivery: otpState.delivery,
+      debugOtp: otpState.debugOtp,
     },
   });
 });

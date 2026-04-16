@@ -7,6 +7,8 @@ const {
   createFee, 
   updateFee, 
   collectPayment,
+  getPaymentReceipt,
+  downloadPaymentReceipt,
   deleteFee,
   getFeeStats,
   bulkCreateFees
@@ -18,6 +20,10 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 // Protected routes
 router.use(protect);
+
+// Payment receipts
+router.get('/payments/:paymentId/receipt', authorize('admin', 'accountant', 'student'), getPaymentReceipt);
+router.get('/payments/:paymentId/receipt/download', authorize('admin', 'accountant', 'student'), downloadPaymentReceipt);
 
 // Get fees by student
 router.get('/student/:studentId', authorize('admin', 'teacher', 'accountant', 'student'), getFeesByStudent);
