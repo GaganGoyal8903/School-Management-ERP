@@ -276,7 +276,7 @@ export default function Login() {
     const payload = result.data;
     setOtpExpiresAt(payload.otp?.expiresAt || null);
     setResendAvailableAt(payload.otp?.resendAvailableAt || null);
-    setOtpValue("");
+    setOtpValue(payload.otp?.debugOtp || "");
     setStep("otp");
     setInfoMessage(payload.message || "OTP sent to your registered email.");
   };
@@ -298,7 +298,7 @@ export default function Login() {
 
     setOtpExpiresAt(result.data.otp?.expiresAt || null);
     setResendAvailableAt(result.data.otp?.resendAvailableAt || null);
-    setOtpValue("");
+    setOtpValue(result.data.otp?.debugOtp || "");
     setInfoMessage(result.data.message || "A new OTP has been sent.");
   };
 
