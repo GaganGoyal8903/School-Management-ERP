@@ -1,4 +1,4 @@
-const StatCard = ({ title, value, icon: Icon, color = 'blue', trend }) => {
+const StatCard = ({ title, value, icon: Icon, color = 'blue', trend, hint = '' }) => {
   const colorClasses = {
     blue: 'bg-blue-100 text-blue-600',
     green: 'bg-green-100 text-green-600',
@@ -14,6 +14,9 @@ const StatCard = ({ title, value, icon: Icon, color = 'blue', trend }) => {
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          {hint ? (
+            <p className="text-sm mt-2 text-gray-500">{hint}</p>
+          ) : null}
           {trend && (
             <p className={`text-sm mt-2 ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
               {trend > 0 ? '+' : ''}{trend}% from last month

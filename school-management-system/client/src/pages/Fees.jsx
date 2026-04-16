@@ -25,6 +25,7 @@ const currencyFormatter = new Intl.NumberFormat('en-IN', {
 
 const formatCurrency = (value = 0) => currencyFormatter.format(Number(value) || 0);
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '-');
+const formatOverdueDays = (value = 0) => `${value} day${Number(value) === 1 ? '' : 's'}`;
 
 const Fees = () => {
   const { isAdmin, isAccountant } = useAuth();
@@ -200,7 +201,7 @@ const Fees = () => {
   const openPaymentModal = (fee) => {
     setSelectedFee(fee);
     setPaymentData({
-      amount: (fee.amount + (fee.lateFee || 0) - (fee.discount || 0) - (fee.paidAmount || 0)).toString(),
+      amount: String(Number(fee.pendingAmount || 0)),
       mode: 'Cash',
       transactionId: '',
       notes: ''
@@ -272,17 +273,40 @@ const Fees = () => {
     { 
       key: 'amount', 
       header: 'Amount',
-      render: (row) => `₹${row.amount?.toLocaleString() || 0}`
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">{formatCurrency(row.amount || 0)}</p>
+          {Number(row.totalPayable || 0) > Number(row.amount || 0) ? (
+            <p className="text-xs text-gray-500">Payable {formatCurrency(row.totalPayable || 0)}</p>
+          ) : null}
+        </div>
+      )
     },
     { 
       key: 'paidAmount', 
       header: 'Paid',
-      render: (row) => `₹${row.paidAmount?.toLocaleString() || 0}`
+      render: (row) => formatCurrency(row.paidAmount || 0)
     },
     { 
       key: 'dueDate', 
       header: 'Due Date',
       render: (row) => formatDate(row.dueDate)
+    },
+    {
+      key: 'overdue',
+      header: 'Overdue',
+      render: (row) => {
+        if (!Number(row.overduePenalty || 0)) {
+          return <span className="text-gray-400">-</span>;
+        }
+
+        return (
+          <div>
+            <p className="font-medium text-red-700">{formatOverdueDays(row.overdueDays || 0)}</p>
+            <p className="text-xs text-red-600">{formatCurrency(row.overduePenalty || 0)} penalty</p>
+          </div>
+        );
+      }
     },
     { 
       key: 'status', 
@@ -407,7 +431,10 @@ const Fees = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Overdue</p>
-              <p className="text-xl font-bold">{stats.overdueCount || 0}</p>
+              <p className="text-xl font-bold">{formatCurrency(stats.overdueAmount || 0)}</p>
+              <p className="text-xs text-gray-500">
+                {stats.overdueCount || 0} accounts • {formatCurrency(stats.overduePenaltyAmount || 0)} penalty
+              </p>
             </div>
           </div>
         </div>
@@ -563,9 +590,16 @@ const Fees = () => {
         <form onSubmit={handlePayment} className="space-y-4">
           <div className="bg-gray-50 p-4 rounded-lg mb-4">
             <p className="text-sm text-gray-600">Student: <span className="font-medium">{selectedFee?.studentId?.fullName}</span></p>
-            <p className="text-sm text-gray-600">Total Fee: <span className="font-medium">₹{selectedFee?.amount}</span></p>
-            <p className="text-sm text-gray-600">Already Paid: <span className="font-medium">₹{selectedFee?.paidAmount || 0}</span></p>
-            <p className="text-sm text-gray-600">Pending: <span className="font-medium text-red-600">₹{selectedFee?.amount - (selectedFee?.paidAmount || 0)}</span></p>
+            <p className="text-sm text-gray-600">Base Fee: <span className="font-medium">{formatCurrency(selectedFee?.amount || 0)}</span></p>
+            <p className="text-sm text-gray-600">Overdue Penalty: <span className="font-medium text-red-600">{formatCurrency(selectedFee?.overduePenalty || 0)}</span></p>
+            <p className="text-sm text-gray-600">Total Payable: <span className="font-medium">{formatCurrency(selectedFee?.totalPayable || 0)}</span></p>
+            <p className="text-sm text-gray-600">Already Paid: <span className="font-medium">{formatCurrency(selectedFee?.paidAmount || 0)}</span></p>
+            <p className="text-sm text-gray-600">Pending: <span className="font-medium text-red-600">{formatCurrency(selectedFee?.pendingAmount || 0)}</span></p>
+            {Number(selectedFee?.overduePenalty || 0) > 0 ? (
+              <p className="mt-2 text-xs text-red-600">
+                {formatOverdueDays(selectedFee?.overdueDays || 0)} overdue at {formatCurrency(selectedFee?.penaltyPerDay || 10)} per day.
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
@@ -634,6 +668,7 @@ const Fees = () => {
           <div className="rounded-lg bg-gray-50 p-4">
             <p className="text-sm text-gray-600">Student: <span className="font-medium text-gray-900">{selectedReceiptFee?.studentId?.fullName || '-'}</span></p>
             <p className="text-sm text-gray-600">Fee Type: <span className="font-medium text-gray-900">{selectedReceiptFee?.feeType || '-'}</span></p>
+            <p className="text-sm text-gray-600">Overdue Penalty: <span className="font-medium text-red-600">{formatCurrency(selectedReceiptFee?.overduePenalty || 0)}</span></p>
             <p className="text-sm text-gray-600">Total Paid: <span className="font-medium text-gray-900">{formatCurrency(selectedReceiptFee?.paidAmount || 0)}</span></p>
             <p className="text-sm text-gray-600">Pending: <span className="font-medium text-red-600">{formatCurrency(selectedReceiptFee?.pendingAmount || 0)}</span></p>
           </div>

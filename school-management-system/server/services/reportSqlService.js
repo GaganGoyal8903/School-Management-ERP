@@ -126,6 +126,9 @@ const createRestrictedDashboardReport = ({ role = null } = {}) => ({
     totalPaid: 0,
     totalPending: 0,
     overdueCount: 0,
+    overdueAmount: 0,
+    overduePenaltyAmount: 0,
+    penaltyPerDay: 10,
   },
   todayAttendance: {
     totalStudents: 0,
@@ -956,6 +959,9 @@ const getDashboardReport = async ({ role = null, userId = null } = {}) => {
     totalPaid: toNumber(feeStats.totalPaid),
     totalPending: toNumber(feeStats.totalPending),
     overdueCount: toNumber(feeStats.overdueCount),
+    overdueAmount: toNumber(feeStats.overdueAmount),
+    overduePenaltyAmount: toNumber(feeStats.overduePenaltyAmount),
+    penaltyPerDay: toNumber(feeStats.penaltyPerDay, 10),
   };
   const attendanceSummary = attendanceSnapshot.attendanceSummary;
   const activeBusCount = getStatusCount(busStats.byStatus, 'Active');
@@ -1223,6 +1229,9 @@ const getFeeReportData = async ({ academicYear = null } = {}) => {
       totalPaid: toNumber(stats.totalPaid),
       totalPending: toNumber(stats.totalPending),
       overdueCount: toNumber(stats.overdueCount),
+      overdueAmount: toNumber(stats.overdueAmount),
+      overduePenaltyAmount: toNumber(stats.overduePenaltyAmount),
+      penaltyPerDay: toNumber(stats.penaltyPerDay, 10),
     },
   };
 };

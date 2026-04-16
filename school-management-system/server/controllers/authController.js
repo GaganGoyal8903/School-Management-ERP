@@ -51,9 +51,18 @@ const CREDENTIAL_MAX_FAILURES = Number(process.env.CREDENTIAL_MAX_FAILURES || 8)
 const CREDENTIAL_WINDOW_MS = Number(process.env.CREDENTIAL_WINDOW_MS || 15 * 60 * 1000);
 const CREDENTIAL_BLOCK_MS = Number(process.env.CREDENTIAL_BLOCK_MS || 15 * 60 * 1000);
 
-const isDevelopmentOtpFallbackEnabled = () =>
-  process.env.NODE_ENV !== 'production' &&
-  String(process.env.ALLOW_DEV_OTP_FALLBACK || 'false').trim().toLowerCase() === 'true';
+const isDevelopmentOtpFallbackEnabled = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  const configuredValue = String(process.env.ALLOW_DEV_OTP_FALLBACK || '').trim().toLowerCase();
+  if (!configuredValue) {
+    return true;
+  }
+
+  return configuredValue === 'true';
+};
 
 const resolveOtpEmailErrorMessage = (error) => {
   const rawMessage = String(error?.message || '').toLowerCase();

@@ -81,7 +81,10 @@ const defaultFeeStats = {
   totalFees: 0,
   totalPaid: 0,
   totalPending: 0,
-  overdueCount: 0
+  overdueCount: 0,
+  overdueAmount: 0,
+  overduePenaltyAmount: 0,
+  penaltyPerDay: 10,
 };
 
 const defaultBusStats = {
@@ -226,7 +229,10 @@ const Dashboard = () => {
         totalFees: Number(feeSummary.totalFees || statsData.totalFees || 0),
         totalPaid: Number(feeSummary.totalPaid || statsData.totalFeesCollected || dashboardData.totalFeesCollected || 0),
         totalPending: Number(feeSummary.totalPending || statsData.pendingFees || dashboardData.pendingFees || 0),
-        overdueCount: Number(feeSummary.overdueCount || 0)
+        overdueCount: Number(feeSummary.overdueCount || 0),
+        overdueAmount: Number(feeSummary.overdueAmount || 0),
+        overduePenaltyAmount: Number(feeSummary.overduePenaltyAmount || 0),
+        penaltyPerDay: Number(feeSummary.penaltyPerDay || 10),
       });
 
       setBusStats({
@@ -458,7 +464,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-6">
         {isAdmin && (
           <>
             <StatCard title="Total Students" value={stats.students} icon={Users} color="blue" trend={5} />
@@ -475,6 +481,13 @@ const Dashboard = () => {
               value={formatCompactCurrency(feeStats.totalPending)}
               icon={AlertCircle}
               color="yellow"
+            />
+            <StatCard
+              title="Overdue Fees"
+              value={formatCompactCurrency(feeStats.overdueAmount)}
+              icon={TrendingUp}
+              color="red"
+              hint={`${Number(feeStats.overdueCount || 0)} accounts • ${formatCompactCurrency(feeStats.overduePenaltyAmount)} penalty`}
             />
           </>
         )}
@@ -499,10 +512,11 @@ const Dashboard = () => {
             <StatCard title="Collected" value={formatCompactCurrency(feeStats.totalPaid)} icon={CheckCircle} color="green" />
             <StatCard title="Pending" value={formatCompactCurrency(feeStats.totalPending)} icon={AlertCircle} color="yellow" />
             <StatCard
-              title="Overdue Accounts"
-              value={Number(feeStats.overdueCount || 0)}
+              title="Overdue Fees"
+              value={formatCompactCurrency(feeStats.overdueAmount)}
               icon={TrendingUp}
-              color="purple"
+              color="red"
+              hint={`${Number(feeStats.overdueCount || 0)} accounts • ${formatCompactCurrency(feeStats.overduePenaltyAmount)} penalty`}
             />
           </>
         )}
@@ -579,9 +593,12 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4">
                 <div>
-                  <p className="text-sm text-slate-600">Overdue Accounts</p>
+                  <p className="text-sm text-slate-600">Overdue Fees</p>
                   <p className="text-2xl font-semibold text-slate-900">
-                    {Number(feeStats.overdueCount || 0)}
+                    {formatCurrency(feeStats.overdueAmount)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {Number(feeStats.overdueCount || 0)} accounts with {formatCurrency(feeStats.overduePenaltyAmount)} penalty
                   </p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-slate-600" />
