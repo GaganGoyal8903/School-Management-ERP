@@ -26,9 +26,10 @@ const createFeeValidationError = (message) => {
   return error;
 };
 
-const VALID_FEE_STATUSES = new Set(['Pending', 'Partial', 'Paid', 'Overdue', 'Exempted']);
 const VALID_FEE_TYPES = new Set(['Tuition', 'Transport', 'Hostel', 'Books', 'Uniform', 'Examination', 'Other']);
 const VALID_PAYMENT_MODES = new Set(['Cash', 'Online', 'Cheque', 'DD', 'Bank Transfer', 'UPI']);
+const OVERDUE_PENALTY_PER_DAY = 10;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const toNullableString = (value) => {
   if (value === undefined || value === null) {
@@ -78,36 +79,109 @@ const normalizeDateTime = (value) => {
   return date;
 };
 
+const getDayDifference = (laterDate, earlierDate) => {
+  const normalizedLaterDate = normalizeDateOnly(laterDate);
+  const normalizedEarlierDate = normalizeDateOnly(earlierDate);
+
+  if (!normalizedLaterDate || !normalizedEarlierDate || normalizedLaterDate <= normalizedEarlierDate) {
+    return 0;
+  }
+
+  return Math.floor((normalizedLaterDate.getTime() - normalizedEarlierDate.getTime()) / MS_PER_DAY);
+};
+
+const computePenaltyAtDate = (dueDate, referenceDate) => {
+  const overdueDays = getDayDifference(referenceDate, dueDate);
+  const overduePenalty = Number((overdueDays * OVERDUE_PENALTY_PER_DAY).toFixed(2));
+
+  return {
+    overdueDays,
+    overduePenalty,
+  };
+};
+
+const computeFeeSnapshot = ({
+  amount = 0,
+  lateFee = 0,
+  discount = 0,
+  paidAmount = 0,
+  dueDate = null,
+  paymentDate = null,
+  status = null,
+} = {}, referenceDate = new Date()) => {
+  const baseAmount = toDecimal(amount);
+  const baseLateFee = toDecimal(lateFee);
+  const discountAmount = toDecimal(discount);
+  const settledAmount = toDecimal(paidAmount);
+
+  if (status === 'Exempted') {
+    return {
+      baseLateFee,
+      overdueDays: 0,
+      overduePenalty: 0,
+      totalLateFee: baseLateFee,
+      totalPayable: 0,
+      pendingAmount: 0,
+      status: 'Exempted',
+      isOverdue: false,
+    };
+  }
+
+  const penaltyToday = computePenaltyAtDate(dueDate, referenceDate);
+  const penaltyAtLastPayment = computePenaltyAtDate(dueDate, paymentDate);
+  const totalDueAtLastPayment = Number(
+    Math.max(baseAmount + baseLateFee + penaltyAtLastPayment.overduePenalty - discountAmount, 0).toFixed(2)
+  );
+  const settledAtLastPayment = Boolean(normalizeDateOnly(paymentDate)) && settledAmount >= totalDueAtLastPayment;
+  const effectivePenalty = settledAtLastPayment ? penaltyAtLastPayment : penaltyToday;
+  const totalLateFee = Number((baseLateFee + effectivePenalty.overduePenalty).toFixed(2));
+  const totalPayable = Number(Math.max(baseAmount + totalLateFee - discountAmount, 0).toFixed(2));
+  const pendingAmount = Number(Math.max(totalPayable - settledAmount, 0).toFixed(2));
+  const isOverdue = pendingAmount > 0 && getDayDifference(referenceDate, dueDate) > 0;
+
+  return {
+    baseLateFee,
+    overdueDays: effectivePenalty.overdueDays,
+    overduePenalty: effectivePenalty.overduePenalty,
+    totalLateFee,
+    totalPayable,
+    pendingAmount,
+    status: pendingAmount <= 0
+      ? 'Paid'
+      : isOverdue
+      ? 'Overdue'
+      : settledAmount > 0
+      ? 'Partial'
+      : 'Pending',
+    isOverdue,
+  };
+};
+
+const getFeeSnapshotFromRow = (row) => computeFeeSnapshot({
+  amount: row?.TotalAmount ?? row?.Amount,
+  lateFee: row?.FineAmount ?? row?.LateFee,
+  discount: row?.DiscountAmount ?? row?.Discount,
+  paidAmount: row?.PaidAmount,
+  dueDate: row?.DueDate,
+  paymentDate: row?.PaymentDate,
+  status: row?.Status,
+});
+
 const createReceiptNumber = () =>
   `RCPT-${Date.now()}-${Math.floor(Math.random() * 100000)
     .toString()
     .padStart(5, '0')}`;
 
-const computePendingAmount = ({ amount = 0, lateFee = 0, discount = 0, paidAmount = 0 }) =>
-  Number(Math.max(toDecimal(amount) + toDecimal(lateFee) - toDecimal(discount) - toDecimal(paidAmount), 0).toFixed(2));
-
-const resolveFeeStatus = ({ amount = 0, lateFee = 0, discount = 0, paidAmount = 0, status = null }) => {
-  if (status === 'Exempted') {
-    return 'Exempted';
-  }
-
-  const grossAmount = toDecimal(amount) + toDecimal(lateFee) - toDecimal(discount);
-  const effectivePaidAmount = toDecimal(paidAmount);
-
-  if (grossAmount <= 0 || effectivePaidAmount >= grossAmount) {
-    return 'Paid';
-  }
-
-  if (effectivePaidAmount > 0) {
-    return 'Partial';
-  }
-
-  if (VALID_FEE_STATUSES.has(status)) {
-    return status;
-  }
-
-  return 'Pending';
-};
+const resolveFeeStatus = ({ amount = 0, lateFee = 0, discount = 0, paidAmount = 0, dueDate = null, paymentDate = null, status = null }) =>
+  computeFeeSnapshot({
+    amount,
+    lateFee,
+    discount,
+    paidAmount,
+    dueDate,
+    paymentDate,
+    status,
+  }).status;
 
 const escapeSqlLiteral = (value = '') => String(value).replace(/'/g, "''");
 
@@ -136,6 +210,8 @@ const toSqlFeePayload = (feeDocument, overrides = {}) => {
       lateFee,
       discount,
       paidAmount,
+      dueDate: overrides.dueDate ?? fee?.dueDate,
+      paymentDate: overrides.paymentDate ?? fee?.paymentDate,
       status: overrides.status ?? fee?.status,
     }),
     paymentMode: paymentMode && VALID_PAYMENT_MODES.has(paymentMode) ? paymentMode : null,
@@ -185,19 +261,9 @@ const mapFeeRow = (row, payments = []) => {
   const feeId = row.StudentFeeId ?? row.MongoFeeId ?? null;
   const studentId = row.StudentId ?? row.MongoStudentId ?? null;
   const amount = toDecimal(row.TotalAmount ?? row.Amount);
-  const lateFee = toDecimal(row.FineAmount ?? row.LateFee);
+  const snapshot = getFeeSnapshotFromRow(row);
   const discount = toDecimal(row.DiscountAmount ?? row.Discount);
   const paidAmount = toDecimal(row.PaidAmount);
-  const pendingAmount = toDecimal(
-    row.BalanceAmount !== undefined
-      ? row.BalanceAmount
-      : computePendingAmount({
-          amount,
-          lateFee,
-          discount,
-          paidAmount,
-        })
-  );
   const receiptNumber = row.ReceiptNumber
     || mappedPayments[0]?.receiptNumber
     || (feeId !== null && feeId !== undefined ? `FEE-${feeId}` : null);
@@ -224,13 +290,20 @@ const mapFeeRow = (row, payments = []) => {
     amount,
     paidAmount,
     dueDate: row.DueDate ? new Date(row.DueDate) : null,
-    status: row.Status,
+    status: snapshot.status,
     paymentMode: row.PaymentMode || null,
     paymentDate: row.PaymentDate ? new Date(row.PaymentDate) : null,
     receiptNumber,
     transactionId: row.TransactionReference || row.TransactionId || null,
     payments: mappedPayments,
-    lateFee,
+    lateFee: snapshot.baseLateFee,
+    baseLateFee: snapshot.baseLateFee,
+    overdueDays: snapshot.overdueDays,
+    overduePenalty: snapshot.overduePenalty,
+    totalLateFee: snapshot.totalLateFee,
+    totalPayable: snapshot.totalPayable,
+    penaltyPerDay: OVERDUE_PENALTY_PER_DAY,
+    isOverdue: snapshot.isOverdue,
     discount,
     discountReason: row.DiscountReason || null,
     remarks: row.Remarks || null,
@@ -242,7 +315,7 @@ const mapFeeRow = (row, payments = []) => {
       : row.CreatedByMongoUserId || null,
     createdAt: row.CreatedAt ? new Date(row.CreatedAt) : null,
     updatedAt: row.UpdatedAt ? new Date(row.UpdatedAt) : null,
-    pendingAmount,
+    pendingAmount: snapshot.pendingAmount,
   };
 };
 
@@ -1517,7 +1590,6 @@ const getFeeList = async ({
   await ensureFeeSqlReady();
   await syncAllFeesToSql();
 
-  const sql = getSqlClient();
   const includeReceipts = await hasFeeReceiptStore();
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 10;
@@ -1525,23 +1597,21 @@ const getFeeList = async ({
   const filter = buildFeeReadFilters({
     search,
     className,
-    status,
     studentId,
     academicYear,
   });
   const result = await executeQuery(`
-    ${buildFeeBaseSelect({ includeTotalCount: true })}
+    ${buildFeeBaseSelect()}
     ${filter.whereClause}
-    ORDER BY sf.DueDate DESC, sf.StudentFeeId DESC
-    OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;
-  `, [
-    ...filter.params,
-    { name: 'Offset', type: sql.Int, value: offset },
-    { name: 'Limit', type: sql.Int, value: safeLimit },
-  ]);
+    ORDER BY sf.DueDate DESC, sf.StudentFeeId DESC;
+  `, filter.params);
 
-  const rows = result?.recordset || [];
-  const total = rows.length ? Number(rows[0].TotalCount || 0) : 0;
+  const allRows = result?.recordset || [];
+  const filteredRows = status
+    ? allRows.filter((row) => getFeeSnapshotFromRow(row).status === status)
+    : allRows;
+  const rows = filteredRows.slice(offset, offset + safeLimit);
+  const total = filteredRows.length;
   const paymentRows = await getPaymentRowsForFeeIds(
     rows.map((row) => row.StudentFeeId),
     { includeReceipts }
@@ -1780,6 +1850,8 @@ const buildCreateOrUpdatePayload = async (input, { createdByUserId = null, exist
     lateFee,
     discount,
     paidAmount,
+    dueDate,
+    paymentDate: existingFee?.paymentDate ?? null,
     status: input.status ?? existingFee?.status ?? 'Pending',
   });
 
@@ -1930,9 +2002,22 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
 
   await executeInTransaction(async (tx) => {
     const currentFee = await tx.query(
-      `SELECT TotalAmount, DiscountAmount, FineAmount, PaidAmount
-       FROM dbo.StudentFees
-       WHERE StudentFeeId = @StudentFeeId`,
+      `SELECT
+         sf.TotalAmount,
+         sf.DiscountAmount,
+         sf.FineAmount,
+         sf.PaidAmount,
+         sf.DueDate,
+         sf.Status,
+         latestPayment.PaymentDate
+       FROM dbo.StudentFees sf
+       OUTER APPLY (
+         SELECT TOP 1 p.PaymentDate
+         FROM dbo.FeePayments p
+         WHERE p.StudentFeeId = sf.StudentFeeId
+         ORDER BY p.PaymentDate DESC, p.FeePaymentId DESC
+       ) latestPayment
+       WHERE sf.StudentFeeId = @StudentFeeId`,
       [{ name: 'StudentFeeId', type: sql.Int, value: feeSqlId }]
     );
 
@@ -1945,12 +2030,15 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
     const discountAmount = toDecimal(feeRow.DiscountAmount);
     const fineAmount = toDecimal(feeRow.FineAmount);
     const currentPaidAmount = toDecimal(feeRow.PaidAmount);
-    const pendingAmount = computePendingAmount({
+    const pendingAmount = computeFeeSnapshot({
       amount: totalAmount,
       lateFee: fineAmount,
       discount: discountAmount,
       paidAmount: currentPaidAmount,
-    });
+      dueDate: feeRow.DueDate,
+      paymentDate: feeRow.PaymentDate,
+      status: feeRow.Status,
+    }).pendingAmount;
 
     if (pendingAmount <= 0) {
       paymentResultCode = 'already_paid';
@@ -1970,6 +2058,9 @@ const collectFeePaymentRecord = async (feeId, paymentInput) => {
       lateFee: fineAmount,
       discount: discountAmount,
       paidAmount: nextPaidAmount,
+      dueDate: feeRow.DueDate,
+      paymentDate: new Date(),
+      status: feeRow.Status,
     });
 
     const insertedPayment = await tx.query(
@@ -2097,53 +2188,10 @@ const getFeeStatistics = async ({ academicYear = null } = {}) => {
     params.push({ name: 'AcademicYear', type: sql.NVarChar(20), value: toNullableString(academicYear) });
   }
   const whereClause = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const summaryResult = await executeQuery(`
-    SELECT
-      SUM(sf.TotalAmount) AS TotalFees,
-      SUM(sf.PaidAmount) AS CollectedFees,
-      SUM(sf.BalanceAmount) AS PendingFees,
-      SUM(CASE WHEN sf.Status = N'Overdue' THEN 1 ELSE 0 END) AS OverdueCount
-    FROM dbo.StudentFees sf
-    LEFT JOIN dbo.FeeStructures fs
-      ON fs.FeeStructureId = sf.FeeStructureId
-    LEFT JOIN dbo.AcademicYears ay
-      ON ay.AcademicYearId = fs.AcademicYearId
-    ${whereClause};
-  `, params);
-  const byStatusResult = await executeQuery(`
-    SELECT
-      sf.Status AS status,
-      COUNT(1) AS count
-    FROM dbo.StudentFees sf
-    LEFT JOIN dbo.FeeStructures fs
-      ON fs.FeeStructureId = sf.FeeStructureId
-    LEFT JOIN dbo.AcademicYears ay
-      ON ay.AcademicYearId = fs.AcademicYearId
+  const feeResult = await executeQuery(`
+    ${buildFeeBaseSelect()}
     ${whereClause}
-    GROUP BY sf.Status
-    ORDER BY sf.Status;
-  `, params);
-  const dueReportResult = await executeQuery(`
-    SELECT
-      c.ClassName AS className,
-      fs.FeeType AS feeType,
-      COUNT(1) AS recordCount,
-      SUM(CASE WHEN sf.BalanceAmount > 0 THEN 1 ELSE 0 END) AS dueCount,
-      SUM(CASE WHEN sf.Status = N'Overdue' THEN 1 ELSE 0 END) AS overdueCount,
-      SUM(CASE WHEN sf.BalanceAmount > 0 THEN sf.BalanceAmount ELSE 0 END) AS dueAmount,
-      SUM(CASE WHEN sf.Status = N'Overdue' THEN sf.BalanceAmount ELSE 0 END) AS overdueAmount
-    FROM dbo.StudentFees sf
-    INNER JOIN dbo.Students st
-      ON st.StudentId = sf.StudentId
-    LEFT JOIN dbo.Classes c
-      ON c.ClassId = st.ClassId
-    LEFT JOIN dbo.FeeStructures fs
-      ON fs.FeeStructureId = sf.FeeStructureId
-    LEFT JOIN dbo.AcademicYears ay
-      ON ay.AcademicYearId = fs.AcademicYearId
-    ${whereClause}
-    GROUP BY c.ClassName, fs.FeeType
-    ORDER BY c.ClassName, fs.FeeType;
+    ORDER BY sf.DueDate DESC, sf.StudentFeeId DESC;
   `, params);
   const collectionReportResult = await executeQuery(`
     SELECT
@@ -2180,29 +2228,101 @@ const getFeeStatistics = async ({ academicYear = null } = {}) => {
     ORDER BY fs.FeeStructureId DESC;
   `, params);
 
-  const summary = summaryResult?.recordset?.[0] || {};
-  const byStatus = byStatusResult?.recordset || [];
-  const dueReport = dueReportResult?.recordset || [];
+  const feeRows = feeResult?.recordset || [];
   const collectionReport = collectionReportResult?.recordset || [];
   const feeStructures = (structureResult?.recordset || []).map(mapFeeStructureRow);
+  const summary = {
+    totalFees: 0,
+    collectedFees: 0,
+    pendingFees: 0,
+    overdueCount: 0,
+    overdueAmount: 0,
+    overduePenaltyAmount: 0,
+  };
+  const byStatusMap = new Map();
+  const dueReportMap = new Map();
+
+  feeRows.forEach((row) => {
+    const snapshot = getFeeSnapshotFromRow(row);
+    const amount = toDecimal(row.TotalAmount ?? row.Amount);
+    const paidAmount = toDecimal(row.PaidAmount);
+    const className = row.ClassName || 'Unassigned';
+    const feeType = row.FeeType || 'Other';
+    const statusKey = snapshot.status || 'Pending';
+    const dueKey = `${className}::${feeType}`;
+
+    summary.totalFees = toDecimal(summary.totalFees + amount);
+    summary.collectedFees = toDecimal(summary.collectedFees + paidAmount);
+    summary.pendingFees = toDecimal(summary.pendingFees + snapshot.pendingAmount);
+
+    if (snapshot.status === 'Overdue') {
+      summary.overdueCount += 1;
+      summary.overdueAmount = toDecimal(summary.overdueAmount + snapshot.pendingAmount);
+      summary.overduePenaltyAmount = toDecimal(summary.overduePenaltyAmount + snapshot.overduePenalty);
+    }
+
+    if (!byStatusMap.has(statusKey)) {
+      byStatusMap.set(statusKey, {
+        _id: statusKey,
+        status: statusKey,
+        count: 0,
+        total: 0,
+        paid: 0,
+        pending: 0,
+      });
+    }
+
+    const statusEntry = byStatusMap.get(statusKey);
+    statusEntry.count += 1;
+    statusEntry.total = toDecimal(statusEntry.total + amount);
+    statusEntry.paid = toDecimal(statusEntry.paid + paidAmount);
+    statusEntry.pending = toDecimal(statusEntry.pending + snapshot.pendingAmount);
+
+    if (!dueReportMap.has(dueKey)) {
+      dueReportMap.set(dueKey, {
+        className,
+        feeType,
+        recordCount: 0,
+        dueCount: 0,
+        overdueCount: 0,
+        dueAmount: 0,
+        overdueAmount: 0,
+        overduePenaltyAmount: 0,
+      });
+    }
+
+    const dueEntry = dueReportMap.get(dueKey);
+    dueEntry.recordCount += 1;
+
+    if (snapshot.pendingAmount > 0) {
+      dueEntry.dueCount += 1;
+      dueEntry.dueAmount = toDecimal(dueEntry.dueAmount + snapshot.pendingAmount);
+    }
+
+    if (snapshot.status === 'Overdue') {
+      dueEntry.overdueCount += 1;
+      dueEntry.overdueAmount = toDecimal(dueEntry.overdueAmount + snapshot.pendingAmount);
+      dueEntry.overduePenaltyAmount = toDecimal(dueEntry.overduePenaltyAmount + snapshot.overduePenalty);
+    }
+  });
+
+  const byStatus = Array.from(byStatusMap.values()).sort((left, right) => left.status.localeCompare(right.status));
+  const dueReport = Array.from(dueReportMap.values()).sort((left, right) =>
+    left.className.localeCompare(right.className) || left.feeType.localeCompare(right.feeType)
+  );
 
   return {
-    totalFees: toDecimal(summary.TotalFees),
-    collectedFees: toDecimal(summary.CollectedFees),
-    pendingFees: toDecimal(summary.PendingFees),
-    totalPaid: toDecimal(summary.CollectedFees),
-    totalPending: toDecimal(summary.PendingFees),
-    overdueCount: Number(summary.OverdueCount || 0),
+    totalFees: toDecimal(summary.totalFees),
+    collectedFees: toDecimal(summary.collectedFees),
+    pendingFees: toDecimal(summary.pendingFees),
+    totalPaid: toDecimal(summary.collectedFees),
+    totalPending: toDecimal(summary.pendingFees),
+    overdueCount: Number(summary.overdueCount || 0),
+    overdueAmount: toDecimal(summary.overdueAmount),
+    overduePenaltyAmount: toDecimal(summary.overduePenaltyAmount),
+    penaltyPerDay: OVERDUE_PENALTY_PER_DAY,
     byStatus,
-    dueReport: dueReport.map((row) => ({
-      className: row.className,
-      feeType: row.feeType,
-      recordCount: Number(row.recordCount || 0),
-      dueCount: Number(row.dueCount || 0),
-      overdueCount: Number(row.overdueCount || 0),
-      dueAmount: toDecimal(row.dueAmount),
-      overdueAmount: toDecimal(row.overdueAmount),
-    })),
+    dueReport,
     collectionReport: collectionReport.map((row) => ({
       collectionDate: row.collectionDate,
       paymentMode: row.paymentMode,
