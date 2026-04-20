@@ -1576,6 +1576,7 @@ const getStudents = asyncHandler(async (req, res) => {
     classId,
     section,
     sectionId,
+    isActive,
     sortBy = 'createdAt',
     sortOrder = 'desc',
   } = req.query;
@@ -1588,6 +1589,7 @@ const getStudents = asyncHandler(async (req, res) => {
     sectionName: section,
     classId,
     sectionId,
+    isActive: parseBooleanInput(isActive),
     sortBy,
     sortOrder,
   });
@@ -1604,6 +1606,7 @@ const getStudents = asyncHandler(async (req, res) => {
       classId: classId || null,
       section: section || null,
       sectionId: sectionId || null,
+      isActive: isActive ?? null,
     });
   }
 

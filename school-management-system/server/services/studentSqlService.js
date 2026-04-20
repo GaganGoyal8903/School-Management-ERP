@@ -914,7 +914,7 @@ const REAL_STUDENT_BASE_SELECT = `
     AY.YearName
   FROM dbo.Students S
   LEFT JOIN dbo.Classes C ON S.ClassId = C.ClassId
-  LEFT JOIN dbo.Sections SEC ON S.SectionId = SEC.SectionId
+  LEFT JOIN dbo.Sections SEC ON S.SectionId = SEC.SectionId AND SEC.ClassId = S.ClassId
   LEFT JOIN dbo.AcademicYears AY ON S.AcademicYearId = AY.AcademicYearId
 `;
 
@@ -1275,6 +1275,7 @@ const filterRealStudents = (
     sectionName = null,
     classId = null,
     sectionId = null,
+    isActive = undefined,
   }
 ) => {
   const normalizedSearch = toNullableString(search)?.toLowerCase() || null;
@@ -1282,8 +1283,14 @@ const filterRealStudents = (
   const normalizedSection = toNullableString(sectionName);
   const normalizedClassId = normalizeStudentNumericId(classId);
   const normalizedSectionId = normalizeStudentNumericId(sectionId);
+  const shouldFilterByActive = isActive !== undefined;
+  const normalizedIsActive = shouldFilterByActive ? Boolean(isActive) : null;
 
   return students.filter((student) => {
+    if (shouldFilterByActive && Boolean(student?.isActive !== false) !== normalizedIsActive) {
+      return false;
+    }
+
     if (
       normalizedClassId
       && normalizeStudentNumericId(student.classDbId) !== normalizedClassId
@@ -1874,6 +1881,7 @@ const getStudentList = async ({
   sectionName = null,
   classId = null,
   sectionId = null,
+  isActive = undefined,
   sortBy = 'createdAt',
   sortOrder = 'desc',
 }) => {
@@ -1899,6 +1907,7 @@ const getStudentList = async ({
     sectionName,
     classId,
     sectionId,
+    isActive,
   });
   const sortedStudents = sortRealStudents(filteredStudents, sortBy, sortOrder);
   const total = sortedStudents.length;

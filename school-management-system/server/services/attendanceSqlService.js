@@ -327,6 +327,7 @@ const buildAttendanceBaseSelect = ({ includeTotalCount = false } = {}) => `
     ON c.ClassId = sa.ClassId
   LEFT JOIN dbo.Sections sec
     ON sec.SectionId = sa.SectionId
+   AND sec.ClassId = sa.ClassId
   LEFT JOIN dbo.Teachers t
     ON t.TeacherId = sa.MarkedByTeacherId
   LEFT JOIN dbo.Users markerUser
@@ -1105,8 +1106,7 @@ const resolveSectionContext = async ({ classId, sectionId = null, sectionName = 
   const sql = getSqlClient();
   const runner = tx?.query || executeQuery;
 
-  // First try to find existing section
-  let sectionResult = await runner(
+  const findSectionInClass = async (targetSectionId = null, targetSectionName = null) => runner(
     `SELECT TOP 1
        SectionId,
        SectionName
@@ -1115,27 +1115,47 @@ const resolveSectionContext = async ({ classId, sectionId = null, sectionName = 
        AND ISNULL(IsActive, 1) = 1
        AND (
          (@SectionId IS NOT NULL AND SectionId = @SectionId)
-         OR (@SectionId IS NULL AND @SectionName IS NOT NULL AND SectionName = @SectionName)
+         OR (@SectionName IS NOT NULL AND SectionName = @SectionName)
        )
-     ORDER BY SectionId DESC;`,
+     ORDER BY
+       CASE WHEN @SectionId IS NOT NULL AND SectionId = @SectionId THEN 0 ELSE 1 END,
+       SectionId DESC;`,
     [
       { name: 'ClassId', type: sql.Int, value: normalizedClassId },
-      { name: 'SectionId', type: sql.Int, value: normalizedSectionId },
-      { name: 'SectionName', type: sql.NVarChar(50), value: normalizedSectionName },
+      { name: 'SectionId', type: sql.Int, value: targetSectionId },
+      { name: 'SectionName', type: sql.NVarChar(50), value: targetSectionName },
     ]
   );
 
-  let row = sectionResult?.recordset?.[0] || null;
-  
-  // Auto-create missing section
-  if (!row && normalizedSectionName) {
+  // Prefer an exact class-scoped SectionId match, but if the UI submits a stale or cross-class
+  // SectionId, fall back to the section name for the selected class before creating anything new.
+  let row = (await findSectionInClass(normalizedSectionId, normalizedSectionName))?.recordset?.[0] || null;
+  let effectiveSectionName = normalizedSectionName;
+
+  if (!row && normalizedSectionId && !effectiveSectionName) {
+    const sectionByIdResult = await runner(
+      `SELECT TOP 1 SectionName
+       FROM dbo.Sections
+       WHERE SectionId = @SectionId
+       ORDER BY SectionId DESC;`,
+      [{ name: 'SectionId', type: sql.Int, value: normalizedSectionId }]
+    );
+
+    effectiveSectionName = toNullableString(sectionByIdResult?.recordset?.[0]?.SectionName);
+    if (effectiveSectionName) {
+      row = (await findSectionInClass(null, effectiveSectionName))?.recordset?.[0] || null;
+    }
+  }
+
+  // Auto-create the class-scoped section only when we know its intended name.
+  if (!row && effectiveSectionName) {
     const insertResult = await runner(
       `INSERT INTO dbo.Sections (ClassId, SectionName, IsActive, CreatedAt)
        OUTPUT INSERTED.SectionId, INSERTED.SectionName
        VALUES (@ClassId, @SectionName, 1, SYSUTCDATETIME());`,
       [
         { name: 'ClassId', type: sql.Int, value: normalizedClassId },
-        { name: 'SectionName', type: sql.NVarChar(50), value: normalizedSectionName },
+        { name: 'SectionName', type: sql.NVarChar(50), value: effectiveSectionName },
       ]
     );
     row = insertResult?.recordset?.[0] || null;
@@ -1144,13 +1164,13 @@ const resolveSectionContext = async ({ classId, sectionId = null, sectionName = 
   if (!row) {
     return {
       sectionId: null,
-      sectionName: normalizedSectionName || '',
+      sectionName: effectiveSectionName || '',
     };
   }
 
   return {
     sectionId: parseNumericId(row.SectionId),
-    sectionName: toNullableString(row.SectionName) || normalizedSectionName,
+    sectionName: toNullableString(row.SectionName) || effectiveSectionName,
   };
 };
 
@@ -1211,6 +1231,7 @@ const loadAttendanceStudents = async (studentIds = [], tx = null) => {
        ON c.ClassId = s.ClassId
      LEFT JOIN dbo.Sections sec
        ON sec.SectionId = s.SectionId
+      AND sec.ClassId = s.ClassId
      WHERE s.StudentId IN (${idParams.placeholders});`,
     idParams.params
   );
@@ -2233,6 +2254,7 @@ const getClassAttendanceSummary = async ({ className = null, sectionName = null,
       ON c.ClassId = sa.ClassId
     LEFT JOIN dbo.Sections sec
       ON sec.SectionId = sa.SectionId
+     AND sec.ClassId = sa.ClassId
     ${filter.whereClause}
     GROUP BY sad.Status
     ORDER BY sad.Status;
@@ -2257,6 +2279,7 @@ const getClassAttendanceSummary = async ({ className = null, sectionName = null,
       ON c.ClassId = sa.ClassId
     LEFT JOIN dbo.Sections sec
       ON sec.SectionId = sa.SectionId
+     AND sec.ClassId = sa.ClassId
     ${filter.whereClause}
     GROUP BY sa.AttendanceDate
     ORDER BY sa.AttendanceDate DESC;
@@ -2283,6 +2306,7 @@ const getClassAttendanceSummary = async ({ className = null, sectionName = null,
       ON c.ClassId = sa.ClassId
     LEFT JOIN dbo.Sections sec
       ON sec.SectionId = sa.SectionId
+     AND sec.ClassId = sa.ClassId
     INNER JOIN dbo.Students s
       ON s.StudentId = sad.StudentId
     ${filter.whereClause}
