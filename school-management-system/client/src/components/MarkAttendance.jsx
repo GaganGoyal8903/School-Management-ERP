@@ -30,6 +30,15 @@ function todayIsoDate() {
   return `${year}-${month}-${day}`;
 }
 
+function isActiveStudent(student) {
+  if (!student) {
+    return false;
+  }
+
+  const status = String(student.status || "").trim().toLowerCase();
+  return student.isActive !== false && status !== "inactive";
+}
+
 export default function MarkAttendance() {
   const [sms_date, sms_setDate] = useState(todayIsoDate());
   const [sms_selectedGrade, sms_setSelectedGrade] = useState("");
@@ -50,8 +59,14 @@ export default function MarkAttendance() {
       sms_setStudentsLoading(true);
 
       try {
-        const response = await getStudents({ grade: sms_selectedGrade, section: sms_selectedSection });
-        const studentsData = response.data.students || [];
+        const response = await getStudents({
+          grade: sms_selectedGrade,
+          section: sms_selectedSection,
+          isActive: true,
+        });
+        const studentsData = Array.isArray(response.data.students)
+          ? response.data.students.filter(isActiveStudent)
+          : [];
         sms_setStudents(studentsData);
 
         const nextMap = {};
