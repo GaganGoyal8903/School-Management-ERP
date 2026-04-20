@@ -101,6 +101,9 @@ const normalizeRosterStudent = (student) => {
     return null;
   }
 
+  const status = String(student?.status || '').trim();
+  const isActive = student?.isActive !== false && status.toLowerCase() !== 'inactive';
+
   return {
     ...student,
     _id: studentId,
@@ -112,8 +115,12 @@ const normalizeRosterStudent = (student) => {
     classDbId: student?.classDbId ?? student?.classId ?? null,
     sectionDbId: student?.sectionDbId ?? student?.sectionId ?? null,
     academicYearId: student?.academicYearId ?? null,
+    isActive,
+    status: status || null,
   };
 };
+
+const isActiveRosterStudent = (student) => Boolean(student) && student.isActive !== false;
 
 const buildAttendanceMap = (records = []) => {
   const map = {};
@@ -262,6 +269,7 @@ const Attendance = () => {
             page: 1,
             limit: 1000,
             class: selectedGrade,
+            isActive: true,
             sortBy: 'rollNumber',
             sortOrder: 'asc',
           }),
@@ -273,7 +281,7 @@ const Attendance = () => {
         }
 
         const classStudents = Array.isArray(classStudentsResponse?.data?.students)
-          ? classStudentsResponse.data.students.map(normalizeRosterStudent).filter(Boolean)
+          ? classStudentsResponse.data.students.map(normalizeRosterStudent).filter(isActiveRosterStudent)
           : null;
         const subjectsData = Array.isArray(subjectsResponse?.data?.subjects)
           ? subjectsResponse.data.subjects
@@ -335,6 +343,7 @@ const Attendance = () => {
             class: selectedGrade,
             classId: resolvedClassId,
             sectionId: nextSection,
+            isActive: true,
             sortBy: 'rollNumber',
             sortOrder: 'asc',
           }),
@@ -357,7 +366,7 @@ const Attendance = () => {
         }
 
         const rosterStudents = Array.isArray(rosterResult.value?.data?.students)
-          ? rosterResult.value.data.students.map(normalizeRosterStudent).filter(Boolean)
+          ? rosterResult.value.data.students.map(normalizeRosterStudent).filter(isActiveRosterStudent)
           : null;
 
         if (!Array.isArray(rosterStudents)) {
