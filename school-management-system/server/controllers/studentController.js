@@ -219,10 +219,28 @@ const isStoredPasswordMatch = async (inputPassword, storedPassword) =>
 
 const mapFeeRecordForDetails = (fee, fallbackAcademicYear = null, referenceDate = new Date()) => {
   const amount = Number(fee?.amount || 0);
+  const discount = Number(fee?.discount || 0);
+  const baseLateFee = Number(fee?.baseLateFee ?? fee?.lateFee ?? 0);
   const paidAmount = Number(fee?.paidAmount || 0);
-  const pendingAmount = Number(fee?.pendingAmount ?? Math.max(amount - paidAmount, 0));
+  const basePayable = Math.max(amount + baseLateFee - discount, 0);
+  const hasExplicitTotalLateFee = fee?.totalLateFee !== undefined && fee?.totalLateFee !== null && fee?.totalLateFee !== '';
+  const inferredLegacyLateFee = !hasExplicitTotalLateFee && paidAmount > basePayable
+    ? Math.max(paidAmount + discount - amount, baseLateFee, 0)
+    : null;
+  const totalLateFee = Number(
+    hasExplicitTotalLateFee
+      ? fee.totalLateFee
+      : inferredLegacyLateFee ?? (baseLateFee + Number(fee?.overduePenalty || 0))
+  );
+  const overduePenalty = Number(
+    fee?.overduePenalty !== undefined && fee?.overduePenalty !== null && fee?.overduePenalty !== ''
+      ? fee.overduePenalty
+      : Math.max(totalLateFee - baseLateFee, 0)
+  );
+  const totalPayable = Number(fee?.totalPayable ?? Math.max(amount + totalLateFee - discount, 0));
+  const pendingAmount = Number(fee?.pendingAmount ?? Math.max(totalPayable - paidAmount, 0));
   const dueDate = fee?.dueDate || null;
-  const isOverdue = pendingAmount > 0 && dueDate && new Date(dueDate) < referenceDate;
+  const isOverdue = fee?.isOverdue === true || (pendingAmount > 0 && dueDate && new Date(dueDate) < referenceDate);
 
   return {
     id: fee?.id || fee?._id || null,
@@ -230,6 +248,11 @@ const mapFeeRecordForDetails = (fee, fallbackAcademicYear = null, referenceDate 
     academicYear: fee?.academicYear || fallbackAcademicYear || null,
     dueDate,
     amount,
+    discount,
+    baseLateFee,
+    overduePenalty,
+    totalLateFee,
+    totalPayable,
     paidAmount,
     pendingAmount,
     status: fee?.status || (pendingAmount > 0 ? 'Pending' : 'Paid'),
@@ -239,6 +262,8 @@ const mapFeeRecordForDetails = (fee, fallbackAcademicYear = null, referenceDate 
     receiptNumber: fee?.receiptNumber || null,
     transactionId: fee?.transactionId || null,
     remarks: fee?.remarks || null,
+    overdueDays: Number(fee?.overdueDays || 0),
+    penaltyPerDay: Number(fee?.penaltyPerDay || 10),
     payments: Array.isArray(fee?.payments) ? fee.payments : [],
     isOverdue,
   };
@@ -247,6 +272,8 @@ const mapFeeRecordForDetails = (fee, fallbackAcademicYear = null, referenceDate 
 const summarizeFeeRecords = (feeRecords = []) => feeRecords.reduce(
   (acc, record) => {
     acc.totalFees += Number(record.amount || 0);
+    acc.lateFeeAmount += Number(record.totalLateFee || 0);
+    acc.totalPayable += Number(record.totalPayable || 0);
     acc.paidAmount += Number(record.paidAmount || 0);
     acc.pendingAmount += Number(record.pendingAmount || 0);
     if (record.isOverdue) {
@@ -256,6 +283,8 @@ const summarizeFeeRecords = (feeRecords = []) => feeRecords.reduce(
   },
   {
     totalFees: 0,
+    lateFeeAmount: 0,
+    totalPayable: 0,
     paidAmount: 0,
     pendingAmount: 0,
     overdueCount: 0,
@@ -1106,6 +1135,8 @@ const buildStudentDetailsPayload = async (studentId) => {
     fees: {
       summary: {
         totalFees: Number(feeSummary.totalFees.toFixed(2)),
+        lateFeeAmount: Number(feeSummary.lateFeeAmount.toFixed(2)),
+        totalPayable: Number(feeSummary.totalPayable.toFixed(2)),
         paidAmount: Number(feeSummary.paidAmount.toFixed(2)),
         pendingAmount: Number(feeSummary.pendingAmount.toFixed(2)),
         overdueCount: feeSummary.overdueCount,
@@ -1250,6 +1281,8 @@ const buildMirrorStudentDetailsPayload = async (student) => {
     fees: {
       summary: {
         totalFees: 0,
+        lateFeeAmount: 0,
+        totalPayable: 0,
         paidAmount: 0,
         pendingAmount: 0,
         overdueCount: 0,
@@ -1346,6 +1379,8 @@ const buildProvisionalStudentDetailsPayload = (user) => {
     fees: {
       summary: {
         totalFees: 0,
+        lateFeeAmount: 0,
+        totalPayable: 0,
         paidAmount: 0,
         pendingAmount: 0,
         overdueCount: 0,

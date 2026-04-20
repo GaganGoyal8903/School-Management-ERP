@@ -40,6 +40,18 @@ const STUDENT_PAYMENT_PORTAL_ENABLED = String(
 
 const formatCurrency = (value = 0) => currencyFormatter.format(Number(value) || 0);
 
+const getFeeDueCharges = (fee = {}) =>
+  Number(fee?.totalLateFee ?? fee?.overduePenalty ?? fee?.baseLateFee ?? fee?.lateFee ?? 0);
+
+const getFeeTotalPayable = (fee = {}) => {
+  const baseAmount = Number(fee?.amount || 0);
+  const dueCharges = getFeeDueCharges(fee);
+  return Number(fee?.totalPayable ?? Math.max(baseAmount + dueCharges, 0));
+};
+
+const getFeeSummaryTotalPayable = (summary = {}) =>
+  Number(summary?.totalPayable ?? (Number(summary?.totalFees || 0) + Number(summary?.lateFeeAmount || 0)));
+
 const formatDate = (value) => {
   if (!value) {
     return "-";
@@ -273,7 +285,7 @@ export default function StudentPortal() {
     [timetable.records]
   );
   const feeCompletionPercentage = useMemo(() => {
-    const totalFees = Number(fees.summary?.totalFees || 0);
+    const totalFees = getFeeSummaryTotalPayable(fees.summary);
     const paidAmount = Number(fees.summary?.paidAmount || 0);
     if (totalFees <= 0) {
       return 0;
@@ -911,15 +923,20 @@ export default function StudentPortal() {
                           style={{
                             width: `${Math.max(
                               0,
-                              Math.min(100, ((Number(fee.paidAmount || 0) / Math.max(Number(fee.amount || 0), 1)) * 100))
+                              Math.min(100, ((Number(fee.paidAmount || 0) / Math.max(getFeeTotalPayable(fee), 1)) * 100))
                             )}%`,
                           }}
                         />
                       </div>
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                          Paid {formatCurrency(fee.paidAmount || 0)} of {formatCurrency(fee.amount || 0)}
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                            Paid {formatCurrency(fee.paidAmount || 0)} of {formatCurrency(getFeeTotalPayable(fee))}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Base {formatCurrency(fee.amount || 0)} • Due fee {formatCurrency(getFeeDueCharges(fee))}
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() => openPaymentModal(fee)}
@@ -1188,11 +1205,37 @@ export default function StudentPortal() {
 
   const feesContent = (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard icon={BadgeIndianRupee} label="Total Fees" value={formatCurrency(fees.summary?.totalFees || 0)} />
-        <StatCard icon={ShieldCheck} label="Paid" value={formatCurrency(fees.summary?.paidAmount || 0)} />
-        <StatCard icon={AlertCircle} label="Pending" value={formatCurrency(fees.summary?.pendingAmount || 0)} />
-        <StatCard icon={Clock3} label="Overdue" value={fees.summary?.overdueCount || 0} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard
+          icon={BadgeIndianRupee}
+          label="Base Fees"
+          value={formatCurrency(fees.summary?.totalFees || 0)}
+          subText="Original assigned fee amount"
+        />
+        <StatCard
+          icon={Clock3}
+          label="Due Fees"
+          value={formatCurrency(fees.summary?.lateFeeAmount || 0)}
+          subText="Late charges added after the due date"
+        />
+        <StatCard
+          icon={ShieldCheck}
+          label="Paid"
+          value={formatCurrency(fees.summary?.paidAmount || 0)}
+          subText={`Payable total ${formatCurrency(getFeeSummaryTotalPayable(fees.summary))}`}
+        />
+        <StatCard
+          icon={AlertCircle}
+          label="Pending"
+          value={formatCurrency(fees.summary?.pendingAmount || 0)}
+          subText="Current balance still to be paid"
+        />
+        <StatCard
+          icon={Clock3}
+          label="Overdue"
+          value={fees.summary?.overdueCount || 0}
+          subText="Fee items that are currently overdue"
+        />
       </div>
       {firstPayableFee ? (
         <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-900">
@@ -1212,14 +1255,20 @@ export default function StudentPortal() {
         </div>
       ) : null}
       <DetailsTable
-        headers={["Fee Type", "Due Date", "Amount", "Paid", "Pending", "Status", "Action"]}
+        headers={["Fee Type", "Due Date", "Base Fee", "Due Fee", "Paid", "Pending", "Status", "Action"]}
         emptyText="No fee records are available yet."
         rows={feeRecords.map((fee) => (
           <tr key={fee.id} className="border-t border-slate-100">
             <td className="px-4 py-3 font-medium text-slate-900">{fee.feeType || "-"}</td>
             <td className="px-4 py-3 text-slate-600">{formatDate(fee.dueDate)}</td>
             <td className="px-4 py-3 text-slate-600">{formatCurrency(fee.amount || 0)}</td>
-            <td className="px-4 py-3 text-slate-600">{formatCurrency(fee.paidAmount || 0)}</td>
+            <td className="px-4 py-3 text-slate-600">{formatCurrency(getFeeDueCharges(fee))}</td>
+            <td className="px-4 py-3 text-slate-600">
+              <div className="space-y-1">
+                <p>{formatCurrency(fee.paidAmount || 0)}</p>
+                <p className="text-xs text-slate-400">of {formatCurrency(getFeeTotalPayable(fee))} payable</p>
+              </div>
+            </td>
             <td className="px-4 py-3 text-slate-600">{formatCurrency(fee.pendingAmount || 0)}</td>
             <td className="px-4 py-3">
               <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(fee.status)}`}>
@@ -1582,6 +1631,10 @@ export default function StudentPortal() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
             <p><span className="text-slate-500">Fee Type:</span> <span className="font-medium text-slate-900">{selectedFee?.feeType || "-"}</span></p>
             <p className="mt-1"><span className="text-slate-500">Due Date:</span> <span className="font-medium text-slate-900">{formatDate(selectedFee?.dueDate)}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Base Fee:</span> <span className="font-medium text-slate-900">{formatCurrency(selectedFee?.amount || 0)}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Due Fee:</span> <span className="font-medium text-slate-900">{formatCurrency(getFeeDueCharges(selectedFee))}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Total Payable:</span> <span className="font-medium text-slate-900">{formatCurrency(getFeeTotalPayable(selectedFee))}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Paid:</span> <span className="font-medium text-slate-900">{formatCurrency(selectedFee?.paidAmount || 0)}</span></p>
             <p className="mt-1"><span className="text-slate-500">Pending:</span> <span className="font-medium text-slate-900">{formatCurrency(selectedFee?.pendingAmount || 0)}</span></p>
           </div>
 
