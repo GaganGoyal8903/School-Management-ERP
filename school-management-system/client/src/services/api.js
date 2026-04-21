@@ -17,6 +17,7 @@ const DASHBOARD_MUTATION_PATHS = [
   "/students",
   "/fees",
   "/buses",
+  "/leaves",
 ];
 
 // Attach token automatically
@@ -106,6 +107,11 @@ export const getAllStudents = () => API.get("/students/all");
 export const getStudentById = (id) => API.get(`/students/${id}`);
 export const getStudentDetailsById = (id) => API.get(`/students/${id}/details`);
 export const getMyStudentDetails = () => API.get("/students/me/details");
+export const createStudentLeaveRequest = (data) => API.post("/students/me/leave-requests", data);
+export const cancelStudentLeaveRequest = (leaveRequestId) => API.delete(`/students/me/leave-requests/${leaveRequestId}`);
+export const getPendingLeaveRequests = (params) => API.get("/leaves/pending", { params });
+export const getLeaveReviewHistory = (params) => API.get("/leaves/history", { params });
+export const reviewLeaveRequest = (id, data) => API.put(`/leaves/${id}/review`, data);
 export const getStudentPortalProfiles = (params) => API.get("/students/portal-profiles", { params });
 export const getStudentPortalProfileById = (id) => API.get(`/students/portal-profiles/${id}`);
 export const updateStudentPortalProfile = (id, data) => API.put(`/students/portal-profiles/${id}`, data);

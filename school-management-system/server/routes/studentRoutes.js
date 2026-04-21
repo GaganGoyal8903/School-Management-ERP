@@ -8,6 +8,8 @@ const {
   getAllStudents,
   getStudent, 
   getCurrentStudentDetails,
+  createCurrentStudentLeaveRequest,
+  cancelCurrentStudentLeaveRequest,
   getStudentPortalProfiles,
   getStudentPortalProfile,
   getStudentDetails,
@@ -72,6 +74,8 @@ router.get('/timetable/:studentId', authorize('admin', 'teacher', 'student'), as
 
 // Current logged-in student portal data
 router.get('/me/details', authorize('student'), getCurrentStudentDetails);
+router.post('/me/leave-requests', authorize('student'), createCurrentStudentLeaveRequest);
+router.delete('/me/leave-requests/:leaveRequestId', authorize('student'), cancelCurrentStudentLeaveRequest);
 
 // Admin-managed portal profiles for student logins missing full student records
 router.route('/portal-profiles')

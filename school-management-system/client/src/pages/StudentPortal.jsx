@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -8,8 +8,11 @@ import {
   CalendarDays,
   Clock3,
   Download,
+  FileText,
   GraduationCap,
   Mail,
+  MapPin,
+  Navigation,
   Phone,
   ShieldCheck,
   UserRound,
@@ -22,6 +25,8 @@ import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
 import {
   downloadFeePaymentReceipt,
+  cancelStudentLeaveRequest,
+  createStudentLeaveRequest,
   getMyStudentDetails,
   payStudentFee,
   startOnlineExamSession,
@@ -69,22 +74,158 @@ const formatDate = (value) => {
   });
 };
 
+const formatDateTime = (value) => {
+  if (!value) {
+    return "-";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const formatCoordinate = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(5) : "-";
+};
+
+const padMonthPart = (value) => String(value).padStart(2, "0");
+
+const getMonthKey = (value = new Date()) => {
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return `${parsedDate.getFullYear()}-${padMonthPart(parsedDate.getMonth() + 1)}`;
+};
+
+const formatMonthLabel = (monthKey = "") => {
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  if (!year || !month) {
+    return "Attendance Calendar";
+  }
+
+  return new Date(year, month - 1, 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const buildAttendanceCalendarCells = (monthKey = "", records = []) => {
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  if (!year || !month) {
+    return [];
+  }
+
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const recordMap = new Map(
+    (records || []).map((record) => [String(record.date || ""), record])
+  );
+  const cells = [];
+
+  for (let index = 0; index < startOffset; index += 1) {
+    cells.push({ id: `blank-start-${index}`, isCurrentMonth: false, dayNumber: null, record: null });
+  }
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    const dateKey = `${year}-${padMonthPart(month)}-${padMonthPart(day)}`;
+    cells.push({
+      id: dateKey,
+      isCurrentMonth: true,
+      dayNumber: day,
+      dateKey,
+      record: recordMap.get(dateKey) || null,
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ id: `blank-end-${cells.length}`, isCurrentMonth: false, dayNumber: null, record: null });
+  }
+
+  return cells;
+};
+
+const getAttendanceCalendarCellTone = (status = "") => {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+
+  if (normalizedStatus === "present") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+
+  if (normalizedStatus === "late") {
+    return "border-amber-200 bg-amber-50 text-amber-900";
+  }
+
+  if (["approved leave", "half day", "excused"].includes(normalizedStatus)) {
+    return "border-violet-200 bg-violet-50 text-violet-900";
+  }
+
+  if (normalizedStatus === "leave requested") {
+    return "border-sky-200 bg-sky-50 text-sky-900";
+  }
+
+  if (normalizedStatus === "absent") {
+    return "border-red-200 bg-red-50 text-red-900";
+  }
+
+  return "border-slate-200 bg-white text-slate-700";
+};
+
+const getHomeworkTimelineText = (record = {}) => {
+  if (record?.isSubmitted) {
+    return record?.submission?.submittedAt
+      ? `Submitted ${formatDateTime(record.submission.submittedAt)}`
+      : "Submission recorded";
+  }
+
+  if (record?.isOverdue) {
+    const overdueDays = Math.abs(Number(record?.dueInDays || 0));
+    return overdueDays > 0 ? `${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue` : "Overdue";
+  }
+
+  if (record?.dueInDays === 0) {
+    return "Due today";
+  }
+
+  if (record?.dueInDays === 1) {
+    return "Due tomorrow";
+  }
+
+  if (Number(record?.dueInDays) > 1) {
+    return `Due in ${record.dueInDays} days`;
+  }
+
+  return `Due on ${formatDate(record?.dueDate)}`;
+};
+
 const getStatusClass = (status = "") => {
   const normalizedStatus = String(status || "").trim().toLowerCase();
 
-  if (["paid", "submitted", "graded", "present", "active"].includes(normalizedStatus)) {
+  if (["paid", "submitted", "graded", "present", "active", "approved"].includes(normalizedStatus)) {
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (["partial", "late", "pending"].includes(normalizedStatus)) {
+  if (["partial", "late", "pending", "half day", "excused"].includes(normalizedStatus)) {
     return "bg-amber-100 text-amber-700";
   }
 
-  if (["live", "in progress"].includes(normalizedStatus)) {
+  if (["live", "in progress", "leave requested"].includes(normalizedStatus)) {
     return "bg-blue-100 text-blue-700";
   }
 
-  if (["absent", "overdue", "inactive", "cancelled"].includes(normalizedStatus)) {
+  if (["absent", "overdue", "inactive", "cancelled", "rejected"].includes(normalizedStatus)) {
     return "bg-red-100 text-red-700";
   }
 
@@ -94,6 +235,7 @@ const getStatusClass = (status = "") => {
 const tabItems = [
   { key: "overview", label: "Overview", icon: ShieldCheck, helper: "Daily view" },
   { key: "attendance", label: "Attendance", icon: CalendarDays, helper: "Recent records" },
+  { key: "homework", label: "Homework", icon: FileText, helper: "Assignments and submissions" },
   { key: "academics", label: "Academics", icon: BookOpen, helper: "Subjects and timetable" },
   { key: "exams", label: "Exams", icon: GraduationCap, helper: "Results and schedule" },
   { key: "fees", label: "Fees", icon: BadgeIndianRupee, helper: "Dues and payments" },
@@ -206,8 +348,17 @@ const defaultPaymentFormState = {
   notes: "",
 };
 
+const defaultLeaveRequestFormState = {
+  leaveType: "Medical",
+  fromDate: "",
+  toDate: "",
+  reason: "",
+};
+
 export default function StudentPortal() {
   const { user } = useAuth();
+  const feesDeskRef = useRef(null);
+  const homeworkDeskRef = useRef(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -222,6 +373,10 @@ export default function StudentPortal() {
   const [examSubmitting, setExamSubmitting] = useState(false);
   const [examSession, setExamSession] = useState(null);
   const [examAnswers, setExamAnswers] = useState({});
+  const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("");
+  const [leaveRequestForm, setLeaveRequestForm] = useState(defaultLeaveRequestFormState);
+  const [leaveRequestSubmitting, setLeaveRequestSubmitting] = useState(false);
+  const [leaveCancelSubmittingId, setLeaveCancelSubmittingId] = useState("");
 
   const loadStudentPortal = async () => {
     try {
@@ -240,19 +395,45 @@ export default function StudentPortal() {
     loadStudentPortal();
   }, []);
 
+  const handleLeaveCancellation = async (leaveRequestId) => {
+    if (!leaveRequestId || leaveCancelSubmittingId) {
+      return;
+    }
+
+    try {
+      setLeaveCancelSubmittingId(leaveRequestId);
+      const response = await cancelStudentLeaveRequest(leaveRequestId);
+      toast.success(response?.data?.message || "Leave request cancelled.");
+      await loadStudentPortal();
+    } catch (cancelError) {
+      toast.error(cancelError?.response?.data?.message || "Unable to cancel the leave request right now.");
+    } finally {
+      setLeaveCancelSubmittingId("");
+    }
+  };
+
   const student = details?.studentProfile || null;
   const attendance = details?.attendance || {};
   const fees = details?.fees || {};
+  const homework = details?.homework || {};
   const examResults = details?.examResults || {};
   const feeRecords = fees.records || [];
   const paymentHistory = fees.paymentHistory || [];
+  const homeworkRecords = homework.records || [];
   const examRecords = examResults.records || [];
   const examSchedule = examResults.schedule || [];
   const academicInfo = details?.academicInfo || {};
+  const studyMaterials = academicInfo.studyMaterials || {};
+  const materialRecords = studyMaterials.records || [];
   const parentDetails = details?.parentDetails || [];
   const transport = details?.additionalInfo?.transport || {};
   const timetable = details?.timetable || {};
   const portalNotes = details?.additionalInfo?.notes || [];
+  const attendanceCalendar = attendance.calendar || {};
+  const leaveRequests = attendance.leaveRequests || {};
+  const leaveRequestRecords = leaveRequests.records || [];
+  const attendanceCalendarRecords = attendanceCalendar.records || [];
+  const attendanceCalendarMonths = attendanceCalendar.availableMonths || [];
   const pendingFeeRecords = useMemo(
     () => [...feeRecords]
       .filter((fee) => Number(fee.pendingAmount || 0) > 0)
@@ -268,9 +449,31 @@ export default function StudentPortal() {
     () => examSchedule.find((record) => record.status === "Upcoming") || examSchedule[0] || null,
     [examSchedule]
   );
+  const nextHomeworkRecord = useMemo(
+    () => [...homeworkRecords]
+      .filter((record) => !record.isSubmitted)
+      .sort((left, right) => new Date(left.dueDate || 0) - new Date(right.dueDate || 0))[0] || null,
+    [homeworkRecords]
+  );
   const firstPayableFee = useMemo(
     () => pendingFeeRecords.find((fee) => Number(fee.pendingAmount || 0) > 0) || null,
     [pendingFeeRecords]
+  );
+  const latestStudyMaterial = useMemo(
+    () => materialRecords[0] || null,
+    [materialRecords]
+  );
+  const selectedAttendanceMonthKey = useMemo(
+    () => selectedAttendanceMonth || attendanceCalendar.currentMonth || attendanceCalendarMonths[attendanceCalendarMonths.length - 1] || getMonthKey(new Date()),
+    [attendanceCalendar.currentMonth, attendanceCalendarMonths, selectedAttendanceMonth]
+  );
+  const attendanceCalendarCells = useMemo(
+    () => buildAttendanceCalendarCells(selectedAttendanceMonthKey, attendanceCalendarRecords),
+    [attendanceCalendarRecords, selectedAttendanceMonthKey]
+  );
+  const selectedAttendanceMonthIndex = useMemo(
+    () => attendanceCalendarMonths.indexOf(selectedAttendanceMonthKey),
+    [attendanceCalendarMonths, selectedAttendanceMonthKey]
   );
   const todayPeriods = useMemo(
     () => (Array.isArray(timetable.today?.periods) ? timetable.today.periods : []),
@@ -293,11 +496,33 @@ export default function StudentPortal() {
 
     return Math.max(0, Math.min(100, Math.round((paidAmount / totalFees) * 100)));
   }, [fees.summary]);
+  const liveTransportMapUrl = useMemo(() => {
+    const latitude = Number(transport.gpsLocation?.latitude);
+    const longitude = Number(transport.gpsLocation?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return "";
+    }
+
+    return `https://www.google.com/maps?q=${latitude},${longitude}`;
+  }, [transport.gpsLocation]);
   const currentFocusText = firstPayableFee
     ? `${firstPayableFee.feeType || "Fee"} is due on ${formatDate(firstPayableFee.dueDate)}.`
+    : nextHomeworkRecord
+      ? `${nextHomeworkRecord.title || "Homework"} is ${getHomeworkTimelineText(nextHomeworkRecord).toLowerCase()}.`
     : nextScheduledExam
       ? `${nextScheduledExam.examName || "Upcoming exam"} is scheduled for ${formatDate(nextScheduledExam.examDate)}.`
       : "You are up to date. New academic or payment updates will appear here.";
+
+  useEffect(() => {
+    const nextMonth = attendanceCalendar.currentMonth
+      || attendanceCalendarMonths[attendanceCalendarMonths.length - 1]
+      || getMonthKey(new Date());
+    setSelectedAttendanceMonth((currentMonth) => (
+      currentMonth && attendanceCalendarMonths.includes(currentMonth)
+        ? currentMonth
+        : nextMonth
+    ));
+  }, [attendanceCalendar.currentMonth, attendanceCalendarMonths]);
 
   const openPaymentModal = (fee) => {
     if (!fee) {
@@ -384,6 +609,54 @@ export default function StudentPortal() {
       toast.error(error?.response?.data?.message || "Unable to download the receipt right now.");
     } finally {
       setReceiptDownloadingId("");
+    }
+  };
+
+  const focusDesk = (tabKey, ref) => {
+    setActiveTab(tabKey);
+    window.setTimeout(() => {
+      ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
+  const handleReviewDues = () => {
+    focusDesk("fees", feesDeskRef);
+    if (firstPayableFee) {
+      window.setTimeout(() => {
+        openPaymentModal(firstPayableFee);
+      }, 120);
+    }
+  };
+
+  const handleLeaveRequestSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!leaveRequestForm.fromDate || !leaveRequestForm.toDate || !leaveRequestForm.reason.trim()) {
+      toast.error("Please complete the leave type, dates, and reason.");
+      return;
+    }
+
+    if (leaveRequestForm.toDate < leaveRequestForm.fromDate) {
+      toast.error("The leave end date cannot be earlier than the start date.");
+      return;
+    }
+
+    try {
+      setLeaveRequestSubmitting(true);
+      const response = await createStudentLeaveRequest({
+        leaveType: leaveRequestForm.leaveType,
+        fromDate: leaveRequestForm.fromDate,
+        toDate: leaveRequestForm.toDate,
+        reason: leaveRequestForm.reason.trim(),
+      });
+
+      toast.success(response?.data?.message || "Leave request submitted.");
+      setLeaveRequestForm(defaultLeaveRequestFormState);
+      await loadStudentPortal();
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || "Unable to submit the leave request right now.");
+    } finally {
+      setLeaveRequestSubmitting(false);
     }
   };
 
@@ -476,22 +749,20 @@ export default function StudentPortal() {
         : `${fees.summary?.overdueCount || 0} overdue fee items`,
     },
     {
-      icon: BookOpen,
-      label: "Subjects",
-      value: String((academicInfo.subjects || []).length),
-      subText: `${student?.class || "Class"}${student?.section ? ` - ${student.section}` : ""}`,
+      icon: FileText,
+      label: "Homework",
+      value: String((homework.summary?.pending || 0) + (homework.summary?.overdue || 0)),
+      subText: `${homework.summary?.submitted || 0} submitted • ${homework.summary?.overdue || 0} overdue`,
     },
   ]), [
-    academicInfo.subjects,
     attendance.summary,
     examRecords.length,
     examResults.summary,
     examSchedule,
     fees.summary,
+    homework.summary,
     pendingFeeRecords,
     nextScheduledExam,
-    student?.class,
-    student?.section,
   ]);
 
   if (loading) {
@@ -605,10 +876,18 @@ export default function StudentPortal() {
                 <div className="mt-6 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => setActiveTab("fees")}
+                    onClick={handleReviewDues}
                     className="inline-flex items-center gap-2 rounded-full bg-[#002366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#001a4d]"
                   >
                     Open Fee Desk
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => focusDesk("homework", homeworkDeskRef)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#002366]/20 hover:bg-[#002366]/5 hover:text-[#002366]"
+                  >
+                    Open Homework Desk
                     <ArrowRight className="h-4 w-4" />
                   </button>
                   <button
@@ -666,13 +945,13 @@ export default function StudentPortal() {
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100">Exam window</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100">Homework board</p>
                       <p className="mt-1 text-sm font-semibold text-white">
-                        {nextScheduledExam ? nextScheduledExam.examName || "Scheduled exam" : "No exam published"}
+                        {nextHomeworkRecord ? nextHomeworkRecord.title || "Assignment due" : "No homework pending"}
                       </p>
                     </div>
                     <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
-                      {nextScheduledExam ? formatDate(nextScheduledExam.examDate) : "Pending"}
+                      {nextHomeworkRecord ? getHomeworkTimelineText(nextHomeworkRecord) : `${homework.summary?.submitted || 0} submitted`}
                     </span>
                   </div>
                 </div>
@@ -1016,16 +1295,49 @@ export default function StudentPortal() {
           )}
         >
           {transport.assigned ? (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.04fr)_minmax(240px,0.96fr)]">
-              <div className="rounded-[1.6rem] border border-[#002366]/10 bg-[linear-gradient(135deg,#eef4ff_0%,#ffffff_100%)] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Assigned route</p>
-                <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{transport.routeName || "Transport route"}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Pickup point: {transport.pickupPoint || transport.stopName || "Not assigned"}{transport.dropPoint ? ` | Drop point: ${transport.dropPoint}` : ""}
-                </p>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <InfoTile label="Current Status" value={transport.currentStatus || "Active"} className="bg-white" />
-                  <InfoTile label="Driver Phone" value={transport.driverPhone || "-"} className="bg-white" />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.04fr)_minmax(260px,0.96fr)]">
+              <div className="space-y-4">
+                <div className="rounded-[1.6rem] border border-[#002366]/10 bg-[linear-gradient(135deg,#eef4ff_0%,#ffffff_100%)] p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Assigned route</p>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{transport.routeName || "Transport route"}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Pickup point: {transport.pickupPoint || transport.stopName || "Not assigned"}{transport.dropPoint ? ` | Drop point: ${transport.dropPoint}` : ""}
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <InfoTile label="Current Status" value={transport.currentStatus || "Active"} className="bg-white" />
+                    <InfoTile label="Driver Phone" value={transport.driverPhone || "-"} className="bg-white" />
+                  </div>
+                </div>
+                <div className="rounded-[1.6rem] border border-emerald-100 bg-[linear-gradient(135deg,#ffffff_0%,#f5fbf7_100%)] p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Live location</p>
+                      <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
+                        {liveTransportMapUrl ? "Bus position available" : "Location waiting for update"}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {transport.gpsLocation?.lastUpdated
+                          ? `Updated ${formatDateTime(transport.gpsLocation.lastUpdated)}`
+                          : "The vehicle has not shared a fresh GPS update yet."}
+                      </p>
+                    </div>
+                    {liveTransportMapUrl ? (
+                      <a
+                        href={liveTransportMapUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                      >
+                        <Navigation className="h-4 w-4" />
+                        Open live location
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <InfoTile icon={MapPin} label="Latitude" value={formatCoordinate(transport.gpsLocation?.latitude)} className="bg-white" />
+                    <InfoTile icon={MapPin} label="Longitude" value={formatCoordinate(transport.gpsLocation?.longitude)} className="bg-white" />
+                    <InfoTile label="Speed" value={`${Number(transport.gpsLocation?.speed || 0)} km/h`} className="bg-white" />
+                  </div>
                 </div>
               </div>
               <div className="grid gap-3">
@@ -1057,12 +1369,232 @@ export default function StudentPortal() {
 
   const attendanceContent = (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard icon={CalendarDays} label="Total Records" value={attendance.summary?.total || 0} />
         <StatCard icon={ShieldCheck} label="Present" value={attendance.summary?.present || 0} />
         <StatCard icon={AlertCircle} label="Absent" value={attendance.summary?.absent || 0} />
         <StatCard icon={Clock3} label="Late" value={attendance.summary?.late || 0} />
+        <StatCard
+          icon={FileText}
+          label="Leave / Excused"
+          value={attendance.summary?.halfDay || 0}
+          subText={`${leaveRequests.summary?.pending || 0} pending request${leaveRequests.summary?.pending === 1 ? "" : "s"}`}
+        />
       </div>
+
+      <PanelCard
+        icon={CalendarDays}
+        title="Attendance Calendar"
+        eyebrow="Month view"
+        action={(
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedAttendanceMonthIndex > 0) {
+                  setSelectedAttendanceMonth(attendanceCalendarMonths[selectedAttendanceMonthIndex - 1]);
+                }
+              }}
+              disabled={selectedAttendanceMonthIndex <= 0}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[#002366]/20 hover:bg-[#002366]/5 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              Prev
+            </button>
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              {formatMonthLabel(selectedAttendanceMonthKey)}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedAttendanceMonthIndex >= 0 && selectedAttendanceMonthIndex < attendanceCalendarMonths.length - 1) {
+                  setSelectedAttendanceMonth(attendanceCalendarMonths[selectedAttendanceMonthIndex + 1]);
+                }
+              }}
+              disabled={selectedAttendanceMonthIndex === -1 || selectedAttendanceMonthIndex >= attendanceCalendarMonths.length - 1}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[#002366]/20 hover:bg-[#002366]/5 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {[
+              ["Present", "bg-emerald-100 text-emerald-700"],
+              ["Absent", "bg-red-100 text-red-700"],
+              ["Late", "bg-amber-100 text-amber-700"],
+              ["Approved Leave", "bg-violet-100 text-violet-700"],
+              ["Leave Requested", "bg-sky-100 text-sky-700"],
+            ].map(([label, tone]) => (
+              <span key={label} className={`inline-flex rounded-full px-3 py-1 font-semibold ${tone}`}>
+                {label}
+              </span>
+            ))}
+          </div>
+
+          {attendanceCalendarCells.length === 0 ? (
+            <EmptySnapshotState
+              icon={CalendarDays}
+              title="No attendance calendar is available yet"
+              description="Once attendance is recorded or leave requests are submitted, the month view will appear here."
+            />
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-7 gap-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+                  <div key={day} className="rounded-xl bg-slate-50 px-2 py-2">{day}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-2">
+                {attendanceCalendarCells.map((cell) => (
+                  <div
+                    key={cell.id}
+                    title={cell.record ? `${cell.record.status}${cell.record.remarks ? `: ${cell.record.remarks}` : ""}` : ""}
+                    className={`min-h-[96px] rounded-2xl border p-3 ${cell.isCurrentMonth ? getAttendanceCalendarCellTone(cell.record?.status) : "border-transparent bg-transparent"}`}
+                  >
+                    {cell.isCurrentMonth ? (
+                      <div className="flex h-full flex-col">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold">{cell.dayNumber}</span>
+                          {cell.record ? (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusClass(cell.record.status)}`}>
+                              {cell.record.status}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-current/80">
+                          {cell.record?.remarks || (cell.record ? "Attendance recorded" : "No record")}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </PanelCard>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <PanelCard
+          icon={FileText}
+          title="Request Leave"
+          eyebrow="Student self-service"
+          action={(
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {leaveRequests.summary?.pending || 0} pending
+            </span>
+          )}
+        >
+          <form className="space-y-4" onSubmit={handleLeaveRequestSubmit}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">Leave Type</span>
+                <select
+                  value={leaveRequestForm.leaveType}
+                  onChange={(event) => setLeaveRequestForm((current) => ({ ...current, leaveType: event.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#002366]/30 focus:ring-2 focus:ring-[#002366]/10"
+                >
+                  {["Medical", "Sick", "Family", "Personal", "Emergency", "Other"].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2 sm:col-span-1">
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">From Date</span>
+                  <input
+                    type="date"
+                    value={leaveRequestForm.fromDate}
+                    onChange={(event) => setLeaveRequestForm((current) => ({ ...current, fromDate: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#002366]/30 focus:ring-2 focus:ring-[#002366]/10"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">To Date</span>
+                  <input
+                    type="date"
+                    value={leaveRequestForm.toDate}
+                    onChange={(event) => setLeaveRequestForm((current) => ({ ...current, toDate: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#002366]/30 focus:ring-2 focus:ring-[#002366]/10"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <label className="block space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Reason</span>
+              <textarea
+                rows={5}
+                value={leaveRequestForm.reason}
+                onChange={(event) => setLeaveRequestForm((current) => ({ ...current, reason: event.target.value }))}
+                placeholder="Mention the reason for leave and any important note for the school."
+                className="w-full rounded-[1.5rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#002366]/30 focus:ring-2 focus:ring-[#002366]/10"
+              />
+            </label>
+
+            <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+              New requests are submitted with `Pending` status and will appear in your attendance calendar as `Leave Requested` until they are reviewed.
+            </div>
+
+            <button
+              type="submit"
+              disabled={leaveRequestSubmitting}
+              className="rounded-full bg-[#002366] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#001a4d] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+            >
+              {leaveRequestSubmitting ? "Submitting..." : "Submit Leave Request"}
+            </button>
+          </form>
+        </PanelCard>
+
+        <PanelCard
+          icon={Clock3}
+          title="Leave Request History"
+          eyebrow="Recent submissions"
+        >
+          <DetailsTable
+            headers={["Type", "Dates", "Days", "Status", "Notes", "Action"]}
+            emptyText="No leave requests have been submitted yet."
+            rows={leaveRequestRecords.map((request) => (
+              <tr key={request.id || `${request.fromDate}-${request.toDate}`} className="border-t border-slate-100 align-top">
+                <td className="px-4 py-3 font-medium text-slate-900">{request.leaveType || "General"}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {formatDate(request.fromDate)}
+                  {request.toDate && request.toDate !== request.fromDate ? ` to ${formatDate(request.toDate)}` : ""}
+                </td>
+                <td className="px-4 py-3 text-slate-600">{request.daysRequested || 0}</td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(request.status)}`}>
+                    {request.status || "Pending"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-600">
+                  <div className="space-y-1">
+                    <p>{request.reason || "-"}</p>
+                    {request.reviewNotes ? <p className="text-xs text-slate-500">Review: {request.reviewNotes}</p> : null}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  {request.canCancel ? (
+                    <button
+                      type="button"
+                      onClick={() => handleLeaveCancellation(request.id)}
+                      disabled={leaveCancelSubmittingId === request.id}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {leaveCancelSubmittingId === request.id ? "Cancelling..." : "Cancel Leave"}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">-</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          />
+        </PanelCard>
+      </div>
+
       <DetailsTable
         headers={["Date", "Status", "Marked By", "Remarks"]}
         emptyText="No attendance history has been recorded yet."
@@ -1082,8 +1614,222 @@ export default function StudentPortal() {
     </div>
   );
 
+  const homeworkContent = (
+    <div ref={homeworkDeskRef} className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard icon={FileText} label="Total Assignments" value={homework.summary?.total || 0} subText="Published to your class" />
+        <StatCard icon={Clock3} label="Pending" value={homework.summary?.pending || 0} subText={`${homework.summary?.dueSoon || 0} due soon`} />
+        <StatCard icon={AlertCircle} label="Overdue" value={homework.summary?.overdue || 0} subText="Needs attention now" />
+        <StatCard icon={ShieldCheck} label="Submitted" value={homework.summary?.submitted || 0} subText="Assignments already turned in" />
+        <StatCard icon={GraduationCap} label="Graded" value={homework.summary?.graded || 0} subText="Feedback or marks available" />
+      </div>
+
+      {nextHomeworkRecord ? (
+        <div className="rounded-[1.6rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Next assignment to act on</p>
+              <p className="mt-1 text-amber-800">
+                {nextHomeworkRecord.title || "Homework"} in {nextHomeworkRecord.subject || "General"} is {getHomeworkTimelineText(nextHomeworkRecord).toLowerCase()}.
+              </p>
+            </div>
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(nextHomeworkRecord.status)}`}>
+              {nextHomeworkRecord.status || "Pending"}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <PanelCard
+        icon={FileText}
+        title="Assignment Board"
+        eyebrow="Classwork and homework"
+        action={(
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {homeworkRecords.length} item{homeworkRecords.length === 1 ? "" : "s"}
+          </span>
+        )}
+      >
+        {homeworkRecords.length === 0 ? (
+          <EmptySnapshotState
+            icon={FileText}
+            title="No homework has been published yet"
+            description="When teachers publish assignments for your class, they will appear here with due dates and submission status."
+            actionLabel="Open academics"
+            onAction={() => setActiveTab("academics")}
+          />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {homeworkRecords.map((record) => (
+              <div
+                key={record.id || `${record.title}-${record.dueDate}`}
+                className="rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[#002366]/5 px-3 py-1 text-xs font-semibold text-[#002366]">
+                        {record.subject || "General"}
+                      </span>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(record.status)}`}>
+                        {record.status || "Pending"}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-semibold tracking-tight text-slate-900">{record.title || "Homework"}</h3>
+                  </div>
+                  {record.totalMarks ? (
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      {record.submission?.marksObtained ?? "-"} / {record.totalMarks}
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-slate-600">{record.description || "Homework details will appear here."}</p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <InfoTile label="Due Date" value={formatDate(record.dueDate)} className="bg-white" />
+                  <InfoTile label="Timeline" value={getHomeworkTimelineText(record)} className="bg-white" valueClassName="text-slate-700" />
+                  <InfoTile label="Assigned By" value={record.assignedBy || "Teacher"} className="bg-white" />
+                </div>
+
+                {record.submission?.feedback ? (
+                  <div className="mt-4 rounded-[1.2rem] border border-emerald-100 bg-emerald-50 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Teacher feedback</p>
+                    <p className="mt-2 text-sm leading-6 text-emerald-900">{record.submission.feedback}</p>
+                  </div>
+                ) : null}
+
+                {(record.attachmentUrl || record.submission?.attachmentUrl) ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {record.attachmentUrl ? (
+                      <a
+                        href={record.attachmentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#002366] transition hover:border-[#002366]/20 hover:bg-[#002366]/5"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {record.attachmentName || "Assignment file"}
+                      </a>
+                    ) : null}
+                    {record.submission?.attachmentUrl ? (
+                      <a
+                        href={record.submission.attachmentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {record.submission.attachmentName || "Your submission"}
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </PanelCard>
+    </div>
+  );
+
   const academicsContent = (
     <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={BookOpen}
+          label="Subjects"
+          value={(academicInfo.subjects || []).length}
+          subText={`${student?.class || "Class"}${student?.section ? ` - ${student.section}` : ""}`}
+        />
+        <StatCard
+          icon={FileText}
+          label="Resources"
+          value={studyMaterials.summary?.total || 0}
+          subText={`${studyMaterials.summary?.subjectCount || 0} subjects with materials`}
+        />
+        <StatCard
+          icon={Clock3}
+          label="Today Periods"
+          value={todayPeriods.length}
+          subText={timetable.today?.day || "No live periods today"}
+        />
+        <StatCard
+          icon={CalendarDays}
+          label="Published Days"
+          value={publishedTimetableDays}
+          subText={`${weeklyTimetablePeriods} periods in weekly view`}
+        />
+      </div>
+
+      <PanelCard
+        icon={FileText}
+        title="Study Materials"
+        eyebrow="Resource library"
+        action={latestStudyMaterial?.fileUrl ? (
+          <a
+            href={latestStudyMaterial.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#002366] transition hover:border-[#002366]/20 hover:bg-[#002366]/5"
+          >
+            Open latest
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        ) : null}
+      >
+        {materialRecords.length === 0 ? (
+          <EmptySnapshotState
+            icon={FileText}
+            title="No study materials are available yet"
+            description="When teachers upload notes, worksheets, or links for your class, they will appear here automatically."
+            actionLabel="Open homework"
+            onAction={() => focusDesk("homework", homeworkDeskRef)}
+          />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {materialRecords.map((material) => (
+              <div
+                key={material.id || `${material.title}-${material.createdAt}`}
+                className="rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[#002366]/5 px-3 py-1 text-xs font-semibold text-[#002366]">
+                        {material.subject || "General"}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        {formatDate(material.createdAt)}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-lg font-semibold tracking-tight text-slate-900">{material.title || "Study Material"}</h3>
+                  </div>
+                  {material.fileUrl ? (
+                    <a
+                      href={material.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#002366] transition hover:border-[#002366]/20 hover:bg-[#002366]/5"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Open
+                    </a>
+                  ) : null}
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-slate-600">{material.description || "Reference material for this subject."}</p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <InfoTile label="File Name" value={material.fileName || "Link resource"} className="bg-white" />
+                  <InfoTile label="Uploaded By" value={material.uploadedBy || "School Desk"} className="bg-white" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </PanelCard>
+
       <DetailsTable
         headers={["Subject", "Code", "Teacher"]}
         emptyText="No subject assignments are available for your class yet."
@@ -1204,7 +1950,7 @@ export default function StudentPortal() {
   );
 
   const feesContent = (
-    <div className="space-y-4">
+    <div ref={feesDeskRef} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
           icon={BadgeIndianRupee}
@@ -1321,6 +2067,7 @@ export default function StudentPortal() {
   const activeContent = {
     overview: overviewContent,
     attendance: attendanceContent,
+    homework: homeworkContent,
     academics: academicsContent,
     exams: examsContent,
     fees: feesContent,
@@ -1360,10 +2107,10 @@ export default function StudentPortal() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("fees")}
+                onClick={handleReviewDues}
                 className="rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
               >
-                Review dues
+                {firstPayableFee ? "Review dues" : "Fee summary"}
               </button>
             </div>
           </div>
@@ -1398,6 +2145,8 @@ export default function StudentPortal() {
               <p className="mt-2 text-sm font-medium leading-6 text-white">
                 {firstPayableFee
                   ? `${firstPayableFee.feeType || "Fee"} is due on ${formatDate(firstPayableFee.dueDate)}.`
+                  : nextHomeworkRecord
+                    ? `${nextHomeworkRecord.title || "Homework"} is ${getHomeworkTimelineText(nextHomeworkRecord).toLowerCase()}.`
                   : nextScheduledExam
                     ? `${nextScheduledExam.examName || "Upcoming exam"} is scheduled for ${formatDate(nextScheduledExam.examDate)}.`
                     : "You are up to date. New academic or payment updates will appear here."}
