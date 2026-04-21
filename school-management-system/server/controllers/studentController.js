@@ -1034,10 +1034,28 @@ const buildHomeworkSnapshotForStudent = async ({ student, referenceDate = new Da
     .filter(Boolean);
 
   let submissions = [];
-  if (homeworkIds.length > 0 && mongoStudentId && mongoose.Types.ObjectId.isValid(String(mongoStudentId))) {
+  const submissionFilters = [];
+  const normalizedMongoStudentId = String(mongoStudentId || '').trim();
+  const normalizedStudentSqlId = parseStudentIdParam(
+    student?.dbId ?? student?._id ?? student?.id ?? student?.studentId
+  );
+
+  if (normalizedMongoStudentId && mongoose.Types.ObjectId.isValid(normalizedMongoStudentId)) {
+    submissionFilters.push({
+      studentId: new mongoose.Types.ObjectId(normalizedMongoStudentId),
+    });
+  }
+
+  if (normalizedStudentSqlId) {
+    submissionFilters.push({
+      studentSqlId: normalizedStudentSqlId,
+    });
+  }
+
+  if (homeworkIds.length > 0 && submissionFilters.length > 0) {
     submissions = await HomeworkSubmission.find({
-      studentId: new mongoose.Types.ObjectId(String(mongoStudentId)),
       homeworkId: { $in: homeworkIds },
+      ...(submissionFilters.length === 1 ? submissionFilters[0] : { $or: submissionFilters }),
     }).lean();
   }
 

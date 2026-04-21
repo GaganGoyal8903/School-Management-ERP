@@ -30,6 +30,7 @@ import {
   getMyStudentDetails,
   payStudentFee,
   startOnlineExamSession,
+  submitHomeworkAssignment,
   submitOnlineExamSession,
 } from "../services/api";
 import { downloadBlobResponse } from "../utils/fileDownload";
@@ -355,6 +356,12 @@ const defaultLeaveRequestFormState = {
   reason: "",
 };
 
+const defaultHomeworkSubmissionState = {
+  submissionText: "",
+  attachmentUrl: "",
+  attachmentName: "",
+};
+
 export default function StudentPortal() {
   const { user } = useAuth();
   const feesDeskRef = useRef(null);
@@ -377,6 +384,10 @@ export default function StudentPortal() {
   const [leaveRequestForm, setLeaveRequestForm] = useState(defaultLeaveRequestFormState);
   const [leaveRequestSubmitting, setLeaveRequestSubmitting] = useState(false);
   const [leaveCancelSubmittingId, setLeaveCancelSubmittingId] = useState("");
+  const [showHomeworkSubmissionModal, setShowHomeworkSubmissionModal] = useState(false);
+  const [selectedHomeworkRecord, setSelectedHomeworkRecord] = useState(null);
+  const [homeworkSubmissionForm, setHomeworkSubmissionForm] = useState(defaultHomeworkSubmissionState);
+  const [homeworkSubmitting, setHomeworkSubmitting] = useState(false);
 
   const loadStudentPortal = async () => {
     try {
@@ -409,6 +420,55 @@ export default function StudentPortal() {
       toast.error(cancelError?.response?.data?.message || "Unable to cancel the leave request right now.");
     } finally {
       setLeaveCancelSubmittingId("");
+    }
+  };
+
+  const openHomeworkSubmissionModal = (record) => {
+    if (!record || record.isSubmitted) {
+      return;
+    }
+
+    setSelectedHomeworkRecord(record);
+    setHomeworkSubmissionForm(defaultHomeworkSubmissionState);
+    setShowHomeworkSubmissionModal(true);
+  };
+
+  const closeHomeworkSubmissionModal = (forceClose = false) => {
+    if (homeworkSubmitting && !forceClose) {
+      return;
+    }
+
+    setShowHomeworkSubmissionModal(false);
+    setSelectedHomeworkRecord(null);
+    setHomeworkSubmissionForm(defaultHomeworkSubmissionState);
+  };
+
+  const handleHomeworkSubmission = async (event) => {
+    event.preventDefault();
+
+    if (!selectedHomeworkRecord?.id || homeworkSubmitting) {
+      return;
+    }
+
+    if (!homeworkSubmissionForm.submissionText.trim() && !homeworkSubmissionForm.attachmentUrl.trim()) {
+      toast.error("Add a submission note or an attachment link before submitting.");
+      return;
+    }
+
+    try {
+      setHomeworkSubmitting(true);
+      await submitHomeworkAssignment(selectedHomeworkRecord.id, {
+        submissionText: homeworkSubmissionForm.submissionText.trim(),
+        attachmentUrl: homeworkSubmissionForm.attachmentUrl.trim(),
+        attachmentName: homeworkSubmissionForm.attachmentName.trim(),
+      });
+      toast.success("Homework submitted successfully.");
+      closeHomeworkSubmissionModal(true);
+      await loadStudentPortal();
+    } catch (submissionError) {
+      toast.error(submissionError?.response?.data?.message || "Unable to submit the homework right now.");
+    } finally {
+      setHomeworkSubmitting(false);
     }
   };
 
@@ -1725,6 +1785,19 @@ export default function StudentPortal() {
                     ) : null}
                   </div>
                 ) : null}
+
+                {!record.isSubmitted ? (
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => openHomeworkSubmissionModal(record)}
+                      className="inline-flex items-center gap-2 rounded-full bg-[#002366] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#001a4d]"
+                    >
+                      Submit assignment
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -2361,6 +2434,81 @@ export default function StudentPortal() {
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showHomeworkSubmissionModal}
+        onClose={closeHomeworkSubmissionModal}
+        title="Submit Homework"
+        size="md"
+      >
+        <form onSubmit={handleHomeworkSubmission} className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+            <p><span className="text-slate-500">Assignment:</span> <span className="font-medium text-slate-900">{selectedHomeworkRecord?.title || "-"}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Subject:</span> <span className="font-medium text-slate-900">{selectedHomeworkRecord?.subject || "-"}</span></p>
+            <p className="mt-1"><span className="text-slate-500">Due Date:</span> <span className="font-medium text-slate-900">{formatDate(selectedHomeworkRecord?.dueDate)}</span></p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Submission Notes</label>
+            <textarea
+              rows={5}
+              value={homeworkSubmissionForm.submissionText}
+              onChange={(event) => setHomeworkSubmissionForm((current) => ({
+                ...current,
+                submissionText: event.target.value,
+              }))}
+              placeholder="Write your answer, summary, or homework completion notes here."
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Attachment URL</label>
+            <input
+              type="url"
+              value={homeworkSubmissionForm.attachmentUrl}
+              onChange={(event) => setHomeworkSubmissionForm((current) => ({
+                ...current,
+                attachmentUrl: event.target.value,
+              }))}
+              placeholder="https://..."
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Attachment Label</label>
+            <input
+              type="text"
+              value={homeworkSubmissionForm.attachmentName}
+              onChange={(event) => setHomeworkSubmissionForm((current) => ({
+                ...current,
+                attachmentName: event.target.value,
+              }))}
+              placeholder="Worksheet PDF, Drive link, notebook scan"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#002366]"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={closeHomeworkSubmissionModal}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              disabled={homeworkSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-[#002366] px-4 py-2 text-sm font-semibold text-white hover:bg-[#001a4d] disabled:opacity-60"
+              disabled={homeworkSubmitting}
+            >
+              {homeworkSubmitting ? "Submitting..." : "Submit Homework"}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <Modal

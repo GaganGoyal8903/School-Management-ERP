@@ -198,12 +198,20 @@ const getHomeworkForResolvedChild = async (resolvedChild) => {
     .sort({ dueDate: 1 });
 
   if (resolvedChild.source !== 'mongo') {
-    return homework.map((hw) => ({
-      ...hw.toObject(),
-      submission: null,
-      isSubmitted: false,
-      isOverdue: new Date(hw.dueDate) < new Date(),
-    }));
+    const sqlStudentId = parseSqlStudentId(resolvedChild.student?._id);
+    const submissions = sqlStudentId
+      ? await HomeworkSubmission.find({ studentSqlId: sqlStudentId })
+      : [];
+
+    return homework.map((hw) => {
+      const submission = submissions.find((entry) => entry.homeworkId.toString() === hw._id.toString());
+      return {
+        ...hw.toObject(),
+        submission: submission || null,
+        isSubmitted: !!submission,
+        isOverdue: !submission && new Date(hw.dueDate) < new Date(),
+      };
+    });
   }
 
   const submissions = await HomeworkSubmission.find({
