@@ -15,6 +15,7 @@ import Teachers from "./pages/Teachers";
 import Subjects from "./pages/Subjects";
 import Materials from "./pages/Materials";
 import Attendance from "./pages/Attendance";
+import LeaveManagement from "./pages/LeaveManagement";
 import Exams from "./pages/Exams";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -162,6 +163,15 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["admin", "teacher"]}>
                   <Attendance />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/leaves"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher"]}>
+                  <LeaveManagement />
                 </ProtectedRoute>
               }
             />

@@ -38,6 +38,12 @@ const { getStudentAttendanceReport } = require('../services/attendanceSqlService
 const { getFeesForStudent } = require('../services/feeSqlService');
 const { ensureExamSqlReady, getStudentExamResults } = require('../services/examSqlService');
 const { getSubjectsByGrade } = require('../services/academicSqlService');
+const {
+  createLeaveRequest,
+  cancelLeaveRequest,
+  getStudentLeaveHistory,
+} = require('../services/leaveSqlService');
+const { getMaterialList } = require('../services/materialSqlService');
 const { getTimetableByClassFromSql } = require('../services/timetableSqlService');
 
 const parseBooleanInput = (value) => {
@@ -65,6 +71,67 @@ const parseStudentIdParam = (value) => {
 
   return numericValue;
 };
+
+const parseDateInput = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+};
+
+const getLocalDateKey = (value) => {
+  const parsedDate = value instanceof Date ? value : parseDateInput(value);
+  if (!(parsedDate instanceof Date) || Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+  const day = String(parsedDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getMonthKeyFromDate = (value) => {
+  const dateKey = getLocalDateKey(value);
+  return dateKey ? dateKey.slice(0, 7) : null;
+};
+
+const enumerateDateKeysBetween = (startDate, endDate) => {
+  const start = parseDateInput(startDate);
+  const end = parseDateInput(endDate);
+  if (!start || !end || end < start) {
+    return [];
+  }
+
+  const dateKeys = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dateKeys.push(getLocalDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dateKeys.filter(Boolean);
+};
+
+const calculateInclusiveDayCount = (startDate, endDate) => {
+  const start = parseDateInput(startDate);
+  const end = parseDateInput(endDate);
+  if (!start || !end || end < start) {
+    return 0;
+  }
+
+  return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+};
+
+const resolvePortalStudentIdentifier = (student = null) => (
+  String(student?.id || student?._id || student?.studentId || student?.dbId || '').trim() || null
+);
 
 const normalizeStudentRole = (value = '') => String(value || '').trim().toLowerCase();
 
@@ -535,7 +602,11 @@ const getExamScheduleForStudentContext = async ({
     .filter(Boolean);
 };
 
-const buildAttendanceSnapshotForDetails = (attendanceRecords = []) => {
+const buildAttendanceSnapshotForDetails = (
+  attendanceRecords = [],
+  leaveRequestRecords = [],
+  referenceDate = new Date()
+) => {
   const resolveMarkedByLabel = (record) => {
     const markedBy = record?.markedBy;
 
@@ -592,6 +663,15 @@ const buildAttendanceSnapshotForDetails = (attendanceRecords = []) => {
       markedBy: resolveMarkedByLabel(record),
       remarks: record?.remarks || '',
     })),
+    calendar: buildAttendanceCalendarSnapshot({
+      attendanceRecords,
+      leaveRequestRecords,
+      referenceDate,
+    }),
+    leaveRequests: {
+      summary: summarizeLeaveRequests(leaveRequestRecords),
+      records: leaveRequestRecords,
+    },
   };
 };
 
@@ -624,6 +704,397 @@ const buildTransportDetails = (row) => {
           lastUpdated: row.LastLocationUpdated || null,
         }
       : null,
+  };
+};
+
+const EMPTY_HOMEWORK_SNAPSHOT = Object.freeze({
+  summary: {
+    total: 0,
+    submitted: 0,
+    pending: 0,
+    overdue: 0,
+    graded: 0,
+    dueSoon: 0,
+  },
+  records: [],
+});
+
+const EMPTY_STUDY_MATERIAL_SNAPSHOT = Object.freeze({
+  summary: {
+    total: 0,
+    subjectCount: 0,
+    latestPublishedAt: null,
+  },
+  records: [],
+});
+
+const createEmptyHomeworkSnapshot = () => ({
+  summary: { ...EMPTY_HOMEWORK_SNAPSHOT.summary },
+  records: [],
+});
+
+const createEmptyStudyMaterialSnapshot = () => ({
+  summary: { ...EMPTY_STUDY_MATERIAL_SNAPSHOT.summary },
+  records: [],
+});
+
+const EMPTY_LEAVE_REQUEST_SNAPSHOT = Object.freeze({
+  summary: {
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    cancelled: 0,
+  },
+  records: [],
+});
+
+const createEmptyLeaveRequestSnapshot = () => ({
+  summary: { ...EMPTY_LEAVE_REQUEST_SNAPSHOT.summary },
+  records: [],
+});
+
+const normalizePortalLookupValue = (value = '') => String(value || '').trim().toLowerCase();
+
+const mapLeaveRequestForDetails = (request = {}, referenceDate = new Date()) => {
+  const fromDate = parseDateInput(request?.fromDate);
+  const toDate = parseDateInput(request?.toDate);
+  const normalizedStatus = normalizePortalLookupValue(request?.status);
+  const fromDateKey = getLocalDateKey(fromDate);
+  const toDateKey = getLocalDateKey(toDate);
+  const currentDateKey = getLocalDateKey(referenceDate);
+
+  let status = 'Pending';
+  if (normalizedStatus === 'approved') {
+    status = 'Approved';
+  } else if (normalizedStatus === 'rejected') {
+    status = 'Rejected';
+  } else if (normalizedStatus === 'cancelled') {
+    status = 'Cancelled';
+  }
+
+  const isUpcoming = Boolean(fromDateKey && currentDateKey && fromDateKey > currentDateKey);
+  const isCurrent = Boolean(fromDateKey && toDateKey && currentDateKey && fromDateKey <= currentDateKey && toDateKey >= currentDateKey);
+
+  return {
+    id: request?.leaveRequestId != null
+      ? String(request.leaveRequestId)
+      : (request?._id ? String(request._id) : null),
+    leaveType: request?.leaveType || 'General',
+    fromDate: fromDateKey,
+    toDate: toDateKey,
+    daysRequested: Number(request?.daysRequested || calculateInclusiveDayCount(fromDate, toDate) || 0),
+    reason: request?.reason || '',
+    status,
+    reviewNotes: request?.reviewNotes || null,
+    createdAt: request?.createdAt || null,
+    reviewedAt: request?.reviewedAt || null,
+    isUpcoming,
+    isCurrent,
+    canCancel: normalizedStatus === 'pending',
+  };
+};
+
+const summarizeLeaveRequests = (leaveRequests = []) => leaveRequests.reduce(
+  (summary, request) => {
+    summary.total += 1;
+    const normalizedStatus = normalizePortalLookupValue(request?.status);
+    if (normalizedStatus === 'approved') {
+      summary.approved += 1;
+    } else if (normalizedStatus === 'rejected') {
+      summary.rejected += 1;
+    } else if (normalizedStatus === 'cancelled') {
+      summary.cancelled += 1;
+    } else {
+      summary.pending += 1;
+    }
+
+    return summary;
+  },
+  {
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    cancelled: 0,
+  }
+);
+
+const buildLeaveRequestSnapshotForStudent = async ({ student, referenceDate = new Date() } = {}) => {
+  const studentSqlId = parseStudentIdParam(student?.dbId ?? student?._id ?? student?.id ?? student?.studentId);
+  if (!studentSqlId) {
+    return createEmptyLeaveRequestSnapshot();
+  }
+
+  const requests = await getStudentLeaveHistory(studentSqlId, 20).catch(() => []);
+
+  const mappedRecords = requests.map((request) => mapLeaveRequestForDetails(request, referenceDate));
+
+  return {
+    summary: summarizeLeaveRequests(mappedRecords),
+    records: mappedRecords,
+  };
+};
+
+const buildAttendanceCalendarSnapshot = ({
+  attendanceRecords = [],
+  leaveRequestRecords = [],
+  referenceDate = new Date(),
+} = {}) => {
+  const recordsByDate = new Map();
+
+  attendanceRecords.forEach((record) => {
+    const dateKey = getLocalDateKey(record?.date);
+    if (!dateKey || recordsByDate.has(dateKey)) {
+      return;
+    }
+
+    recordsByDate.set(dateKey, {
+      id: record?.id || `attendance-${dateKey}`,
+      date: dateKey,
+      status: record?.status || 'Absent',
+      remarks: record?.remarks || '',
+      source: 'attendance',
+    });
+  });
+
+  leaveRequestRecords.forEach((request) => {
+    const normalizedStatus = normalizePortalLookupValue(request?.status);
+    if (!['pending', 'approved'].includes(normalizedStatus)) {
+      return;
+    }
+
+    const calendarStatus = normalizedStatus === 'approved' ? 'Approved Leave' : 'Leave Requested';
+    enumerateDateKeysBetween(request?.fromDate, request?.toDate).forEach((dateKey) => {
+      if (!dateKey || recordsByDate.has(dateKey)) {
+        return;
+      }
+
+      recordsByDate.set(dateKey, {
+        id: `leave-${request?.id || dateKey}-${dateKey}`,
+        date: dateKey,
+        status: calendarStatus,
+        remarks: request?.reason || '',
+        source: 'leave-request',
+        leaveRequestId: request?.id || null,
+      });
+    });
+  });
+
+  const currentMonth = getMonthKeyFromDate(referenceDate);
+  const availableMonths = [...new Set([
+    currentMonth,
+    ...[...recordsByDate.keys()].map((dateKey) => dateKey.slice(0, 7)),
+  ].filter(Boolean))].sort();
+
+  return {
+    currentMonth,
+    availableMonths,
+    records: [...recordsByDate.values()].sort((left, right) => String(left.date).localeCompare(String(right.date))),
+  };
+};
+
+const getHomeworkDueInDays = (dueDate, referenceDate = new Date()) => {
+  if (!(dueDate instanceof Date) || Number.isNaN(dueDate.getTime())) {
+    return null;
+  }
+
+  const dueMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+  const referenceMidnight = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate()
+  );
+  const diffMs = dueMidnight.getTime() - referenceMidnight.getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+};
+
+const mapHomeworkRecordForDetails = (homework = {}, submission = null, referenceDate = new Date()) => {
+  const dueDate = homework?.dueDate ? new Date(homework.dueDate) : null;
+  const dueInDays = getHomeworkDueInDays(dueDate, referenceDate);
+  const normalizedSubmissionStatus = normalizePortalLookupValue(submission?.status);
+  const hasSubmission = Boolean(submission);
+  const isGraded = hasSubmission && (
+    normalizedSubmissionStatus === 'graded'
+    || (submission?.marksObtained !== undefined && submission?.marksObtained !== null)
+    || normalizePortalLookupValue(submission?.feedback)
+  );
+  const isLateSubmission = normalizedSubmissionStatus === 'late';
+  const isOverdue = !hasSubmission && dueInDays !== null && dueInDays < 0;
+  const isDueSoon = !hasSubmission && !isOverdue && dueInDays !== null && dueInDays <= 2;
+
+  let status = 'Pending';
+  if (isGraded) {
+    status = 'Graded';
+  } else if (hasSubmission) {
+    status = isLateSubmission ? 'Late' : 'Submitted';
+  } else if (isOverdue) {
+    status = 'Overdue';
+  } else if (isDueSoon) {
+    status = 'Due Soon';
+  }
+
+  return {
+    id: homework?._id ? String(homework._id) : null,
+    title: homework?.title || 'Homework',
+    description: homework?.description || '',
+    subject: homework?.subject?.name || homework?.subjectName || homework?.subject || 'General',
+    className: homework?.class || null,
+    section: homework?.section || null,
+    dueDate: dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toISOString() : null,
+    dueInDays,
+    totalMarks: Number(homework?.totalMarks || 0),
+    assignedAt: homework?.createdAt || null,
+    assignedBy: homework?.assignedBy?.fullName || homework?.assignedByName || 'Teacher',
+    attachmentUrl: homework?.attachmentUrl || null,
+    attachmentName: homework?.attachmentName || null,
+    status,
+    isSubmitted: hasSubmission,
+    isGraded,
+    isOverdue,
+    isDueSoon,
+    submission: hasSubmission
+      ? {
+          id: submission?._id ? String(submission._id) : null,
+          status: submission?.status || null,
+          submittedAt: submission?.submittedAt || null,
+          marksObtained: submission?.marksObtained !== undefined && submission?.marksObtained !== null
+            ? Number(submission.marksObtained)
+            : null,
+          feedback: submission?.feedback || null,
+          attachmentUrl: submission?.attachmentUrl || null,
+          attachmentName: submission?.attachmentName || null,
+          submissionText: submission?.submissionText || null,
+        }
+      : null,
+  };
+};
+
+const summarizeHomeworkRecords = (homeworkRecords = []) => homeworkRecords.reduce(
+  (summary, record) => {
+    summary.total += 1;
+
+    if (record.isSubmitted) {
+      summary.submitted += 1;
+    } else if (record.isOverdue) {
+      summary.overdue += 1;
+    } else {
+      summary.pending += 1;
+      if (record.isDueSoon) {
+        summary.dueSoon += 1;
+      }
+    }
+
+    if (record.isGraded) {
+      summary.graded += 1;
+    }
+
+    return summary;
+  },
+  {
+    total: 0,
+    submitted: 0,
+    pending: 0,
+    overdue: 0,
+    graded: 0,
+    dueSoon: 0,
+  }
+);
+
+const buildHomeworkSnapshotForStudent = async ({ student, referenceDate = new Date(), mongoStudentId = null } = {}) => {
+  const className = String(student?.class || '').trim();
+  if (!className) {
+    return createEmptyHomeworkSnapshot();
+  }
+
+  const sectionName = String(student?.section || '').trim();
+  const query = {
+    class: className,
+    isActive: true,
+  };
+
+  if (sectionName) {
+    query.$or = [
+      { section: { $exists: false } },
+      { section: null },
+      { section: '' },
+      { section: sectionName },
+    ];
+  }
+
+  const homeworkRecords = await Homework.find(query)
+    .populate('subject', 'name')
+    .populate('assignedBy', 'fullName')
+    .sort({ dueDate: 1, createdAt: -1 })
+    .limit(30)
+    .lean();
+
+  const homeworkIds = homeworkRecords
+    .map((record) => record?._id)
+    .filter(Boolean);
+
+  let submissions = [];
+  if (homeworkIds.length > 0 && mongoStudentId && mongoose.Types.ObjectId.isValid(String(mongoStudentId))) {
+    submissions = await HomeworkSubmission.find({
+      studentId: new mongoose.Types.ObjectId(String(mongoStudentId)),
+      homeworkId: { $in: homeworkIds },
+    }).lean();
+  }
+
+  const submissionsByHomeworkId = new Map(
+    submissions.map((submission) => [String(submission.homeworkId), submission])
+  );
+  const mappedRecords = homeworkRecords.map((record) => (
+    mapHomeworkRecordForDetails(
+      record,
+      submissionsByHomeworkId.get(String(record._id)) || null,
+      referenceDate
+    )
+  ));
+
+  return {
+    summary: summarizeHomeworkRecords(mappedRecords),
+    records: mappedRecords,
+  };
+};
+
+const mapStudyMaterialForDetails = (material = {}) => ({
+  id: material?.id || material?._id || null,
+  title: material?.title || 'Study Material',
+  subject: material?.subject || 'General',
+  description: material?.description || '',
+  fileUrl: material?.fileUrl || null,
+  fileName: material?.fileName || null,
+  uploadedBy: material?.uploadedBy?.fullName || material?.uploadedByName || null,
+  grade: material?.grade || material?.className || null,
+  createdAt: material?.createdAt || null,
+  updatedAt: material?.updatedAt || null,
+});
+
+const buildStudyMaterialSnapshot = ({ materials = [], subjectNames = [] } = {}) => {
+  const normalizedSubjects = new Set(
+    (subjectNames || [])
+      .map((subjectName) => normalizePortalLookupValue(subjectName))
+      .filter(Boolean)
+  );
+
+  const mappedRecords = (materials || []).map(mapStudyMaterialForDetails);
+  const subjectMatchedRecords = normalizedSubjects.size > 0
+    ? mappedRecords.filter((material) => normalizedSubjects.has(normalizePortalLookupValue(material.subject)))
+    : mappedRecords;
+  const selectedRecords = (subjectMatchedRecords.length > 0 ? subjectMatchedRecords : mappedRecords).slice(0, 8);
+
+  return {
+    summary: {
+      total: selectedRecords.length,
+      subjectCount: new Set(
+        selectedRecords
+          .map((record) => normalizePortalLookupValue(record.subject))
+          .filter(Boolean)
+      ).size,
+      latestPublishedAt: selectedRecords[0]?.createdAt || selectedRecords[0]?.updatedAt || null,
+    },
+    records: selectedRecords,
   };
 };
 
@@ -960,7 +1431,7 @@ const buildStudentDetailsPayload = async (studentId) => {
 
   const now = new Date();
   const sql = getSqlClient();
-  const [attendanceResult, subjectsResult, transportResult, feesResult, examsResult, examScheduleResult, timetableResult] = await Promise.allSettled([
+  const [attendanceResult, subjectsResult, transportResult, feesResult, examsResult, examScheduleResult, timetableResult, homeworkResult, materialsResult, leaveRequestsResult] = await Promise.allSettled([
     getStudentAttendanceReport({ studentId }),
     getSubjectsByGrade(student.class),
     executeQuery(`
@@ -997,10 +1468,31 @@ const buildStudentDetailsPayload = async (studentId) => {
       referenceDate: now,
     }),
     buildStudentTimetableSnapshot(student),
+    buildHomeworkSnapshotForStudent({
+      student,
+      referenceDate: now,
+    }),
+    student.class
+      ? getMaterialList({
+          grade: student.class,
+          limit: 24,
+        })
+      : Promise.resolve(createEmptyStudyMaterialSnapshot()),
+    buildLeaveRequestSnapshotForStudent({
+      student,
+      referenceDate: now,
+    }),
   ]);
 
   const attendanceRecords = attendanceResult.status === 'fulfilled' ? attendanceResult.value : [];
-  const attendance = buildAttendanceSnapshotForDetails(attendanceRecords);
+  const leaveRequestSnapshot = leaveRequestsResult.status === 'fulfilled'
+    ? leaveRequestsResult.value
+    : createEmptyLeaveRequestSnapshot();
+  const attendance = buildAttendanceSnapshotForDetails(
+    attendanceRecords,
+    leaveRequestSnapshot.records,
+    now
+  );
   const academicSubjects = subjectsResult.status === 'fulfilled'
     ? (subjectsResult.value || [])
         .filter((subject) => !subject.sectionName || subject.sectionName === student.section)
@@ -1019,6 +1511,9 @@ const buildStudentDetailsPayload = async (studentId) => {
   const transport = buildTransportDetails(
     transportResult.status === 'fulfilled' ? transportResult.value?.recordset?.[0] || null : null
   );
+  const homeworkSnapshot = homeworkResult.status === 'fulfilled'
+    ? homeworkResult.value
+    : createEmptyHomeworkSnapshot();
   const feeSource = feesResult.status === 'fulfilled'
     ? feesResult.value
     : (sqlSnapshot.feeSnapshot || []);
@@ -1100,6 +1595,12 @@ const buildStudentDetailsPayload = async (studentId) => {
           },
         ]
       : [];
+  const studyMaterials = materialsResult.status === 'fulfilled'
+    ? buildStudyMaterialSnapshot({
+        materials: materialsResult.value?.materials || [],
+        subjectNames: academicSubjects.map((subject) => subject.name),
+      })
+    : createEmptyStudyMaterialSnapshot();
 
   return {
     studentProfile: {
@@ -1130,6 +1631,7 @@ const buildStudentDetailsPayload = async (studentId) => {
       section: student.section,
       academicYear: student.academicYear || null,
       subjects: academicSubjects,
+      studyMaterials,
     },
     attendance,
     fees: {
@@ -1149,16 +1651,7 @@ const buildStudentDetailsPayload = async (studentId) => {
       records: examRecords,
       schedule: examSchedule,
     },
-    homework: {
-      summary: {
-        total: 0,
-        submitted: 0,
-        pending: 0,
-        overdue: 0,
-        graded: 0,
-      },
-      records: [],
-    },
+    homework: homeworkSnapshot,
     timetable: timetableSnapshot,
     additionalInfo: {
       transport,
@@ -1182,6 +1675,7 @@ const buildMirrorStudentDetailsPayload = async (student) => {
     return null;
   }
 
+  const now = new Date();
   const profileNotes = [];
   if (student.profileNote) {
     profileNotes.push({
@@ -1221,6 +1715,28 @@ const buildMirrorStudentDetailsPayload = async (student) => {
     sectionName: student.section || null,
     studentId: student.id || student._id || student.studentId || null,
   }).catch(() => []);
+  const [homeworkSnapshot, studyMaterials, leaveRequestSnapshot] = await Promise.all([
+    buildHomeworkSnapshotForStudent({
+      student,
+      referenceDate: now,
+      mongoStudentId: student._id || student.studentId || null,
+    }).catch(() => createEmptyHomeworkSnapshot()),
+    student.class
+      ? getMaterialList({
+          grade: student.class || null,
+          limit: 24,
+        })
+          .then((response) => buildStudyMaterialSnapshot({
+            materials: response?.materials || [],
+            subjectNames: academicSubjects.map((subject) => subject.name),
+          }))
+          .catch(() => createEmptyStudyMaterialSnapshot())
+      : Promise.resolve(createEmptyStudyMaterialSnapshot()),
+    buildLeaveRequestSnapshotForStudent({
+      student,
+      referenceDate: now,
+    }).catch(() => createEmptyLeaveRequestSnapshot()),
+  ]);
 
   return {
     studentProfile: {
@@ -1266,18 +1782,9 @@ const buildMirrorStudentDetailsPayload = async (student) => {
       section: student.section || null,
       academicYear: student.academicYear || null,
       subjects: academicSubjects,
+      studyMaterials,
     },
-    attendance: {
-      summary: {
-        total: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        halfDay: 0,
-        percentage: 0,
-      },
-      recentHistory: [],
-    },
+    attendance: buildAttendanceSnapshotForDetails([], leaveRequestSnapshot.records, now),
     fees: {
       summary: {
         totalFees: 0,
@@ -1301,16 +1808,7 @@ const buildMirrorStudentDetailsPayload = async (student) => {
       records: [],
       schedule: examSchedule,
     },
-    homework: {
-      summary: {
-        total: 0,
-        submitted: 0,
-        pending: 0,
-        overdue: 0,
-        graded: 0,
-      },
-      records: [],
-    },
+    homework: homeworkSnapshot,
     timetable,
     additionalInfo: {
       transport: {
@@ -1364,18 +1862,9 @@ const buildProvisionalStudentDetailsPayload = (user) => {
       section: null,
       academicYear: null,
       subjects: [],
+      studyMaterials: createEmptyStudyMaterialSnapshot(),
     },
-    attendance: {
-      summary: {
-        total: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        halfDay: 0,
-        percentage: 0,
-      },
-      recentHistory: [],
-    },
+    attendance: buildAttendanceSnapshotForDetails([], [], new Date()),
     fees: {
       summary: {
         totalFees: 0,
@@ -1399,16 +1888,7 @@ const buildProvisionalStudentDetailsPayload = (user) => {
       records: [],
       schedule: [],
     },
-    homework: {
-      summary: {
-        total: 0,
-        submitted: 0,
-        pending: 0,
-        overdue: 0,
-        graded: 0,
-      },
-      records: [],
-    },
+    homework: createEmptyHomeworkSnapshot(),
     timetable: {
       class: null,
       section: null,
@@ -1726,6 +2206,115 @@ const getCurrentStudentDetails = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     ...payload,
+  });
+});
+
+// @desc    Create leave request for current student
+// @route   POST /api/students/me/leave-requests
+// @access  Private (Student)
+const createCurrentStudentLeaveRequest = asyncHandler(async (req, res) => {
+  const student = await getStudentByUserId(req.user);
+  if (!student) {
+    return res.status(404).json({
+      success: false,
+      message: 'Student profile not found for the logged-in account.',
+    });
+  }
+
+  const leaveType = String(req.body?.leaveType || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  const fromDate = parseDateInput(req.body?.fromDate);
+  const toDate = parseDateInput(req.body?.toDate);
+
+  if (!leaveType || !reason || !fromDate || !toDate) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide leave type, from date, to date, and reason.',
+    });
+  }
+
+  if (toDate < fromDate) {
+    return res.status(400).json({
+      success: false,
+      message: 'The leave end date cannot be earlier than the start date.',
+    });
+  }
+
+  const studentSqlId = parseStudentIdParam(student?.dbId ?? student?._id ?? student?.id ?? student?.studentId);
+  if (!studentSqlId) {
+    return res.status(400).json({
+      success: false,
+      message: 'This student account is not linked to a valid student profile yet.',
+    });
+  }
+  const requestedByUserId = parseStudentIdParam(req.user?._id ?? req.user?.id ?? null);
+  let leaveRequest;
+  try {
+    leaveRequest = await createLeaveRequest(studentSqlId, {
+      leaveType,
+      fromDate,
+      toDate,
+      reason,
+      requestedByUserId,
+    });
+  } catch (error) {
+    const message = String(error?.message || '');
+    return res.status(message.includes('already exists') ? 409 : 400).json({
+      success: false,
+      message: message || 'Unable to submit the leave request.',
+    });
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Leave request submitted successfully.',
+    leaveRequest: mapLeaveRequestForDetails(leaveRequest, new Date()),
+  });
+});
+
+// @desc    Cancel leave request for current student
+// @route   DELETE /api/students/me/leave-requests/:leaveRequestId
+// @access  Private (Student)
+const cancelCurrentStudentLeaveRequest = asyncHandler(async (req, res) => {
+  const student = await getStudentByUserId(req.user);
+  if (!student) {
+    return res.status(404).json({
+      success: false,
+      message: 'Student profile not found for the logged-in account.',
+    });
+  }
+
+  const leaveRequestId = parseStudentIdParam(req.params?.leaveRequestId);
+  if (!leaveRequestId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid leave request ID.',
+    });
+  }
+
+  const studentSqlId = parseStudentIdParam(student?.dbId ?? student?._id ?? student?.id ?? student?.studentId);
+  if (!studentSqlId) {
+    return res.status(400).json({
+      success: false,
+      message: 'This student account is not linked to a valid student profile yet.',
+    });
+  }
+  const cancelledByUserId = parseStudentIdParam(req.user?._id ?? req.user?.id ?? null);
+  let leaveRequest;
+  try {
+    leaveRequest = await cancelLeaveRequest(leaveRequestId, studentSqlId, cancelledByUserId);
+  } catch (error) {
+    const message = String(error?.message || '');
+    return res.status(message.includes('not found') ? 404 : 409).json({
+      success: false,
+      message: message || 'Unable to cancel the leave request.',
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Leave request cancelled successfully.',
+    leaveRequest: mapLeaveRequestForDetails(leaveRequest, new Date()),
   });
 });
 
@@ -2116,6 +2705,8 @@ module.exports = {
   getAllStudents,
   getStudent,
   getCurrentStudentDetails,
+  createCurrentStudentLeaveRequest,
+  cancelCurrentStudentLeaveRequest,
   getStudentPortalProfiles,
   getStudentPortalProfile,
   getStudentDetails,

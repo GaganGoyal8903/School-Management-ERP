@@ -15,7 +15,8 @@ import {
   Bus,
   Clock,
   Sparkles,
-  DollarSign
+  DollarSign,
+  ClipboardList
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -28,6 +29,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: '/subjects', icon: BookOpen, label: 'Subjects' },
     { path: '/materials', icon: FileText, label: 'Materials' },
     { path: '/attendance', icon: Calendar, label: 'Attendance' },
+    { path: '/leaves', icon: ClipboardList, label: 'Leave Requests' },
     { path: '/exams', icon: ClipboardCheck, label: 'Exams' },
     { path: '/fees', icon: DollarSign, label: 'Fees' },
     { path: '/bus-tracking', icon: Bus, label: 'Bus Tracking' },
@@ -43,6 +45,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: '/subjects', icon: BookOpen, label: 'Subjects' },
     { path: '/materials', icon: FileText, label: 'Materials' },
     { path: '/attendance', icon: Calendar, label: 'Attendance' },
+    { path: '/leaves', icon: ClipboardList, label: 'Leave Requests' },
     { path: '/exams', icon: ClipboardCheck, label: 'Exams' },
     { path: '/timetable', icon: Clock, label: 'Timetable' },
     { path: '/ai-tools', icon: Sparkles, label: 'AI Tools' },
