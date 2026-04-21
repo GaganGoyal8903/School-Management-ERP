@@ -18,6 +18,7 @@ const DASHBOARD_MUTATION_PATHS = [
   "/fees",
   "/buses",
   "/leaves",
+  "/portal",
 ];
 
 // Attach token automatically
@@ -241,10 +242,35 @@ export const generateQuiz = (data) => API.post("/ai/quiz", data);
 export const generateHomework = (data) => API.post("/ai/homework", data);
 
 // ================= NOTIFICATIONS =================
-export const getNotifications = (params) => API.get("/notifications", { params });
-export const sendNotification = (data) => API.post("/notifications", data);
-export const sendWhatsAppMessage = (data) => API.post("/notifications/whatsapp", data);
-export const getNotices = (params) => API.get("/parents/announcements", { params });
+export const getNotifications = (params) => API.get("/portal/notifications", { params });
+export const sendNotification = (data) => API.post("/portal/notifications", data);
+export const sendWhatsAppMessage = (data) => API.post("/portal/notifications", data);
+export const getNotices = (params) => API.get("/parent/announcements", { params });
+export const getParentAnnouncements = (params) => API.get("/parent/announcements", { params });
+export const getParentDashboard = () => API.get("/parent/dashboard");
+export const getParentAttendance = (params) => API.get("/parent/attendance", { params });
+export const getParentGrades = () => API.get("/parent/grades");
+export const getParentHomework = () => API.get("/parent/homework");
+export const getParentExams = () => API.get("/parent/exams");
+
+// ================= PORTAL FOUNDATION =================
+export const getParentPortalDashboard = () => API.get("/portal/parent/dashboard");
+export const getPortalNotifications = (params) => API.get("/portal/notifications", { params });
+export const createPortalNotification = (data) => API.post("/portal/notifications", data);
+export const markPortalNotificationRead = (notificationId) => API.put(`/portal/notifications/${notificationId}/read`);
+export const getPortalContacts = () => API.get("/portal/contacts");
+export const getPortalConversations = () => API.get("/portal/conversations");
+export const getPortalConversationMessages = (conversationId) => API.get(`/portal/conversations/${conversationId}/messages`);
+export const sendPortalMessage = (data) => API.post("/portal/messages", data);
+export const getPortalMeetings = (params) => API.get("/portal/meetings", { params });
+export const createPortalMeeting = (data) => API.post("/portal/meetings", data);
+export const reviewPortalMeeting = (meetingId, data) => API.put(`/portal/meetings/${meetingId}/review`, data);
+export const cancelPortalMeeting = (meetingId, data) => API.put(`/portal/meetings/${meetingId}/cancel`, data);
+export const getBranches = () => API.get("/portal/branches");
+export const createBranch = (data) => API.post("/portal/branches", data);
+export const updateBranch = (id, data) => API.put(`/portal/branches/${id}`, data);
+export const deleteBranchRecord = (id) => API.delete(`/portal/branches/${id}`);
+export const createParentStudentLink = (data) => API.post("/portal/parent-links", data);
 
 export default API;
 

@@ -16,7 +16,10 @@ import {
   Clock,
   Sparkles,
   DollarSign,
-  ClipboardList
+  ClipboardList,
+  Building2,
+  MessageSquare,
+  BellRing
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -24,6 +27,10 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const adminLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/branches', icon: Building2, label: 'Branches' },
+    { path: '/communications', icon: MessageSquare, label: 'Communications' },
+    { path: '/meetings', icon: Calendar, label: 'Meetings' },
+    { path: '/notifications', icon: BellRing, label: 'Notifications' },
     { path: '/students', icon: Users, label: 'Students' },
     { path: '/teachers', icon: GraduationCap, label: 'Teachers' },
     { path: '/subjects', icon: BookOpen, label: 'Subjects' },
@@ -41,6 +48,9 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const teacherLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/communications', icon: MessageSquare, label: 'Communications' },
+    { path: '/meetings', icon: Calendar, label: 'Meetings' },
+    { path: '/notifications', icon: BellRing, label: 'Notifications' },
     { path: '/students', icon: Users, label: 'Students' },
     { path: '/subjects', icon: BookOpen, label: 'Subjects' },
     { path: '/materials', icon: FileText, label: 'Materials' },
@@ -53,16 +63,22 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const studentLinks = [
     { path: getRoleHomePath('student'), icon: LayoutDashboard, label: 'Student Portal' },
+    { path: '/notifications', icon: BellRing, label: 'Notifications' },
   ];
 
   const parentLinks = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: getRoleHomePath('parent'), icon: LayoutDashboard, label: 'Parent Portal' },
+    { path: '/communications', icon: MessageSquare, label: 'Communications' },
+    { path: '/meetings', icon: Calendar, label: 'Meetings' },
+    { path: '/notifications', icon: BellRing, label: 'Notifications' },
     { path: '/bus-tracking', icon: Bus, label: 'Bus Tracking' },
     { path: '/timetable', icon: Clock, label: 'Timetable' },
   ];
 
   const accountantLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/communications', icon: MessageSquare, label: 'Communications' },
+    { path: '/notifications', icon: BellRing, label: 'Notifications' },
     { path: '/fees', icon: DollarSign, label: 'Fees' },
     { path: '/reports', icon: BarChart3, label: 'Reports' },
   ];

@@ -33,7 +33,7 @@ const featureItems = [
   {
     icon: Users,
     title: "Role-Based Workflows",
-    text: "Securely route admins, teachers, and students into the right portal experience.",
+    text: "Securely route admins, teachers, students, and parents into the right portal experience.",
   },
   {
     icon: BarChart3,
@@ -56,6 +56,7 @@ const loginRoleOptions = [
   { value: "admin", label: "Admin" },
   { value: "teacher", label: "Teacher" },
   { value: "student", label: "Student" },
+  { value: "parent", label: "Parent" },
 ];
 
 const getRemainingSeconds = (targetTime, nowMs) => {
@@ -659,7 +660,7 @@ export default function Login() {
             )}
 
             <p className="erp-login-footer">
-              Secure access for Admin, Teacher, and Student
+              Secure access for Admin, Teacher, Student, and Parent
             </p>
           </div>
         </section>

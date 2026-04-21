@@ -28,6 +28,7 @@ const timetableRoutes = require('./routes/timetableRoutes');
 const parentRoutes = require('./routes/parentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
+const portalRoutes = require('./routes/portalRoutes');
 
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production'
@@ -246,6 +247,9 @@ app.use("/api/leaves", leaveRoutes);
 
 // Parent routes
 app.use("/api/parent", parentRoutes);
+
+// Portal enhancement routes
+app.use("/api/portal", portalRoutes);
 
 // AI routes
 app.use("/api/ai", aiRoutes);

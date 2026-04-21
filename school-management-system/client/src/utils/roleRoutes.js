@@ -5,6 +5,10 @@ const getRoleKeyFromUser = (user) => normalizeRoleKey(user?.roleKey || user?.rol
 const ROLE_ALLOWED_PATH_PREFIXES = {
   admin: [
     "/dashboard",
+    "/branches",
+    "/communications",
+    "/meetings",
+    "/notifications",
     "/students",
     "/teachers",
     "/subjects",
@@ -22,6 +26,9 @@ const ROLE_ALLOWED_PATH_PREFIXES = {
   ],
   teacher: [
     "/dashboard",
+    "/communications",
+    "/meetings",
+    "/notifications",
     "/students",
     "/subjects",
     "/materials",
@@ -34,16 +41,22 @@ const ROLE_ALLOWED_PATH_PREFIXES = {
   ],
   student: [
     "/student/dashboard",
+    "/notifications",
     "/unauthorized",
   ],
   parent: [
-    "/dashboard",
+    "/parent/dashboard",
+    "/communications",
+    "/meetings",
+    "/notifications",
     "/bus-tracking",
     "/timetable",
     "/unauthorized",
   ],
   accountant: [
     "/dashboard",
+    "/communications",
+    "/notifications",
     "/fees",
     "/reports",
     "/unauthorized",
@@ -62,7 +75,15 @@ export const getRoleHomePath = (userOrRole) => {
     ? normalizeRoleKey(userOrRole)
     : getRoleKeyFromUser(userOrRole);
 
-  return roleKey === "student" ? "/student/dashboard" : "/dashboard";
+  if (roleKey === "student") {
+    return "/student/dashboard";
+  }
+
+  if (roleKey === "parent") {
+    return "/parent/dashboard";
+  }
+
+  return "/dashboard";
 };
 
 export const resolvePostLoginPath = (authenticatedUser, requestedPath) => {

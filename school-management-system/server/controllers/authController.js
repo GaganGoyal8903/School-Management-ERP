@@ -35,7 +35,7 @@ const {
 } = require('../services/authSecurityService');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VALID_AUTH_ROLES = new Set(['admin', 'teacher', 'student']);
+const VALID_AUTH_ROLES = new Set(['admin', 'teacher', 'student', 'parent']);
 const DUPLICATE_ROLE_EMAIL_MESSAGE = 'This email already exists for the selected role';
 
 const LOGIN_SESSION_TTL_MS = Number(process.env.LOGIN_SESSION_TTL_MS || 15 * 60 * 1000);
@@ -265,7 +265,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   if (!VALID_AUTH_ROLES.has(role)) {
-    return credentialsValidationError(res, 'Please select a valid role: admin, teacher, or student');
+    return credentialsValidationError(res, 'Please select a valid role: admin, teacher, student, or parent');
   }
 
   const clientIp = getClientIp(req);
@@ -404,7 +404,7 @@ const legacyLogin = asyncHandler(async (req, res) => {
   }
 
   if (!VALID_AUTH_ROLES.has(role)) {
-    return res.status(400).json({ success: false, message: 'Please select a valid role: admin, teacher, or student' });
+    return res.status(400).json({ success: false, message: 'Please select a valid role: admin, teacher, student, or parent' });
   }
 
   logAuthDebug('legacy-login.attempt', {
@@ -831,7 +831,7 @@ const register = asyncHandler(async (req, res) => {
   const normalizedRole = String(role).trim().toLowerCase();
 
   if (!VALID_AUTH_ROLES.has(normalizedRole)) {
-    return res.status(400).json({ message: 'Valid roles: admin, teacher, student' });
+    return res.status(400).json({ message: 'Valid roles: admin, teacher, student, parent' });
   }
 
   if (!EMAIL_REGEX.test(email)) {
