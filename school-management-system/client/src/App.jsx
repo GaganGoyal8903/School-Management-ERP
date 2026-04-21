@@ -23,6 +23,11 @@ import Fees from "./pages/Fees";
 import BusTracking from "./pages/BusTracking";
 import Timetable from "./pages/Timetable";
 import AITools from "./pages/AITools";
+import ParentPortal from "./pages/ParentPortal";
+import CommunicationCenter from "./pages/CommunicationCenter";
+import Meetings from "./pages/Meetings";
+import NotificationsCenter from "./pages/NotificationsCenter";
+import Branches from "./pages/Branches";
 
 const AuthLoadingScreen = () => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -105,6 +110,51 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["student"]}>
                   <StudentPortal />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/parent/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["parent"]}>
+                  <ParentPortal />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/communications"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher", "parent", "accountant"]}>
+                  <CommunicationCenter />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/meetings"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher", "parent"]}>
+                  <Meetings />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher", "student", "parent", "accountant"]}>
+                  <NotificationsCenter />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/branches"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <Branches />
                 </ProtectedRoute>
               }
             />

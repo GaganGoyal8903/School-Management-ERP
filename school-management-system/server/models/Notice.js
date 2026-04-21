@@ -10,6 +10,11 @@ const noticeSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Notice content is required']
   },
+  category: {
+    type: String,
+    enum: ['Urgent', 'Event', 'Holiday'],
+    default: 'Urgent'
+  },
   priority: {
     type: String,
     enum: ['Low', 'Normal', 'High', 'Urgent'],
@@ -54,7 +59,16 @@ const noticeSchema = new mongoose.Schema({
     url: String
   }]
 }, { 
-  timestamps: true 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+});
+
+noticeSchema.virtual('postedBy', {
+  ref: 'User',
+  localField: 'createdBy',
+  foreignField: '_id',
+  justOne: true
 });
 
 // Index for queries
