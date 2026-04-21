@@ -13,7 +13,11 @@ const homeworkSchema = new mongoose.Schema({
   subject: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subject',
-    required: true
+    required: false
+  },
+  subjectName: {
+    type: String,
+    trim: true
   },
   class: {
     type: String,
@@ -26,7 +30,11 @@ const homeworkSchema = new mongoose.Schema({
   assignedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
+  },
+  assignedByName: {
+    type: String,
+    trim: true
   },
   dueDate: {
     type: Date,

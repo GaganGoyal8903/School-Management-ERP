@@ -9,7 +9,14 @@ const homeworkSubmissionSchema = new mongoose.Schema({
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student',
-    required: true
+    required: false
+  },
+  studentSqlId: {
+    type: Number
+  },
+  studentFullName: {
+    type: String,
+    trim: true
   },
   submittedAt: {
     type: Date,
@@ -39,6 +46,10 @@ const homeworkSubmissionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  gradedByName: {
+    type: String,
+    trim: true
+  },
   gradedAt: {
     type: Date
   }
@@ -48,7 +59,9 @@ const homeworkSubmissionSchema = new mongoose.Schema({
 
 // Index for faster queries
 homeworkSubmissionSchema.index({ homeworkId: 1, studentId: 1 });
+homeworkSubmissionSchema.index({ homeworkId: 1, studentSqlId: 1 });
 homeworkSubmissionSchema.index({ studentId: 1, status: 1 });
+homeworkSubmissionSchema.index({ studentSqlId: 1, status: 1 });
 
 module.exports = mongoose.model('HomeworkSubmission', homeworkSubmissionSchema);
 

@@ -2,7 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { BookOpen, Calendar, Plus, Clock, CheckCircle, AlertCircle, X } from "lucide-react";
 import CrestLogo from "./CrestLogo";
-import { getHomework, createHomework, deleteHomework, getStudents } from "../services/api";
+import {
+  getHomework,
+  createHomework,
+  deleteHomework,
+  getHomeworkSubmissions,
+  gradeHomeworkSubmission,
+} from "../services/api";
 import { getStoredAuthUser } from "../utils/authStorage";
 
 const subjects = ["Mathematics", "Science", "English", "History", "Geography"];
@@ -18,6 +24,11 @@ export default function Homework() {
   const [sms_statusFilter, setSms_statusFilter] = useState("All");
   const [sms_showCreateModal, setSms_showCreateModal] = useState(false);
   const [sms_selectedHomework, setSms_selectedHomework] = useState(null);
+  const [sms_submissions, setSms_submissions] = useState([]);
+  const [sms_submissionsLoading, setSms_submissionsLoading] = useState(false);
+  const [sms_gradingSubmissionId, setSms_gradingSubmissionId] = useState("");
+  const [sms_marksBySubmission, setSms_marksBySubmission] = useState({});
+  const [sms_feedbackBySubmission, setSms_feedbackBySubmission] = useState({});
   
   // Create form state
   const [sms_title, setSms_title] = useState("");
@@ -35,6 +46,17 @@ export default function Homework() {
     fetchHomework();
   }, [sms_subjectFilter, sms_statusFilter]);
 
+  useEffect(() => {
+    if (!sms_selectedHomework || !["admin", "teacher"].includes(userRole)) {
+      setSms_submissions([]);
+      setSms_marksBySubmission({});
+      setSms_feedbackBySubmission({});
+      return;
+    }
+
+    fetchSubmissions(sms_selectedHomework._id);
+  }, [sms_selectedHomework, userRole]);
+
   const fetchHomework = async () => {
     try {
       setSms_loading(true);
@@ -49,6 +71,36 @@ export default function Homework() {
       toast.error("Failed to load homework");
     } finally {
       setSms_loading(false);
+    }
+  };
+
+  const fetchSubmissions = async (homeworkId) => {
+    if (!homeworkId) {
+      return;
+    }
+
+    try {
+      setSms_submissionsLoading(true);
+      const response = await getHomeworkSubmissions(homeworkId);
+      const submissions = response?.data?.submissions || [];
+      setSms_submissions(submissions);
+      setSms_marksBySubmission(
+        submissions.reduce((acc, submission) => {
+          acc[submission._id] = submission.marksObtained ?? "";
+          return acc;
+        }, {})
+      );
+      setSms_feedbackBySubmission(
+        submissions.reduce((acc, submission) => {
+          acc[submission._id] = submission.feedback || "";
+          return acc;
+        }, {})
+      );
+    } catch (error) {
+      console.error("Error fetching submissions:", error);
+      toast.error("Failed to load homework submissions");
+    } finally {
+      setSms_submissionsLoading(false);
     }
   };
 
@@ -68,7 +120,7 @@ export default function Homework() {
         const due = new Date(hw.dueDate);
         return hw.status === "Active" && due >= now;
       }).length,
-      submitted: 0, // Would need separate tracking
+      submitted: filteredHomework.reduce((sum, hw) => sum + Number(hw.submittedCount || hw.submitted || 0), 0),
       overdue: filteredHomework.filter(hw => {
         const due = new Date(hw.dueDate);
         return hw.status === "Active" && due < now;
@@ -129,6 +181,30 @@ export default function Homework() {
       fetchHomework();
     } catch (error) {
       toast.error("Failed to delete homework");
+    }
+  };
+
+  const handleGradeSubmission = async (submissionId) => {
+    if (!submissionId) {
+      return;
+    }
+
+    try {
+      setSms_gradingSubmissionId(submissionId);
+      await gradeHomeworkSubmission(submissionId, {
+        marksObtained: Number(sms_marksBySubmission[submissionId] || 0),
+        feedback: sms_feedbackBySubmission[submissionId] || "",
+      });
+      toast.success("Submission graded successfully");
+      if (sms_selectedHomework?._id) {
+        await fetchSubmissions(sms_selectedHomework._id);
+      }
+      await fetchHomework();
+    } catch (error) {
+      console.error("Error grading submission:", error);
+      toast.error(error?.response?.data?.message || "Failed to grade the submission");
+    } finally {
+      setSms_gradingSubmissionId("");
     }
   };
 
@@ -413,7 +489,100 @@ export default function Homework() {
                   <p className="text-sm font-medium text-slate-700">Posted by</p>
                   <p className="text-sm text-slate-600">{sms_selectedHomework.assignedBy?.fullName || "Teacher"}</p>
                 </div>
+
+                {(userRole === "admin" || userRole === "teacher") && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Submission progress</p>
+                    <p className="text-sm text-slate-600">
+                      {Number(sms_selectedHomework.submittedCount || sms_selectedHomework.submitted || 0)} submission(s) received
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {(userRole === "admin" || userRole === "teacher") && (
+                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Student submissions</h3>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                      {sms_submissions.length} total
+                    </span>
+                  </div>
+
+                  {sms_submissionsLoading ? (
+                    <p className="py-6 text-center text-sm text-slate-500">Loading submissions...</p>
+                  ) : sms_submissions.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-slate-500">No student has submitted this homework yet.</p>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {sms_submissions.map((submission) => (
+                        <div key={submission._id} className="rounded-xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-900">{submission.student?.fullName || "Student"}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {submission.student?.rollNumber ? `Roll ${submission.student.rollNumber} • ` : ""}
+                                {submission.submittedAt ? `Submitted ${new Date(submission.submittedAt).toLocaleString("en-IN")}` : "Submission recorded"}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 capitalize">
+                              {submission.status || "submitted"}
+                            </span>
+                          </div>
+
+                          {submission.submissionText ? (
+                            <p className="mt-3 text-sm leading-6 text-slate-600">{submission.submissionText}</p>
+                          ) : null}
+
+                          {submission.attachmentUrl ? (
+                            <a
+                              href={submission.attachmentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex text-xs font-semibold text-[#002366] hover:underline"
+                            >
+                              {submission.attachmentName || "Open attachment"}
+                            </a>
+                          ) : null}
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-[120px,1fr,auto]">
+                            <input
+                              type="number"
+                              min="0"
+                              max={sms_selectedHomework.totalMarks || 100}
+                              value={sms_marksBySubmission[submission._id] ?? ""}
+                              onChange={(event) => setSms_marksBySubmission((current) => ({
+                                ...current,
+                                [submission._id]: event.target.value,
+                              }))}
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#c5a059]"
+                              placeholder="Marks"
+                            />
+                            <input
+                              type="text"
+                              value={sms_feedbackBySubmission[submission._id] ?? ""}
+                              onChange={(event) => setSms_feedbackBySubmission((current) => ({
+                                ...current,
+                                [submission._id]: event.target.value,
+                              }))}
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#c5a059]"
+                              placeholder="Feedback for student"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleGradeSubmission(submission._id)}
+                              disabled={sms_gradingSubmissionId === submission._id}
+                              className="rounded-lg bg-[#002366] px-4 py-2 text-sm font-semibold text-white hover:bg-[#003399] disabled:opacity-50"
+                            >
+                              {sms_gradingSubmissionId === submission._id ? "Saving..." : "Save Grade"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {(userRole === "admin" || userRole === "teacher") && (
                 <div className="mt-6 flex gap-3">

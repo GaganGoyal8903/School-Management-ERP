@@ -18,6 +18,7 @@ const DASHBOARD_MUTATION_PATHS = [
   "/fees",
   "/buses",
   "/leaves",
+  "/homework",
   "/portal",
 ];
 
@@ -72,6 +73,8 @@ export const resendLoginOtp = (data) => API.post("/auth/login/otp/resend", data)
 export const verifyLoginOtp = (data) => API.post("/auth/login/otp/verify", data);
 export const register = (data) => API.post("/auth/register", data);
 export const getMe = () => API.get("/auth/me");
+export const updateMyProfile = (data) => API.put("/auth/profile", data);
+export const changeMyPassword = (data) => API.post("/auth/change-password", data);
 
 // ================= DASHBOARD =================
 export const getDashboard = () => API.get("/reports/dashboard");
@@ -149,6 +152,17 @@ export const uploadMaterial = (data) => {
   });
 };
 
+// ================= HOMEWORK =================
+export const getHomework = (params) => API.get("/homework", { params });
+export const getHomeworkByClass = (className, params) => API.get(`/homework/class/${className}`, { params });
+export const getHomeworkByStudent = (studentId) => API.get(`/homework/student/${studentId}`);
+export const createHomework = (data) => API.post("/homework", data);
+export const updateHomework = (id, data) => API.put(`/homework/${id}`, data);
+export const deleteHomework = (id) => API.delete(`/homework/${id}`);
+export const submitHomeworkAssignment = (id, data) => API.post(`/homework/${id}/submit`, data);
+export const getHomeworkSubmissions = (id) => API.get(`/homework/${id}/submissions`);
+export const gradeHomeworkSubmission = (id, data) => API.put(`/homework/submission/${id}/grade`, data);
+
 // ================= ATTENDANCE =================
 export const getAttendance = (params) => API.get("/attendance", { params });
 export const getAttendanceSession = (params) => API.get("/attendance/session", { params });
@@ -196,6 +210,9 @@ export const exportExamResults = (params) => API.get("/reports/exams/export", {
 // ================= SETTINGS =================
 export const getSettings = () => API.get("/settings");
 export const updateSettings = (data) => API.put("/settings", data);
+export const getSettingsAuditLogs = (params) => API.get("/settings/audit-logs", { params });
+export const getSettingsUsers = (params) => API.get("/settings/users", { params });
+export const adminResetUserPassword = (data) => API.post("/settings/users/reset-password", data);
 
 // ================= FEES =================
 export const getFees = (params) => API.get("/fees", { params });

@@ -19,6 +19,7 @@ const classRoutes = require('./routes/classRoutes');
 const sectionRoutes = require('./routes/sectionRoutes');
 const subjectRoutes = require('./routes/subjectRoutes');
 const materialRoutes = require('./routes/materialRoutes');
+const homeworkRoutes = require('./routes/homeworkRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const examRoutes = require('./routes/examRoutes');
 const reportRoutes = require('./routes/reportRoutes');
@@ -29,6 +30,7 @@ const parentRoutes = require('./routes/parentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const portalRoutes = require('./routes/portalRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production'
@@ -224,6 +226,9 @@ app.use("/api/subjects", subjectRoutes);
 // Material routes
 app.use("/api/materials", materialRoutes);
 
+// Homework routes
+app.use("/api/homework", homeworkRoutes);
+
 // Attendance routes
 app.use("/api/attendance", attendanceRoutes);
 
@@ -250,6 +255,9 @@ app.use("/api/parent", parentRoutes);
 
 // Portal enhancement routes
 app.use("/api/portal", portalRoutes);
+
+// Settings routes
+app.use("/api/settings", settingsRoutes);
 
 // AI routes
 app.use("/api/ai", aiRoutes);

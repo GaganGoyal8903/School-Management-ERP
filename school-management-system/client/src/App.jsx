@@ -14,6 +14,7 @@ import StudentDetails from "./pages/StudentDetails";
 import Teachers from "./pages/Teachers";
 import Subjects from "./pages/Subjects";
 import Materials from "./pages/Materials";
+import HomeworkPage from "./pages/HomeworkPage";
 import Attendance from "./pages/Attendance";
 import LeaveManagement from "./pages/LeaveManagement";
 import Exams from "./pages/Exams";
@@ -208,6 +209,15 @@ function App() {
             />
 
             {/* Attendance */}
+            <Route
+              path="/homework"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher"]}>
+                  <HomeworkPage />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/attendance"
               element={
