@@ -7,6 +7,9 @@ const {
   saveBranchRecord,
   removeBranchRecord,
   linkParentStudentRecord,
+  getParentStudentLinks,
+  setParentStudentLinkPrimary,
+  removeParentStudentLink,
   getParentDashboardSnapshot,
   getPortalNotifications,
   createPortalNotification,
@@ -24,7 +27,10 @@ const {
 router.use(protect);
 
 router.get('/parent/dashboard', authorize('parent'), getParentDashboardSnapshot);
+router.get('/parent-links', authorize('admin', 'parent'), getParentStudentLinks);
 router.post('/parent-links', authorize('admin'), linkParentStudentRecord);
+router.put('/parent-links/:id/primary', authorize('admin', 'parent'), setParentStudentLinkPrimary);
+router.delete('/parent-links/:id', authorize('admin', 'parent'), removeParentStudentLink);
 
 router.get('/branches', authorize('admin'), listBranchRecords);
 router.post('/branches', authorize('admin'), saveBranchRecord);

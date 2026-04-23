@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
+  CheckCircle2,
   Bell,
   BookOpen,
   Briefcase,
@@ -22,6 +23,8 @@ import {
   getParentHomework,
   getParentPortalDashboard,
   getParentGrades,
+  setParentStudentLinkPrimary,
+  deleteParentStudentLink,
 } from '../services/api';
 
 const formatDate = (value) => {
@@ -117,6 +120,7 @@ export default function ParentPortal() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
 
   const loadPortal = async ({ silent = false } = {}) => {
     if (silent) {
@@ -134,11 +138,11 @@ export default function ParentPortal() {
         examsResponse,
         announcementsResponse,
       ] = await Promise.all([
-        getParentPortalDashboard(),
-        getParentDashboard().catch(() => null),
-        getParentGrades().catch(() => null),
-        getParentHomework().catch(() => null),
-        getParentExams().catch(() => null),
+        getParentPortalDashboard(selectedStudentId ? { studentId: selectedStudentId } : undefined),
+        getParentDashboard(selectedStudentId ? { studentId: selectedStudentId } : undefined).catch(() => null),
+        getParentGrades(selectedStudentId ? { studentId: selectedStudentId } : undefined).catch(() => null),
+        getParentHomework(selectedStudentId ? { studentId: selectedStudentId } : undefined).catch(() => null),
+        getParentExams(selectedStudentId ? { studentId: selectedStudentId } : undefined).catch(() => null),
         getParentAnnouncements({ isActive: true }).catch(() => null),
       ]);
 
@@ -168,9 +172,10 @@ export default function ParentPortal() {
 
   useEffect(() => {
     loadPortal();
-  }, []);
+  }, [selectedStudentId]);
 
   const student = portalSnapshot?.student;
+  const linkedStudents = Array.isArray(portalSnapshot?.linkedStudents) ? portalSnapshot.linkedStudents : [];
   const attendanceStats = portalSnapshot?.attendance?.stats || {};
   const attendanceRecords = Array.isArray(portalSnapshot?.attendance?.records)
     ? portalSnapshot.attendance.records.slice(0, 6)
@@ -195,6 +200,28 @@ export default function ParentPortal() {
   const unreadAlerts = notifications.filter((entry) => !entry.isRead).length;
   const pendingLeaves = leaves.filter((entry) => String(entry.status || '').toLowerCase() === 'pending').length;
   const pendingMeetings = meetings.filter((entry) => String(entry.status || '').toLowerCase() === 'pending').length;
+
+  const handleSetPrimaryStudent = async (linkId, studentId) => {
+    try {
+      await setParentStudentLinkPrimary(linkId);
+      setSelectedStudentId(String(studentId));
+      toast.success('Primary child updated successfully.');
+      await loadPortal({ silent: true });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update the primary child.');
+    }
+  };
+
+  const handleRemoveChildLink = async (linkId) => {
+    try {
+      await deleteParentStudentLink(linkId);
+      toast.success('Child link removed successfully.');
+      setSelectedStudentId('');
+      await loadPortal({ silent: true });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to remove the child link.');
+    }
+  };
 
   if (loading) {
     return <div className="px-6 py-8 text-slate-500">Loading parent portal...</div>;
@@ -242,6 +269,84 @@ export default function ParentPortal() {
         </SectionCard>
       ) : (
         <>
+          <SectionCard
+            title="Children linked to this parent"
+            subtitle="Switch the active child view or choose which student should be the default dashboard selection."
+            action={(
+              <span className="rounded-full bg-[#002366]/8 px-3 py-1 text-xs font-semibold text-[#002366]">
+                {linkedStudents.length} linked
+              </span>
+            )}
+          >
+            {linkedStudents.length ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {linkedStudents.map((entry) => {
+                  const isSelected = String(portalSnapshot?.studentId || student?.studentId || '') === String(entry.studentId || '');
+                  return (
+                    <div
+                      key={entry.parentStudentLinkId || entry.studentId}
+                      className={`rounded-[1.5rem] border px-4 py-4 ${isSelected ? 'border-[#002366]/25 bg-[#002366]/5' : 'border-slate-200 bg-slate-50'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-900">{entry.studentFullName || 'Student'}</p>
+                            {entry.isPrimary ? (
+                              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Primary</span>
+                            ) : null}
+                            {isSelected ? (
+                              <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Open</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {entry.className || '-'}{entry.sectionName ? ` • Section ${entry.sectionName}` : ''}{entry.rollNumber ? ` • Roll ${entry.rollNumber}` : ''}
+                          </p>
+                          {entry.relation ? <p className="mt-2 text-xs text-slate-500">Relation: {entry.relation}</p> : null}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {!isSelected ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStudentId(String(entry.studentId))}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#002366] transition hover:border-[#002366]/25 hover:bg-[#002366]/5"
+                            >
+                              View child
+                            </button>
+                          ) : null}
+                          {!entry.isPrimary ? (
+                            <button
+                              type="button"
+                              onClick={() => handleSetPrimaryStudent(entry.parentStudentLinkId, entry.studentId)}
+                              className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                            >
+                              Make primary
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Default child
+                            </span>
+                          )}
+                          {linkedStudents.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveChildLink(entry.parentStudentLinkId)}
+                              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState text="No linked children found." />
+            )}
+          </SectionCard>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard icon={Users} label="Student" value={student.fullName || '-'} accent="text-[#002366]" helper={`${student.className || '-'}${student.sectionName ? ` • Section ${student.sectionName}` : ''}`} />
             <StatCard icon={CalendarDays} label="Attendance" value={`${attendanceStats.percentage || dashboardSnapshot?.stats?.attendancePercentage || 0}%`} accent="text-emerald-600" helper={`${attendanceStats.present || dashboardSnapshot?.stats?.recentAttendance || 0} present days recorded`} />

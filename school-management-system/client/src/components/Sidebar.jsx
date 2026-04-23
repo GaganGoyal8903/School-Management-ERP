@@ -19,7 +19,9 @@ import {
   ClipboardList,
   Building2,
   MessageSquare,
-  BellRing
+  BellRing,
+  ShieldAlert,
+  WalletCards
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -28,6 +30,9 @@ const Sidebar = ({ isOpen, onClose }) => {
   const adminLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/branches', icon: Building2, label: 'Branches' },
+    { path: '/parent-links', icon: Users, label: 'Parent Links' },
+    { path: '/student-support', icon: ShieldAlert, label: 'Student Support' },
+    { path: '/finance-ops', icon: WalletCards, label: 'Finance Ops' },
     { path: '/communications', icon: MessageSquare, label: 'Communications' },
     { path: '/meetings', icon: Calendar, label: 'Meetings' },
     { path: '/notifications', icon: BellRing, label: 'Notifications' },
@@ -50,6 +55,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const teacherLinks = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/communications', icon: MessageSquare, label: 'Communications' },
+    { path: '/student-support', icon: ShieldAlert, label: 'Student Support' },
     { path: '/meetings', icon: Calendar, label: 'Meetings' },
     { path: '/notifications', icon: BellRing, label: 'Notifications' },
     { path: '/students', icon: Users, label: 'Students' },
@@ -81,6 +87,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/communications', icon: MessageSquare, label: 'Communications' },
     { path: '/notifications', icon: BellRing, label: 'Notifications' },
+    { path: '/finance-ops', icon: WalletCards, label: 'Finance Ops' },
     { path: '/fees', icon: DollarSign, label: 'Fees' },
     { path: '/reports', icon: BarChart3, label: 'Reports' },
   ];

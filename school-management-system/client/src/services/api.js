@@ -214,6 +214,15 @@ export const getSettingsAuditLogs = (params) => API.get("/settings/audit-logs", 
 export const getSettingsUsers = (params) => API.get("/settings/users", { params });
 export const adminResetUserPassword = (data) => API.post("/settings/users/reset-password", data);
 
+// ================= STUDENT SUPPORT =================
+export const getStudentSupportSummary = (params) => API.get("/student-support/summary", { params });
+export const getStudentRemarks = (params) => API.get("/student-support/remarks", { params });
+export const createStudentRemark = (data) => API.post("/student-support/remarks", data);
+export const updateStudentRemarkStatus = (id, data) => API.put(`/student-support/remarks/${id}/status`, data);
+export const getStudentInterventions = (params) => API.get("/student-support/interventions", { params });
+export const createStudentIntervention = (data) => API.post("/student-support/interventions", data);
+export const updateStudentInterventionStatus = (id, data) => API.put(`/student-support/interventions/${id}/status`, data);
+
 // ================= FEES =================
 export const getFees = (params) => API.get("/fees", { params });
 export const getFeeById = (id) => API.get(`/fees/${id}`);
@@ -229,6 +238,15 @@ export const downloadFeePaymentReceipt = (paymentId) => API.get(`/fees/payments/
 });
 export const getFeeStats = (params) => API.get("/fees/stats", { params });
 export const bulkCreateFees = (data) => API.post("/fees/bulk", data);
+
+// ================= FINANCE OPS =================
+export const getFinanceOpsSummary = () => API.get("/finance-ops/summary");
+export const getFeeConcessions = (params) => API.get("/finance-ops/concessions", { params });
+export const createFeeConcession = (data) => API.post("/finance-ops/concessions", data);
+export const reviewFeeConcession = (id, data) => API.put(`/finance-ops/concessions/${id}/review`, data);
+export const getFeeRefunds = (params) => API.get("/finance-ops/refunds", { params });
+export const createFeeRefund = (data) => API.post("/finance-ops/refunds", data);
+export const reviewFeeRefund = (id, data) => API.put(`/finance-ops/refunds/${id}/review`, data);
 
 // ================= BUS =================
 export const getBuses = (params) => API.get("/buses", { params });
@@ -264,14 +282,14 @@ export const sendNotification = (data) => API.post("/portal/notifications", data
 export const sendWhatsAppMessage = (data) => API.post("/portal/notifications", data);
 export const getNotices = (params) => API.get("/parent/announcements", { params });
 export const getParentAnnouncements = (params) => API.get("/parent/announcements", { params });
-export const getParentDashboard = () => API.get("/parent/dashboard");
+export const getParentDashboard = (params) => API.get("/parent/dashboard", { params });
 export const getParentAttendance = (params) => API.get("/parent/attendance", { params });
-export const getParentGrades = () => API.get("/parent/grades");
-export const getParentHomework = () => API.get("/parent/homework");
-export const getParentExams = () => API.get("/parent/exams");
+export const getParentGrades = (params) => API.get("/parent/grades", { params });
+export const getParentHomework = (params) => API.get("/parent/homework", { params });
+export const getParentExams = (params) => API.get("/parent/exams", { params });
 
 // ================= PORTAL FOUNDATION =================
-export const getParentPortalDashboard = () => API.get("/portal/parent/dashboard");
+export const getParentPortalDashboard = (params) => API.get("/portal/parent/dashboard", { params });
 export const getPortalNotifications = (params) => API.get("/portal/notifications", { params });
 export const createPortalNotification = (data) => API.post("/portal/notifications", data);
 export const markPortalNotificationRead = (notificationId) => API.put(`/portal/notifications/${notificationId}/read`);
@@ -287,7 +305,10 @@ export const getBranches = () => API.get("/portal/branches");
 export const createBranch = (data) => API.post("/portal/branches", data);
 export const updateBranch = (id, data) => API.put(`/portal/branches/${id}`, data);
 export const deleteBranchRecord = (id) => API.delete(`/portal/branches/${id}`);
+export const getParentStudentLinks = (params) => API.get("/portal/parent-links", { params });
 export const createParentStudentLink = (data) => API.post("/portal/parent-links", data);
+export const setParentStudentLinkPrimary = (id) => API.put(`/portal/parent-links/${id}/primary`);
+export const deleteParentStudentLink = (id) => API.delete(`/portal/parent-links/${id}`);
 
 export default API;
 

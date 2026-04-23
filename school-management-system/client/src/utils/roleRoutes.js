@@ -6,6 +6,9 @@ const ROLE_ALLOWED_PATH_PREFIXES = {
   admin: [
     "/dashboard",
     "/branches",
+    "/parent-links",
+    "/student-support",
+    "/finance-ops",
     "/communications",
     "/meetings",
     "/notifications",
@@ -28,6 +31,7 @@ const ROLE_ALLOWED_PATH_PREFIXES = {
   teacher: [
     "/dashboard",
     "/communications",
+    "/student-support",
     "/meetings",
     "/notifications",
     "/students",
@@ -59,6 +63,7 @@ const ROLE_ALLOWED_PATH_PREFIXES = {
     "/dashboard",
     "/communications",
     "/notifications",
+    "/finance-ops",
     "/fees",
     "/reports",
     "/unauthorized",

@@ -116,6 +116,15 @@ BEGIN
   SET NOCOUNT ON;
   SET XACT_ABORT ON;
 
+  IF ISNULL(@IsPrimary, 1) = 1
+  BEGIN
+    UPDATE dbo.ParentStudentLinks
+    SET IsPrimary = 0,
+        UpdatedAt = SYSUTCDATETIME()
+    WHERE ParentUserId = @ParentUserId
+      AND StudentId <> @StudentId;
+  END
+
   MERGE dbo.ParentStudentLinks AS target
   USING (SELECT @ParentUserId AS ParentUserId, @StudentId AS StudentId) AS source
   ON target.ParentUserId = source.ParentUserId AND target.StudentId = source.StudentId
@@ -127,6 +136,168 @@ BEGIN
 
   SELECT TOP 1 * FROM dbo.ParentStudentLinks
   WHERE ParentUserId = @ParentUserId AND StudentId = @StudentId;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.spParentStudentLinkList
+  @ParentUserId INT = NULL,
+  @RequestingUserId INT = NULL,
+  @RequestingRoleName NVARCHAR(50) = NULL,
+  @Search NVARCHAR(200) = NULL
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  DECLARE @NormalizedRole NVARCHAR(50) = LOWER(LTRIM(RTRIM(ISNULL(@RequestingRoleName, N''))));
+  DECLARE @NormalizedSearch NVARCHAR(200) = NULLIF(LTRIM(RTRIM(ISNULL(@Search, N''))), N'');
+
+  SELECT
+    psl.ParentStudentLinkId,
+    psl.ParentUserId,
+    parentUser.FullName AS ParentFullName,
+    parentUser.Email AS ParentEmail,
+    parentUser.Phone AS ParentPhone,
+    psl.StudentId,
+    studentUser.FullName AS StudentFullName,
+    student.AdmissionNumber,
+    student.RollNumber,
+    class.ClassName,
+    section.SectionName,
+    psl.Relation,
+    psl.IsPrimary,
+    psl.IsActive,
+    psl.CreatedByUserId,
+    psl.CreatedAt,
+    psl.UpdatedAt
+  FROM dbo.ParentStudentLinks psl
+  INNER JOIN dbo.Users parentUser
+    ON parentUser.UserId = psl.ParentUserId
+  INNER JOIN dbo.Students student
+    ON student.StudentId = psl.StudentId
+  LEFT JOIN dbo.Users studentUser
+    ON studentUser.UserId = student.UserId
+  LEFT JOIN dbo.Classes class
+    ON class.ClassId = student.ClassId
+  LEFT JOIN dbo.Sections section
+    ON section.SectionId = student.SectionId
+  WHERE psl.IsActive = 1
+    AND (
+      @NormalizedRole = N'admin'
+      OR (@RequestingUserId IS NOT NULL AND psl.ParentUserId = @RequestingUserId)
+    )
+    AND (@ParentUserId IS NULL OR psl.ParentUserId = @ParentUserId)
+    AND (
+      @NormalizedSearch IS NULL
+      OR parentUser.FullName LIKE N'%' + @NormalizedSearch + N'%'
+      OR parentUser.Email LIKE N'%' + @NormalizedSearch + N'%'
+      OR studentUser.FullName LIKE N'%' + @NormalizedSearch + N'%'
+      OR student.AdmissionNumber LIKE N'%' + @NormalizedSearch + N'%'
+      OR student.RollNumber LIKE N'%' + @NormalizedSearch + N'%'
+      OR class.ClassName LIKE N'%' + @NormalizedSearch + N'%'
+      OR section.SectionName LIKE N'%' + @NormalizedSearch + N'%'
+    )
+  ORDER BY parentUser.FullName ASC, psl.IsPrimary DESC, studentUser.FullName ASC, psl.ParentStudentLinkId ASC;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.spParentStudentLinkSetPrimary
+  @ParentStudentLinkId INT,
+  @RequestingUserId INT,
+  @RequestingRoleName NVARCHAR(50)
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  DECLARE @ParentUserId INT = NULL;
+  DECLARE @NormalizedRole NVARCHAR(50) = LOWER(LTRIM(RTRIM(ISNULL(@RequestingRoleName, N''))));
+
+  SELECT TOP 1 @ParentUserId = ParentUserId
+  FROM dbo.ParentStudentLinks
+  WHERE ParentStudentLinkId = @ParentStudentLinkId
+    AND IsActive = 1;
+
+  IF @ParentUserId IS NULL
+  BEGIN
+    THROW 51000, 'Parent-student link not found.', 1;
+  END;
+
+  IF @NormalizedRole <> N'admin' AND @ParentUserId <> @RequestingUserId
+  BEGIN
+    THROW 51001, 'You are not authorized to update this link.', 1;
+  END;
+
+  UPDATE dbo.ParentStudentLinks
+  SET IsPrimary = 0,
+      UpdatedAt = SYSUTCDATETIME()
+  WHERE ParentUserId = @ParentUserId
+    AND IsActive = 1;
+
+  UPDATE dbo.ParentStudentLinks
+  SET IsPrimary = 1,
+      UpdatedAt = SYSUTCDATETIME()
+  WHERE ParentStudentLinkId = @ParentStudentLinkId
+    AND IsActive = 1;
+
+  EXEC dbo.spParentStudentLinkList
+    @ParentUserId = @ParentUserId,
+    @RequestingUserId = @RequestingUserId,
+    @RequestingRoleName = @RequestingRoleName,
+    @Search = NULL;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.spParentStudentLinkDeactivate
+  @ParentStudentLinkId INT,
+  @RequestingUserId INT,
+  @RequestingRoleName NVARCHAR(50)
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  DECLARE @ParentUserId INT = NULL;
+  DECLARE @WasPrimary BIT = 0;
+  DECLARE @NormalizedRole NVARCHAR(50) = LOWER(LTRIM(RTRIM(ISNULL(@RequestingRoleName, N''))));
+
+  SELECT TOP 1
+    @ParentUserId = ParentUserId,
+    @WasPrimary = IsPrimary
+  FROM dbo.ParentStudentLinks
+  WHERE ParentStudentLinkId = @ParentStudentLinkId
+    AND IsActive = 1;
+
+  IF @ParentUserId IS NULL
+  BEGIN
+    THROW 51002, 'Parent-student link not found.', 1;
+  END;
+
+  IF @NormalizedRole <> N'admin' AND @ParentUserId <> @RequestingUserId
+  BEGIN
+    THROW 51003, 'You are not authorized to remove this link.', 1;
+  END;
+
+  UPDATE dbo.ParentStudentLinks
+  SET IsActive = 0,
+      IsPrimary = 0,
+      UpdatedAt = SYSUTCDATETIME()
+  WHERE ParentStudentLinkId = @ParentStudentLinkId;
+
+  IF @WasPrimary = 1
+  BEGIN
+    UPDATE TOP (1) dbo.ParentStudentLinks
+    SET IsPrimary = 1,
+        UpdatedAt = SYSUTCDATETIME()
+    WHERE ParentUserId = @ParentUserId
+      AND IsActive = 1
+    ORDER BY CreatedAt ASC, ParentStudentLinkId ASC;
+  END;
+
+  EXEC dbo.spParentStudentLinkList
+    @ParentUserId = @ParentUserId,
+    @RequestingUserId = @RequestingUserId,
+    @RequestingRoleName = @RequestingRoleName,
+    @Search = NULL;
 END;
 GO
 

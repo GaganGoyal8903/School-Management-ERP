@@ -224,6 +224,73 @@ const createParentStudentLink = async ({ parentUserId, studentId, relation = nul
   return result?.recordset?.[0] || null;
 };
 
+const mapParentStudentLinkRow = (row = {}) => ({
+  parentStudentLinkId: normalizeInteger(row.ParentStudentLinkId),
+  parentUserId: normalizeInteger(row.ParentUserId),
+  parentFullName: row.ParentFullName || '',
+  parentEmail: row.ParentEmail || '',
+  parentPhone: row.ParentPhone || '',
+  studentId: normalizeInteger(row.StudentId),
+  studentFullName: row.StudentFullName || '',
+  admissionNumber: row.AdmissionNumber || '',
+  rollNumber: row.RollNumber || '',
+  className: row.ClassName || '',
+  sectionName: row.SectionName || '',
+  relation: row.Relation || '',
+  isPrimary: row.IsPrimary === true || row.IsPrimary === 1,
+  isActive: row.IsActive === true || row.IsActive === 1,
+  createdByUserId: normalizeInteger(row.CreatedByUserId),
+  createdAt: row.CreatedAt || null,
+  updatedAt: row.UpdatedAt || null,
+});
+
+const listParentStudentLinks = async ({
+  parentUserId = null,
+  requestingUserId = null,
+  requestingRoleName = null,
+  search = null,
+} = {}) => {
+  await ensurePortalFoundationSqlReady();
+  const sql = getSqlClient();
+  const result = await executeStoredProcedure('dbo.spParentStudentLinkList', [
+    { name: 'ParentUserId', type: sql.Int, value: normalizeInteger(parentUserId) },
+    { name: 'RequestingUserId', type: sql.Int, value: normalizeInteger(requestingUserId) },
+    { name: 'RequestingRoleName', type: sql.NVarChar(50), value: requestingRoleName ? String(requestingRoleName).trim().toLowerCase() : null },
+    { name: 'Search', type: sql.NVarChar(200), value: search ? String(search).trim() : null },
+  ]);
+  return (result?.recordset || []).map(mapParentStudentLinkRow);
+};
+
+const setPrimaryParentStudentLink = async ({
+  parentStudentLinkId,
+  requestingUserId,
+  requestingRoleName,
+} = {}) => {
+  await ensurePortalFoundationSqlReady();
+  const sql = getSqlClient();
+  const result = await executeStoredProcedure('dbo.spParentStudentLinkSetPrimary', [
+    { name: 'ParentStudentLinkId', type: sql.Int, value: normalizeInteger(parentStudentLinkId) },
+    { name: 'RequestingUserId', type: sql.Int, value: normalizeInteger(requestingUserId) },
+    { name: 'RequestingRoleName', type: sql.NVarChar(50), value: requestingRoleName ? String(requestingRoleName).trim().toLowerCase() : null },
+  ]);
+  return (result?.recordset || []).map(mapParentStudentLinkRow);
+};
+
+const deactivateParentStudentLink = async ({
+  parentStudentLinkId,
+  requestingUserId,
+  requestingRoleName,
+} = {}) => {
+  await ensurePortalFoundationSqlReady();
+  const sql = getSqlClient();
+  const result = await executeStoredProcedure('dbo.spParentStudentLinkDeactivate', [
+    { name: 'ParentStudentLinkId', type: sql.Int, value: normalizeInteger(parentStudentLinkId) },
+    { name: 'RequestingUserId', type: sql.Int, value: normalizeInteger(requestingUserId) },
+    { name: 'RequestingRoleName', type: sql.NVarChar(50), value: requestingRoleName ? String(requestingRoleName).trim().toLowerCase() : null },
+  ]);
+  return (result?.recordset || []).map(mapParentStudentLinkRow);
+};
+
 const createNotification = async ({
   senderUserId = null,
   title,
@@ -373,11 +440,23 @@ const cancelPortalMeeting = async (meetingId, userId, roleName, notes = null) =>
   return mapMeetingRow(result?.recordset?.[0] || null);
 };
 
-const resolveParentLinkedStudentId = async (user = {}) => {
+const resolveParentLinkedStudentId = async (user = {}, preferredStudentId = null) => {
   await ensurePortalFoundationSqlReady();
   const userId = normalizeInteger(user?.id || user?.UserId || user?.userId || user?._id);
   if (!userId) {
     return null;
+  }
+
+  const normalizedPreferredStudentId = normalizeInteger(preferredStudentId);
+  if (normalizedPreferredStudentId) {
+    const preferredLinks = await listParentStudentLinks({
+      parentUserId: userId,
+      requestingUserId: userId,
+      requestingRoleName: 'parent',
+    }).catch(() => []);
+    if (preferredLinks.some((link) => link.studentId === normalizedPreferredStudentId && link.isActive)) {
+      return normalizedPreferredStudentId;
+    }
   }
 
   const sql = getSqlClient();
@@ -415,14 +494,23 @@ const resolveParentLinkedStudentId = async (user = {}) => {
   return normalizeInteger(result?.recordsets?.[1]?.[0]?.StudentId);
 };
 
-const getParentPortalSnapshot = async (user = {}) => {
-  const studentId = await resolveParentLinkedStudentId(user);
+const getParentPortalSnapshot = async (user = {}, preferredStudentId = null) => {
+  const resolvedUserId = normalizeInteger(user?.id || user?.UserId || user?.userId || user?._id);
+  const linkedStudents = resolvedUserId
+    ? await listParentStudentLinks({
+        parentUserId: resolvedUserId,
+        requestingUserId: resolvedUserId,
+        requestingRoleName: 'parent',
+      }).catch(() => [])
+    : [];
+  const studentId = await resolveParentLinkedStudentId(user, preferredStudentId);
   const notifications = await getNotificationInbox(user?.id || user?.UserId || user?.userId || user?._id, 8).catch(() => []);
   const meetings = await listPortalMeetings(user?.id || user?.UserId || user?.userId || user?._id, 'parent').catch(() => []);
 
   if (!studentId) {
     return {
       studentId: null,
+      linkedStudents,
       student: null,
       attendance: { records: [], stats: { total: 0, present: 0, absent: 0, late: 0, percentage: 0 } },
       fees: [],
@@ -450,6 +538,7 @@ const getParentPortalSnapshot = async (user = {}) => {
 
   return {
     studentId,
+    linkedStudents,
     student,
     attendance: {
       records: Array.isArray(attendancePayload?.attendance) ? attendancePayload.attendance : Array.isArray(attendancePayload) ? attendancePayload : [],
@@ -469,6 +558,9 @@ module.exports = {
   upsertBranch,
   deleteBranch,
   createParentStudentLink,
+  listParentStudentLinks,
+  setPrimaryParentStudentLink,
+  deactivateParentStudentLink,
   createNotification,
   getNotificationInbox,
   markNotificationRead,
