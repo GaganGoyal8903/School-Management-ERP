@@ -8,6 +8,9 @@ const {
   upsertBranch,
   deleteBranch,
   createParentStudentLink,
+  listParentStudentLinks,
+  setPrimaryParentStudentLink,
+  deactivateParentStudentLink,
   createNotification,
   getNotificationInbox,
   markNotificationRead,
@@ -175,6 +178,40 @@ const linkParentStudentRecord = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, link, data: link });
 });
 
+const getParentStudentLinks = asyncHandler(async (req, res) => {
+  const { userId } = await resolveAuthenticatedSqlUser(req);
+  const role = getAuthRole(req);
+  const links = await listParentStudentLinks({
+    parentUserId: role === 'admin' ? req.query?.parentUserId : userId,
+    requestingUserId: userId,
+    requestingRoleName: role,
+    search: req.query?.search || null,
+  });
+  res.status(200).json({ success: true, links, data: links });
+});
+
+const setParentStudentLinkPrimary = asyncHandler(async (req, res) => {
+  const { userId } = await resolveAuthenticatedSqlUser(req);
+  const role = getAuthRole(req);
+  const links = await setPrimaryParentStudentLink({
+    parentStudentLinkId: req.params.id,
+    requestingUserId: userId,
+    requestingRoleName: role,
+  });
+  res.status(200).json({ success: true, links, data: links });
+});
+
+const removeParentStudentLink = asyncHandler(async (req, res) => {
+  const { userId } = await resolveAuthenticatedSqlUser(req);
+  const role = getAuthRole(req);
+  const links = await deactivateParentStudentLink({
+    parentStudentLinkId: req.params.id,
+    requestingUserId: userId,
+    requestingRoleName: role,
+  });
+  res.status(200).json({ success: true, links, data: links });
+});
+
 const getParentDashboardSnapshot = asyncHandler(async (req, res) => {
   const { userId, user } = await resolveAuthenticatedSqlUser(req);
   const snapshot = await getParentPortalSnapshot({
@@ -184,7 +221,7 @@ const getParentDashboardSnapshot = asyncHandler(async (req, res) => {
     UserId: userId,
     userId,
     _id: userId,
-  });
+  }, req.query?.studentId || null);
   res.status(200).json({ success: true, data: snapshot, snapshot });
 });
 
@@ -302,6 +339,9 @@ module.exports = {
   saveBranchRecord,
   removeBranchRecord,
   linkParentStudentRecord,
+  getParentStudentLinks,
+  setParentStudentLinkPrimary,
+  removeParentStudentLink,
   getParentDashboardSnapshot,
   getPortalNotifications,
   createPortalNotification,

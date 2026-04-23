@@ -31,6 +31,8 @@ const aiRoutes = require('./routes/aiRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const portalRoutes = require('./routes/portalRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const studentSupportRoutes = require('./routes/studentSupportRoutes');
+const financeOpsRoutes = require('./routes/financeOpsRoutes');
 
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = process.env.NODE_ENV === 'production'
@@ -258,6 +260,12 @@ app.use("/api/portal", portalRoutes);
 
 // Settings routes
 app.use("/api/settings", settingsRoutes);
+
+// Teacher support routes
+app.use("/api/student-support", studentSupportRoutes);
+
+// Finance operations routes
+app.use("/api/finance-ops", financeOpsRoutes);
 
 // AI routes
 app.use("/api/ai", aiRoutes);

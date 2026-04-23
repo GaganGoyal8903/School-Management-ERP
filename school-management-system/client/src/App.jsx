@@ -25,6 +25,9 @@ import BusTracking from "./pages/BusTracking";
 import Timetable from "./pages/Timetable";
 import AITools from "./pages/AITools";
 import ParentPortal from "./pages/ParentPortal";
+import ParentLinksManagement from "./pages/ParentLinksManagement";
+import StudentSupport from "./pages/StudentSupport";
+import FinanceOperations from "./pages/FinanceOperations";
 import CommunicationCenter from "./pages/CommunicationCenter";
 import Meetings from "./pages/Meetings";
 import NotificationsCenter from "./pages/NotificationsCenter";
@@ -120,6 +123,33 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["parent"]}>
                   <ParentPortal />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/parent-links"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <ParentLinksManagement />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/student-support"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "teacher"]}>
+                  <StudentSupport />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/finance-ops"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "accountant"]}>
+                  <FinanceOperations />
                 </ProtectedRoute>
               }
             />

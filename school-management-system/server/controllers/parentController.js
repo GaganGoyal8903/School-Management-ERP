@@ -10,9 +10,11 @@ const { asyncHandler } = require('../middleware/errorMiddleware');
 const { generateToken } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const { getAuthUserByEmailRole } = require('../services/authSqlService');
 const { getStudentById: getStudentByIdFromSql } = require('../services/studentSqlService');
 const { getStudentAttendanceReport } = require('../services/attendanceSqlService');
 const { getStudentExamResults } = require('../services/examSqlService');
+const { listParentStudentLinks } = require('../services/portalFoundationSqlService');
 
 const isMongoObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ''));
 const parseSqlStudentId = (value) => {
@@ -29,6 +31,50 @@ const mapSqlStudentForParent = (student = {}) => ({
   section: student.section || null,
   rollNumber: student.rollNumber || null,
 });
+
+const getDirectAuthUserId = (user = {}) => {
+  const candidates = [user.userId, user.UserId, user.id, user._id];
+  for (const candidate of candidates) {
+    const numericCandidate = Number(candidate);
+    if (Number.isInteger(numericCandidate) && numericCandidate > 0) {
+      return numericCandidate;
+    }
+  }
+  return null;
+};
+
+const resolveAuthenticatedSqlUserId = async (user = {}) => {
+  const directUserId = getDirectAuthUserId(user);
+  if (directUserId) {
+    return directUserId;
+  }
+
+  const email = String(user?.email || '').trim().toLowerCase();
+  const role = String(user?.role || '').trim().toLowerCase();
+  if (!email || !role) {
+    return null;
+  }
+
+  const resolvedUser = await getAuthUserByEmailRole(email, role);
+  const resolvedUserId = Number(
+    resolvedUser?._id ?? resolvedUser?.id ?? resolvedUser?.UserId ?? null
+  );
+
+  return Number.isInteger(resolvedUserId) && resolvedUserId > 0 ? resolvedUserId : null;
+};
+
+const getParentLinkedStudents = async (authUser = {}) => {
+  const requestingUserId = await resolveAuthenticatedSqlUserId(authUser);
+  if (!requestingUserId) {
+    return [];
+  }
+
+  return listParentStudentLinks({
+    parentUserId: requestingUserId,
+    requestingUserId,
+    requestingRoleName: String(authUser?.role || 'parent').trim().toLowerCase(),
+  });
+};
 
 const resolveParentChildStudent = async (childId) => {
   const rawChildId = typeof childId === 'object' && childId !== null && childId._id
@@ -65,16 +111,26 @@ const resolveParentChildStudent = async (childId) => {
   };
 };
 
-const getParentWithResolvedChild = async (userId) => {
+const getParentWithResolvedChild = async (userId, preferredChildId = null, authUser = {}) => {
   const parent = await Parent.findOne({ userId });
   if (!parent) {
     return null;
   }
 
-  const child = await resolveParentChildStudent(parent.childId);
+  const linkedStudents = await getParentLinkedStudents(authUser);
+  const normalizedPreferredChildId = String(preferredChildId || '').trim();
+  const selectedLink = normalizedPreferredChildId
+    ? linkedStudents.find((link) => String(link.studentId) === normalizedPreferredChildId)
+    : null;
+  const defaultLink =
+    selectedLink || linkedStudents.find((link) => link.isPrimary) || linkedStudents[0] || null;
+  const fallbackChildId = defaultLink?.studentId || parent.childId;
+  const child = await resolveParentChildStudent(fallbackChildId);
+
   return {
     parent,
     child,
+    linkedStudents,
   };
 };
 
@@ -170,12 +226,14 @@ const normalizeSqlExamSchedule = (payload) =>
 const getSqlAttendanceStats = (payload, attendanceRecords) =>
   payload?.stats || payload?.summary || summarizeSqlAttendance(attendanceRecords);
 
-const buildParentPayload = (parent, resolvedChild) => {
+const buildParentPayload = (parent, resolvedChild, linkedStudents = []) => {
   const parentObject = parent.toObject();
   return {
     ...parentObject,
     childId: resolvedChild?.student || parentObject.childId,
-    linkedStudents: buildLinkedStudentsPayload(resolvedChild),
+    linkedStudents: Array.isArray(linkedStudents) && linkedStudents.length > 0
+      ? linkedStudents
+      : buildLinkedStudentsPayload(resolvedChild),
   };
 };
 
@@ -291,7 +349,7 @@ const getExamDataForResolvedChild = async (resolvedChild) => {
 // @route   GET /api/parents/profile
 // @access  Private (Parent)
 const getParentProfile = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -299,7 +357,7 @@ const getParentProfile = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    parent: buildParentPayload(parentContext.parent, parentContext.child),
+    parent: buildParentPayload(parentContext.parent, parentContext.child, parentContext.linkedStudents),
   });
 });
 
@@ -307,7 +365,7 @@ const getParentProfile = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/child
 // @access  Private (Parent)
 const getChildInfo = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -327,7 +385,7 @@ const getChildInfo = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/attendance
 // @access  Private (Parent)
 const getChildAttendance = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -393,7 +451,7 @@ const getChildAttendance = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/grades
 // @access  Private (Parent)
 const getChildGrades = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -443,7 +501,7 @@ const getChildGrades = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/homework
 // @access  Private (Parent)
 const getChildHomework = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -467,7 +525,7 @@ const getChildHomework = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/exams
 // @access  Private (Parent)
 const getChildExams = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -508,7 +566,7 @@ const getAnnouncements = asyncHandler(async (req, res) => {
 // @route   GET /api/parents/dashboard
 // @access  Private (Parent)
 const getParentDashboard = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ message: 'Parent profile not found' });
@@ -794,7 +852,7 @@ const parentLogin = asyncHandler(async (req, res) => {
 // @route   GET /api/parent/students
 // @access  Private (Parent)
 const getLinkedStudents = asyncHandler(async (req, res) => {
-  const parentContext = await getParentWithResolvedChild(req.user._id);
+  const parentContext = await getParentWithResolvedChild(req.user._id, req.query?.studentId, req.user);
 
   if (!parentContext) {
     return res.status(404).json({ 
@@ -803,7 +861,10 @@ const getLinkedStudents = asyncHandler(async (req, res) => {
     });
   }
 
-  const linkedStudents = buildLinkedStudentsPayload(parentContext.child);
+  const linkedStudents =
+    Array.isArray(parentContext.linkedStudents) && parentContext.linkedStudents.length > 0
+      ? parentContext.linkedStudents
+      : buildLinkedStudentsPayload(parentContext.child);
 
   res.json({
     success: true,
